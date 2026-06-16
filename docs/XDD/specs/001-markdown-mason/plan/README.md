@@ -82,7 +82,7 @@ npm run dev                 # esbuild watch -> main.js
 Each phase is a separate file. Tasks follow red-green-refactor: **Prime** → **Test** (red) →
 **Implement** (green) → **Validate** (refactor + verify).
 
-- [ ] [Phase 1: Scaffolding & Build Harness](phase-1.md)
+- [x] [Phase 1: Scaffolding & Build Harness](phase-1.md)
 - [ ] [Phase 2: Core Operations (pure domain)](phase-2.md)
 - [ ] [Phase 3: Registry, mason.* API, Commands & Editor Adapters](phase-3.md)
 - [ ] [Phase 4: Perplexity Parsers & Auto-Dispatcher](phase-4.md)
