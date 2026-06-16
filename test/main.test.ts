@@ -35,6 +35,10 @@ describe("MarkdownMasonPlugin", () => {
 			expect(DEFAULT_SETTINGS).toBeDefined();
 			expect(DEFAULT_SETTINGS.debugLogging).toBe(false);
 		});
+
+		it("has resourcesName defaulting to 'Resources'", () => {
+			expect(DEFAULT_SETTINGS.resourcesName).toBe("Resources");
+		});
 	});
 
 	describe("onload()", () => {
@@ -65,7 +69,7 @@ describe("MarkdownMasonPlugin", () => {
 			await plugin.onload();
 
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			expect((plugin.app as any).workspace._layoutReadyCount).toBeGreaterThanOrEqual(1);
+			expect((plugin.app as any).workspace._layoutReadyCount).toBe(1);
 		});
 
 		it("registers zero manual listeners — no leaked register/registerEvent calls", async () => {
