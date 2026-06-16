@@ -257,7 +257,7 @@ describe("applyFootnoteInlineRename — rewrites inline [^n] markers", () => {
 
 	it("returns a non-empty EditPlan (three markers → three edits)", () => {
 		const plan = applyFootnoteInlineRename(body, idMap);
-		expect(plan.length).toBeGreaterThan(0);
+		expect(plan).toHaveLength(3);
 	});
 
 	it("applying the plan to the body produces the expected rewritten text", () => {
@@ -307,6 +307,69 @@ describe("applyFootnoteInlineRename — handles same-id rewrite (idMap[n] === n)
 			result = result.slice(0, edit.from) + edit.insert + result.slice(edit.to);
 		}
 		expect(result).toBe("Text [^6].");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// W1 — dup-in-paste of an existing URL: second same-URL incoming ref must
+// reuse the id already mapped for the first (which matched an existing ref),
+// and must NOT produce a spurious newRef.
+// ---------------------------------------------------------------------------
+
+describe("resolveFootnoteIdentity — dup-in-paste of an existing URL", () => {
+	// incoming[1] and incoming[2] both carry urlA, which already exists as [^6].
+	// incoming[1] → hits existingByUrl → reuse 6.
+	// incoming[2] → hits seenInPaste (firstInPaste=1, idMap[1]=6) → reuse 6.
+	// newRefs must be empty (urlA is not genuinely new).
+	const incoming: FootnoteRef[] = [
+		makeRef({ incomingId: 1, url: urlA, title: "Alpha Again", snippet: "snip1" }),
+		makeRef({ incomingId: 2, url: urlA, title: "Alpha Once More", snippet: "snip2" }),
+	];
+	const existing: ExistingRef[] = [makeExisting(6, urlA)];
+
+	const result = resolveFootnoteIdentity(incoming, existing);
+
+	it("idMap[1] === 6 (first incoming urlA reuses existing [^6])", () => {
+		expect(result.idMap[1]).toBe(6);
+	});
+
+	it("idMap[2] === 6 (second incoming urlA hits dup-in-paste branch, reuses same id)", () => {
+		expect(result.idMap[2]).toBe(6);
+	});
+
+	it("newRefs is empty (urlA was not genuinely new)", () => {
+		expect(result.newRefs).toHaveLength(0);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// W2 — multi-digit ids in applyFootnoteInlineRename: [^10] must not be
+// partially matched as [^1] + "0".  The regex /\[\^(\d+)\]/g is greedy and
+// must consume all digits.  idMap={1:7} must rewrite [^1] but NOT [^10].
+// ---------------------------------------------------------------------------
+
+describe("applyFootnoteInlineRename — multi-digit id is not partially matched", () => {
+	const body = "text [^1] and [^10]";
+	const idMap: Record<number, number> = { 1: 7 };
+
+	const applyPlan = (src: string, plan: ReturnType<typeof applyFootnoteInlineRename>): string => {
+		const sorted = [...plan].sort((a, b) => b.from - a.from);
+		let result = src;
+		for (const edit of sorted) {
+			result = result.slice(0, edit.from) + edit.insert + result.slice(edit.to);
+		}
+		return result;
+	};
+
+	it("produces exactly ONE edit (only [^1] is in idMap, not [^10])", () => {
+		const plan = applyFootnoteInlineRename(body, idMap);
+		expect(plan).toHaveLength(1);
+	});
+
+	it("applying the plan rewrites [^1] → [^7] and leaves [^10] untouched", () => {
+		const plan = applyFootnoteInlineRename(body, idMap);
+		const result = applyPlan(body, plan);
+		expect(result).toBe("text [^7] and [^10]");
 	});
 });
 

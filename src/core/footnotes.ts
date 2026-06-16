@@ -123,6 +123,8 @@ function buildExistingByUrl(existing: ExistingRef[]): Record<string, number> {
  * Only markers whose numeric n appears as a key in idMap are rewritten.
  * Markers are matched by /\[\^(\d+)\]/g; alpha markers ([^A]) are not matched
  * and are left untouched.
+ *
+ * @param body Prose-only content; must NOT contain definition lines ("[^n]:"). Pass ParseResult.body, not full doc text.
  */
 export function applyFootnoteInlineRename(
 	body: string,
