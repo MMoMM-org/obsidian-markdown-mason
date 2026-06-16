@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fixtures, loadFixture } from "./fixtures.js";
+import { fixtures, loadFixture } from "./fixtures";
 
 describe("golden fixtures", () => {
 	it("app fixture is non-empty", () => {

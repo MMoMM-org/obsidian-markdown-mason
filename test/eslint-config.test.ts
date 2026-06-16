@@ -20,10 +20,16 @@ const makeEslint = (): ESLint =>
 	});
 
 describe("eslint flat config — CON-3 no-console enforcement", () => {
+	// Shared instance — all four tests use the same config; no need to recreate it.
+	const eslint = makeEslint();
+
+	// "src/virtual.ts" is a non-existent path under src/ chosen so the flat
+	// config's `files: ["src/**/*.ts"]` glob applies during lintText calls.
+	const virtualFilePath = path.join(repoRoot, "src/virtual.ts");
+
 	it("rejects console.log", async () => {
-		const eslint = makeEslint();
 		const results = await eslint.lintText('console.log("hello");\n', {
-			filePath: path.join(repoRoot, "src/virtual.ts"),
+			filePath: virtualFilePath,
 		});
 		const noConsoleErrors = results
 			.flatMap((r) => r.messages)
@@ -32,9 +38,8 @@ describe("eslint flat config — CON-3 no-console enforcement", () => {
 	});
 
 	it("accepts console.warn", async () => {
-		const eslint = makeEslint();
 		const results = await eslint.lintText('console.warn("hello");\n', {
-			filePath: path.join(repoRoot, "src/virtual.ts"),
+			filePath: virtualFilePath,
 		});
 		const noConsoleErrors = results
 			.flatMap((r) => r.messages)
@@ -43,9 +48,8 @@ describe("eslint flat config — CON-3 no-console enforcement", () => {
 	});
 
 	it("accepts console.debug", async () => {
-		const eslint = makeEslint();
 		const results = await eslint.lintText('console.debug("hello");\n', {
-			filePath: path.join(repoRoot, "src/virtual.ts"),
+			filePath: virtualFilePath,
 		});
 		const noConsoleErrors = results
 			.flatMap((r) => r.messages)
@@ -54,9 +58,8 @@ describe("eslint flat config — CON-3 no-console enforcement", () => {
 	});
 
 	it("accepts console.error", async () => {
-		const eslint = makeEslint();
 		const results = await eslint.lintText('console.error("hello");\n', {
-			filePath: path.join(repoRoot, "src/virtual.ts"),
+			filePath: virtualFilePath,
 		});
 		const noConsoleErrors = results
 			.flatMap((r) => r.messages)
