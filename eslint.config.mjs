@@ -1,6 +1,6 @@
 import tseslint from "typescript-eslint";
 
-export default tseslint.config(
+export default [
 	...tseslint.configs.recommended,
 	{
 		files: ["src/**/*.ts"],
@@ -15,4 +15,4 @@ export default tseslint.config(
 			"no-console": ["error", { allow: ["debug", "warn", "error"] }],
 		},
 	},
-);
+];

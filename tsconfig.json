@@ -13,8 +13,7 @@
 		"inlineSourceMap": true,
 		"inlineSources": true,
 		"esModuleInterop": true,
-		"skipLibCheck": true,
-		"outDir": "dist"
+		"skipLibCheck": true
 	},
 	"include": ["src/**/*.ts"],
 	"exclude": ["node_modules"]
