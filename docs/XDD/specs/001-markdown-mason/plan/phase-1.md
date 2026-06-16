@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: Scaffolding & Build Harness"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 1
 ---
@@ -27,7 +27,7 @@ phase: 1
 
 Establishes a building, loading, testable plugin skeleton.
 
-- [ ] **T1.1 Build & TypeScript config** `[activity: build-tooling]`
+- [x] **T1.1 Build & TypeScript config** `[activity: build-tooling]`
   1. Prime: Read `package.json`, `manifest.json`, `versions.json` `[ref: SDD/Implementation Context]`
   2. Test: `npm run build` produces `main.js`; `tsc -noEmit` passes on a trivial `src/main.ts`.
   3. Implement: Author `tsconfig.json` (strict, ESNext, bundler resolution) and `esbuild.config.mjs` (entry `src/main.ts`, format cjs, external `obsidian`/electron/builtins, watch+prod modes).

@@ -9,7 +9,8 @@
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"test": "vitest run",
 		"test:watch": "vitest",
-		"lint": "eslint src/"
+		"lint": "eslint src/",
+		"check:manifest": "node scripts/check-manifest.mjs"
 	},
 	"keywords": [
 		"obsidian",
