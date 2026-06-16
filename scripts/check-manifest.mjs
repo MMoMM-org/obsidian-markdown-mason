@@ -2,35 +2,63 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const manifestPath = resolve(__dirname, '..', 'manifest.json');
+/**
+ * Pure validation function — no I/O, no side effects.
+ * @param {unknown} manifest
+ * @returns {string[]} List of failure messages; empty means compliant.
+ */
+export function checkManifest(manifest) {
+	const failures = [];
 
-const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-
-const failures = [];
-
-if (manifest.isDesktopOnly !== true) {
-	failures.push(`isDesktopOnly must be true (got: ${manifest.isDesktopOnly})`);
-}
-
-if (manifest.id.toLowerCase().includes('obsidian')) {
-	failures.push(`id must not contain "obsidian" (got: "${manifest.id}")`);
-}
-
-if (!manifest.description.endsWith('.')) {
-	failures.push(`description must end with "." (got: "${manifest.description}")`);
-}
-
-if (/\bobsidian\b/i.test(manifest.description)) {
-	failures.push(`description must not contain the word "Obsidian" (got: "${manifest.description}")`);
-}
-
-if (failures.length > 0) {
-	console.error('manifest.json compliance failures:');
-	for (const msg of failures) {
-		console.error(`  - ${msg}`);
+	if (typeof manifest.id !== 'string') {
+		failures.push('id is missing or not a string');
+	} else if (manifest.id.toLowerCase().includes('obsidian')) {
+		failures.push(`id must not contain 'obsidian' (got: "${manifest.id}")`);
 	}
-	process.exit(1);
+
+	if (typeof manifest.description !== 'string') {
+		failures.push('description is missing or not a string');
+	} else {
+		if (!manifest.description.endsWith('.')) {
+			failures.push(`description must end with '.' (got: "${manifest.description}")`);
+		}
+		if (/\bobsidian\b/i.test(manifest.description)) {
+			failures.push(`description must not contain the word 'Obsidian' (got: "${manifest.description}")`);
+		}
+	}
+
+	if (manifest.isDesktopOnly !== true) {
+		failures.push(`isDesktopOnly must be true (got: ${manifest.isDesktopOnly})`);
+	}
+
+	return failures;
 }
 
-console.log('manifest.json passed all compliance checks.');
+// CLI entry point — only runs when invoked directly, not when imported.
+const currentFile = fileURLToPath(import.meta.url);
+const invokedFile = process.argv[1] ? resolve(process.argv[1]) : null;
+
+if (invokedFile === currentFile) {
+	const __dirname = dirname(currentFile);
+	const manifestPath = resolve(__dirname, '..', 'manifest.json');
+
+	let manifest;
+	try {
+		manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+	} catch (err) {
+		console.error(`Failed to parse manifest.json: ${err.message}`);
+		process.exit(1);
+	}
+
+	const failures = checkManifest(manifest);
+
+	if (failures.length > 0) {
+		console.error('manifest.json compliance failures:');
+		for (const msg of failures) {
+			console.error(`  - ${msg}`);
+		}
+		process.exit(1);
+	}
+
+	console.log('manifest.json passed all compliance checks.');
+}
