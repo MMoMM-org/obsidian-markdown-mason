@@ -11,9 +11,13 @@
 //   Returns Edits (offsets vs the ORIGINAL body string, ADR-1) that rewrite
 //   each [^n] marker whose n is a key in idMap.
 //
+// formatF4Def(ref) → string
+//   Canonical F4 two-line formatter: "[^id]: snippet\n[title](url)".
+//   Single source of F4 format in core.  newRefDefinitions delegates here.
+//
 // newRefDefinitions(newRefs) → string[]
-//   Returns formatted definition strings "[^id]: Title\n    URL" for each
-//   genuinely new ref.  T2.5 (M) will place these into the Resources section.
+//   Returns F4-format definition strings for each genuinely new ref by mapping
+//   through formatF4Def.  T2.5 (M) will place these into the Resources section.
 //   This is the clean seam: T2.4 owns identity + inline rewrite + def content;
 //   T2.5 owns section placement (locating/creating "## Resources" and inserting).
 //
@@ -30,22 +34,18 @@
 //   Locates "## <resourcesName>" section; if absent, creates it at note end.
 //   Never modifies orphaned lines.  Empty defs → empty plan.
 //
-//   Definition format reconciliation (T2.4 vs T2.5):
-//     newRefDefinitions (T2.4) emits: "[^id]: title\n    url"   (indented URL)
-//     moveToResources   (T2.5) expects: "[^n]: snippet\n[title](url)" (F4 two-line)
-//   These formats differ.  moveToResources receives pre-formatted defs from the
-//   CALLER (the command layer builds the two-line format from FootnoteRef fields:
-//   snippet on line 1, markdown link on line 2).  newRefDefinitions is intentionally
-//   kept in its T2.4 form to avoid breaking existing tests; callers that need F4
-//   format must format defs themselves before passing them to moveToResources.
+//   Definition format (T2.4 → T2.5):
+//     formatF4Def (canonical)    emits: "[^id]: snippet\n[title](url)" (F4 two-line)
+//     newRefDefinitions delegates to formatF4Def — one canonical formatter in core.
+//     moveToResources receives defs already in F4 format (produced by newRefDefinitions
+//     or by callers mapping ResolvedRef[] through formatF4Def directly).
 //
 //   Caller composition of a two-place plan (ADR — body + defs in one plan):
-//     const bodyEdits = fromCitations(parseResult);          // [n]→[^n] in body
-//     const { idMap, newRefs } = resolveFootnoteIdentity(…); // O+D resolution
-//     const renameEdits = applyFootnoteInlineRename(…);      // [^n]→[^m] rename
-//     const f4Defs = newRefs.map(r =>
-//       `[^${r.id}]: ${r.snippet}\n[${r.title}](${r.url})`); // F4 two-line format
-//     const resourceEdits = moveToResources(ctx, f4Defs);    // section placement
+//     const bodyEdits = fromCitations(parseResult);               // [n]→[^n] in body
+//     const { idMap, newRefs } = resolveFootnoteIdentity(…);      // O+D resolution
+//     const renameEdits = applyFootnoteInlineRename(…);           // [^n]→[^m] rename
+//     const f4Defs = newRefDefinitions(newRefs);                  // F4 format (via formatF4Def)
+//     const resourceEdits = moveToResources(ctx, f4Defs);         // section placement
 //     const plan: EditPlan = [                               // ONE combined plan
 //       ...bodyEdits, ...renameEdits, ...resourceEdits       // all vs ORIGINAL doc
 //     ];
@@ -183,26 +183,44 @@ export function applyFootnoteInlineRename(
 }
 
 // ---------------------------------------------------------------------------
+// formatF4Def — canonical F4 two-line definition formatter
+// ---------------------------------------------------------------------------
+
+/**
+ * Produce the canonical F4 two-line footnote definition for a single ref.
+ *
+ * Format (F4.1):
+ *   "[^{id}]: {snippet}"   ← line 1: anchor + snippet
+ *   "[{title}]({url})"     ← line 2: markdown link
+ *
+ * This is the single canonical source of F4 format in core.
+ * newRefDefinitions delegates here; callers that need F4 defs for
+ * moveToResources should map their ResolvedRef[] through this function.
+ */
+export function formatF4Def(ref: { id: number; snippet: string; title: string; url: string }): string {
+	return `[^${ref.id}]: ${ref.snippet}\n[${ref.title}](${ref.url})`;
+}
+
+// ---------------------------------------------------------------------------
 // newRefDefinitions
 // ---------------------------------------------------------------------------
 
 /**
  * Format definition lines for genuinely new refs.
  *
- * Output format per ref:
- *   "[^{id}]: {title}\n    {url}"
+ * Delegates to formatF4Def — the canonical F4 two-line formatter — so there
+ * is exactly one place in core that produces the F4 format.
  *
- * This two-line format is the standard Markdown Mason Resources entry.
+ * Output format per ref (F4.1):
+ *   "[^{id}]: {snippet}"
+ *   "[{title}]({url})"
+ *
  * T2.5 (M / move-to-Resources) consumes this output and is responsible for
  * locating or creating the "## Resources" section and inserting the lines.
  * T2.4 deliberately stops here — it produces the content, not the placement.
- *
- * NOTE: This format differs from the F4 two-line spec used by moveToResources.
- * The command layer is responsible for producing F4-format defs from FootnoteRef
- * fields (snippet on line 1, markdown link on line 2) before calling moveToResources.
  */
 export function newRefDefinitions(newRefs: ResolvedRef[]): string[] {
-	return newRefs.map((ref) => `[^${ref.id}]: ${ref.title}\n    ${ref.url}`);
+	return newRefs.map(formatF4Def);
 }
 
 // ---------------------------------------------------------------------------

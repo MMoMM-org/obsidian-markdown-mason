@@ -3,6 +3,7 @@ import {
 	resolveFootnoteIdentity,
 	applyFootnoteInlineRename,
 	newRefDefinitions,
+	formatF4Def,
 	fromCitations,
 	moveToResources,
 } from "../../src/core/footnotes";
@@ -376,15 +377,47 @@ describe("applyFootnoteInlineRename — multi-digit id is not partially matched"
 });
 
 // ---------------------------------------------------------------------------
-// newRefDefinitions — produces definition lines for new refs
+// formatF4Def — canonical F4 two-line definition formatter (F4.1 proof)
 //
-// Output per ref: "[^{id}]: {title}\n    {url}"
+// Output format: "[^{id}]: {snippet}\n[{title}]({url})"
+// Non-tautological: pins the exact format, not just presence of substrings.
+// ---------------------------------------------------------------------------
+
+describe("formatF4Def — produces canonical F4 two-line definition (direct proof)", () => {
+	it("exact F4 format: snippet on line 1, markdown link on line 2", () => {
+		const result = formatF4Def({
+			id: 3,
+			snippet: "some snippet",
+			title: "Page Title",
+			url: "https://example.com",
+		});
+		expect(result).toBe("[^3]: some snippet\n[Page Title](https://example.com)");
+	});
+
+	it("line 1 is '[^id]: snippet' — NOT title, NOT indented url", () => {
+		const result = formatF4Def({ id: 1, snippet: "the snippet", title: "The Title", url: "https://x.com" });
+		const line1 = result.split("\n")[0];
+		expect(line1).toBe("[^1]: the snippet");
+	});
+
+	it("line 2 is a markdown link '[title](url)'", () => {
+		const result = formatF4Def({ id: 1, snippet: "snip", title: "My Title", url: "https://y.com" });
+		const line2 = result.split("\n")[1];
+		expect(line2).toBe("[My Title](https://y.com)");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// newRefDefinitions — produces F4 definition lines for new refs
+//
+// Delegates to formatF4Def — one canonical formatter in core.
+// Output per ref: "[^{id}]: {snippet}\n[{title}]({url})"
 // These strings are handed to T2.5 (M) for placement into Resources section.
 // ---------------------------------------------------------------------------
 
-describe("newRefDefinitions — produces formatted definition strings", () => {
+describe("newRefDefinitions — produces F4-format definition strings", () => {
 	const newRefs: ResolvedRef[] = [
-		{ incomingId: 1, id: 7, url: urlB, title: "Beta Page", snippet: "snip" },
+		{ incomingId: 1, id: 7, url: urlB, title: "Beta Page", snippet: "B snippet" },
 	];
 
 	it("returns one definition string per newRef", () => {
@@ -392,19 +425,21 @@ describe("newRefDefinitions — produces formatted definition strings", () => {
 		expect(defs).toHaveLength(1);
 	});
 
-	it("definition starts with [^7]:", () => {
+	it("definition is exactly the F4 two-line format: snippet on line 1, link on line 2", () => {
 		const defs = newRefDefinitions(newRefs);
-		expect(defs[0]).toMatch(/^\[\^7\]:/);
+		expect(defs[0]).toBe(`[^7]: B snippet\n[Beta Page](${urlB})`);
 	});
 
-	it("definition contains the title", () => {
+	it("line 1 starts with [^7]: and carries the snippet (not the title)", () => {
 		const defs = newRefDefinitions(newRefs);
-		expect(defs[0]).toContain("Beta Page");
+		const line1 = defs[0].split("\n")[0];
+		expect(line1).toBe("[^7]: B snippet");
 	});
 
-	it("definition contains the url", () => {
+	it("line 2 is the markdown link '[title](url)'", () => {
 		const defs = newRefDefinitions(newRefs);
-		expect(defs[0]).toContain(urlB);
+		const line2 = defs[0].split("\n")[1];
+		expect(line2).toBe(`[Beta Page](${urlB})`);
 	});
 });
 
@@ -461,11 +496,10 @@ describe("integration — inline rename and new definitions in sync from one res
 		expect(defs).toHaveLength(1);
 	});
 
-	it("the single new definition is for [^7] matching the inline rewrite", () => {
+	it("the single new definition is for [^7] in F4 format — snippet line 1, link line 2", () => {
 		const defs = newRefDefinitions(newRefs);
-		expect(defs[0]).toMatch(/^\[\^7\]:/);
-		expect(defs[0]).toContain("Beta Page");
-		expect(defs[0]).toContain(urlB);
+		// newRefs[0] is from incoming[0]: title="Beta Page", snippet="B snippet", url=urlB
+		expect(defs[0]).toBe(`[^7]: B snippet\n[Beta Page](${urlB})`);
 	});
 
 	it("no new definition is emitted for id 6 (urlA was reused from existing, not new)", () => {
@@ -824,7 +858,7 @@ describe("moveToResources — orphaned resources (no [^n]: prefix) are NOT modif
 	});
 });
 
-describe("moveToResources — two-line definition format", () => {
+describe("moveToResources — two-line definition format (passthrough check)", () => {
 	// The F4 spec mandates: "[^n]: snippet" on line 1, "[title](url)" on line 2.
 	// moveToResources receives pre-formatted defs in this exact format.
 	const doc = "# Title\n\nBody.\n";
@@ -842,5 +876,65 @@ describe("moveToResources — two-line definition format", () => {
 		const plan = moveToResources(ctx, defs);
 		const result = applyPlan(doc, plan);
 		expect(result).toContain("[The Title](https://example.org/page)");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// END-TO-END — formatF4Def + moveToResources produces F4 format in the doc
+//
+// Proves that F4 format is PRODUCED by core (not just passed through):
+// resolveFootnoteIdentity → newRefDefinitions (via formatF4Def) → moveToResources
+// → doc contains "[^id]: snippet" on line 1 and "[title](url)" on line 2.
+//
+// Golden setup: incoming has urlB (new) and urlA (reuses existing [^6]).
+// Only urlB becomes a newRef with id=7.  urlA produces no new def.
+// Expected Resources section:
+//   [^7]: B snippet
+//   [Beta Page](https://example.com/beta)
+// ---------------------------------------------------------------------------
+
+describe("end-to-end — formatF4Def → moveToResources places F4 format in doc (F4.1 proof)", () => {
+	const incoming: FootnoteRef[] = [
+		makeRef({ incomingId: 1, url: urlB, title: "Beta Page", snippet: "B snippet" }),
+		makeRef({ incomingId: 2, url: urlA, title: "Alpha Page", snippet: "A snippet" }),
+		makeRef({ incomingId: 3, url: urlB, title: "Beta Page Again", snippet: "B snippet 2" }),
+	];
+	const existing: ExistingRef[] = [makeExisting(6, urlA)];
+
+	const { newRefs } = resolveFootnoteIdentity(incoming, existing);
+	// newRefs has exactly one entry: id=7, urlB, title="Beta Page", snippet="B snippet"
+
+	const doc = "# Title\n\nBody text.\n";
+	const ctx = makeCtx(doc);
+
+	const f4Defs = newRefs.map(formatF4Def);
+	const plan = moveToResources(ctx, f4Defs);
+	const result = applyPlan(doc, plan);
+
+	it("only one new def is produced (urlB is new; urlA reuses existing [^6])", () => {
+		expect(f4Defs).toHaveLength(1);
+	});
+
+	it("the doc now contains a ## Resources section", () => {
+		expect(result).toContain("## Resources");
+	});
+
+	it("line 1 of the def has the snippet: '[^7]: B snippet'", () => {
+		expect(result).toContain("[^7]: B snippet");
+	});
+
+	it("line 2 of the def has the markdown link: '[Beta Page](urlB)'", () => {
+		expect(result).toContain(`[Beta Page](${urlB})`);
+	});
+
+	it("the snippet line appears before the link line in the doc", () => {
+		const snippetIdx = result.indexOf("[^7]: B snippet");
+		const linkIdx = result.indexOf(`[Beta Page](${urlB})`);
+		expect(snippetIdx).toBeGreaterThan(-1);
+		expect(linkIdx).toBeGreaterThan(snippetIdx);
+	});
+
+	it("no [^6] definition is created (urlA was reused from existing, not new)", () => {
+		expect(result).not.toContain("[^6]: ");
 	});
 });
