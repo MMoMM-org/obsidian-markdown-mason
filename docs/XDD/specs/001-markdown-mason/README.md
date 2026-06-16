@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-06-16 |
-| **Current Phase** | PRD |
+| **Current Phase** | SDD |
 | **Last Updated** | 2026-06-16 |
 
 ## Documents
@@ -13,7 +13,7 @@
 | Document | Status | Notes |
 |----------|--------|-------|
 | requirements.md | completed | v1.1 (JS-scripts-first pivot); 11 features, 45 Gherkin acceptance criteria |
-| solution.md | pending | |
+| solution.md | completed | Hexagonal; 10 ADRs all confirmed; EARS acceptance criteria |
 | plan/ | pending | |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
@@ -28,6 +28,8 @@
 | 2026-06-16 | **O+D fused** (resolves open-decision #4) | Sequential O-then-D collides (gaps/reuse contradiction); the single "footnote-identity" pass (dedup-in-paste → match existing URL/reuse number → assign max+1 to new) is the only consistent design. Core returns an **EditPlan**; two-place edit applied as one CM6 transaction. |
 | 2026-06-16 | **Drift = hard-block** (not dismissable warning) | Security: same-version+different-checksum must disable the transform until explicit user resolution, else a same-version malicious push can be clicked past. |
 | 2026-06-16 | **PIVOT: JS-scripts-first (Advanced Paste model), declarative core dropped** (PRD v1.1) | User feedback on PRD: extensibility is via custom JS scripts invokable on paste or as a command on a selection; ops H/C/O+D/M are an in-plugin **versioned, extensible API** scripts call; the 3 Perplexity surfaces ship as **downloadable scripts, not built-ins**; reuse the in-house `miyo-tomo-hashi` `src/hooks/` execution model. Script support is **foundational v0.1** (no later rewrite). **Desktop-only** accepted (`isDesktopOnly:true`). Storage = plugin dir; download from vetted official repo (Markdown-in-note only, doc-required PR) or vault-import community scripts at user discretion. Consent = once per **checksum/version**. §2 blocker **resolved** — 3 samples committed under `assets/`. |
+
+| 2026-06-16 | **SDD: 10 ADRs confirmed** | Hexagonal core + hashi-derived script runtime. ADR-1 EditPlan+single CM6 transaction · ADR-2 fused O+D · ADR-3 hashi runtime · ADR-4 per-checksum/version consent · ADR-5 versioned `mason.*` registry/API · ADR-6 plugin-dir storage + per-device sidecar · ADR-7 desktop-only · ADR-8 official-repo distribution (v0.2) · **ADR-9 three Perplexity scripts + auto-dispatcher** (amended) · ADR-10 explicit-invoke paste in v0.1 (auto-on-paste → v0.3). |
 
 ### Research agents (resumable via SendMessage)
 
