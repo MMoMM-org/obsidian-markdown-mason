@@ -25,7 +25,7 @@ import type { ResolvedRef } from "../../src/core/footnotes";
 //
 // newRefDefinitions(newRefs) → string[]
 //   Produces the definition lines for genuinely new refs, e.g.
-//   "[^7]: Title\n    URL"
+//   "[^7]: snippet\n[Title](URL)"
 //   T2.5 (M) will place these into the Resources section.
 //
 // Algorithm (SDD §Complex Logic — fused Footnote-Identity):
@@ -668,7 +668,7 @@ describe("fromCitations — multiple occurrences of the same n are each rewritte
 //     "\n## <resourcesName>\n\n<defs joined by \n\n>"
 //
 // The two-line format per def: "[^n]: snippet\n[title](url)"
-// (Differs from newRefDefinitions which uses "[^n]: title\n    url".)
+// (Both newRefDefinitions and direct callers produce this same F4 format.)
 // ---------------------------------------------------------------------------
 
 const DEFAULT_SETTINGS: MasonSettings = {
