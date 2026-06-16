@@ -1,0 +1,32 @@
+{
+	"name": "obsidian-markdown-mason",
+	"version": "0.0.1",
+	"description": "Fit pasted or whole-note Markdown into the target note's structure — heading cascade, footnote renumbering, dedup and a curated transform library.",
+	"main": "main.js",
+	"type": "module",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"lint": "eslint src/"
+	},
+	"keywords": [
+		"obsidian",
+		"obsidian-plugin",
+		"markdown",
+		"footnotes",
+		"paste"
+	],
+	"author": "Marcus Breiden",
+	"license": "MIT",
+	"devDependencies": {
+		"@types/node": "^22.0.0",
+		"builtin-modules": "5.0.0",
+		"esbuild": "0.25.5",
+		"obsidian": "latest",
+		"tslib": "2.4.0",
+		"typescript": "^5.8.3",
+		"vitest": "^3.2.1"
+	}
+}

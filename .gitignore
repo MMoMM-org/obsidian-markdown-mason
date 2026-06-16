@@ -1,0 +1,47 @@
+# vscode
+.vscode
+*.code-workspace
+
+# Intellij
+*.iml
+.idea
+
+# npm
+node_modules
+
+# Don't include the compiled main.js file in the repo.
+# It should be uploaded to GitHub releases instead.
+main.js
+
+# Build output (release assets)
+build/
+
+# Test coverage
+coverage/
+
+# Exclude sourcemaps
+*.map
+
+# obsidian
+data.json
+
+# macOS Finder view states
+.DS_Store
+
+# Workspace scratch / inter-project message channels (not tracked)
+temp/
+_inbox/
+_outbox/
+_archive/
+
+# Claude Code
+.claude/
+.claude-docker/
+
+# Local Docker-based dev environment (not useful to anyone cloning the repo).
+# The master copies live under ~/Kouzou/scripts and are deployed per-repo
+# locally; they do not belong in the plugin source tree.
+claude-docker/
+claude-docker-home/
+begin-code.sh
+/generated-images/
