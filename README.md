@@ -54,10 +54,11 @@ gegen den die Operationen getestet werden:
 - **Verwaiste Resources:** Snippet + Link **ohne** `[^n]:`-Präfix kommen vor (Quellen,
   die noch keiner Stelle zugeordnet sind) — dürfen nicht zerstört werden.
 
-> ⚠️ **Noch offen / benötigt:** ein **roher** Perplexity-Paste (unbearbeitet, Inline-Citations
-> + Quellenblock), um den Parser in §4 (C/D) korrekt zu bauen. Bisher ist nur das
-> *kuratierte Ergebnis* bekannt, nicht das *Roh-Eingabeformat*. Perplexity variiert
-> (mal `[1]` inline, mal „Citations:"-Block, mal Superscript-Links).
+> ✅ **Gelöst:** Drei rohe Samples liegen unter `assets/sakura-in-tokyo-{app,web,web-download}.md`
+> und sind die Golden-Fixtures. Sie zeigen **drei verschiedene Formate** — *App-Copy* (`[1][2]` +
+> `Sources`-Block, Nummerierung pro Antwort neu), *Web-Copy* (Inline-Links `[domain](url)`, keine
+> Marker/Block), *Web-Download* (bereits `[^a_b]`-Fußnoten + URL-only-Definitionsliste, mit HTML-
+> Resten). Jedes Format = ein eigenes Skript (§7), kein gemeinsamer Parser.
 
 ---
 
@@ -165,111 +166,89 @@ CodeMirror-Transaktion anwenden (alle Ranges gegen das **Original**-Dokument ber
 
 ---
 
-## 7. Extensibilität: kuratierte Transform-Bibliothek (Kern-Idee)
+## 7. Extensibilität: Skripte (Advanced-Paste-Modell) + erweiterbare Operations-API
 
-Das Hauptproblem mit Advanced Paste war: **Skripte lebten lose im Vault** → Obsidian
-schleppt/synct sie mit, unübersichtlich. Markdown Mason dreht das um:
+> **Richtungswechsel (PRD v1.1):** Der frühere „deklarative Kern, JS nur als Escape-Hatch"-Ansatz
+> ist **verworfen**. Markdown Mason ist **JS-Skript-first** im Geist von Advanced Paste: ein Skript
+> läuft **beim Paste** oder **als Command auf einer Selektion**. Das Plugin ist deshalb **desktop-only**.
 
-- **Transforms werden vom Plugin verwaltet**, gespeichert in einem **eigenen Skript-Verzeichnis
-  im Plugin-Datenverzeichnis** (`.obsidian/plugins/markdown-mason/scripts/…`), **nicht** als
-  Notiz-Dateien im Vault-Baum.
-- **Built-in-Transforms** werden mit dem Plugin ausgeliefert (die obigen H/C/O/D/M + die
-  Perplexity-Beispiele des Autors als kanonische Vorlage). Sie sind die **einzige durch die
-  Maintainer geprüfte** Stufe; jede Aktivierung ist **Opt-in**. Pro Beispiel liegt im Repo eine
-  Doku, *warum* es so gebaut ist (Feature-Set orientiert am Perplexity-Use-Case, ergänzt um
-  Ideen — **nicht Code** — aus Paste Reformatter).
-- **Import statt Auto-Galerie:** Es gibt **keinen** stillen Netzwerk-Installer. Sowohl
-  Community- als auch selbstgebaute Transforms laufen über **denselben manuellen Pfad**: Datei
-  im Vault ablegen → ins Skript-Verzeichnis importieren. Das Plugin führt eine **Quell-Liste**
-  (kuratierte Repos + eigene Vault-Pfade), aus der re-importiert/aktualisiert werden kann — aber
-  Installation und Upgrade sind immer **nutzer-bestätigt** (siehe §10).
+Das Hauptproblem mit Advanced Paste war: **Skripte lebten lose im Vault**. Mason übernimmt sein
+gutes Modell (Custom-Skript beim Paste) und behebt die Schwäche: Skripte werden **vom Plugin
+verwaltet**, gespeichert in einem **eigenen Skript-Verzeichnis im Plugin-Datenverzeichnis**
+(`.obsidian/plugins/markdown-mason/scripts/…`), **nicht** als Notiz-Dateien im Vault-Baum.
 
-### Entschieden: deklarativer Kern (A), JS nur als Escape-Hatch
-Beim „Transforms aus einer Quelle ziehen und ausführen" entsteht eine **Trust-/Supply-Chain-Fläche**
-(Code-Ausführung mit vollem Plugin-Rechten). Die Entscheidung ist gefallen:
+### Operationen = in-plugin API; Skripte = Erweiterungsschicht
+- **H/C/O/D/M sind eine getestete, in-plugin Operations-API** (`mason.*`) **und** je ein Standalone-
+  `Mason:`-Command. Skripte rufen diese API — sie reimplementieren nichts.
+- **Skripte (JS/`.cjs`)** sind die Erweiterungsschicht: an Command/Hotkey **bindbar**, ausführbar
+  **beim Paste** oder **auf Selektion**. Skript-Support ist **Fundament ab v0.1** — kein späterer Umbau.
+- **Perplexity = herunterladbare Skripte, nicht Built-in.** Die drei Surfaces sind je ein eigenes
+  Skript (`assets/sakura-in-tokyo-{app,web,web-download}.md` als Golden-Fixtures, siehe §2).
+- **Erweiterbare, versionierte API:** neue plugin-integrierte Operationen können dazukommen und
+  stehen dann allen Skripten unter `mason.*` zur Verfügung; ein Skript deklariert die benötigte
+  **API-Version**. Additiv oder dokumentierter Major-Bump.
 
-- **(A) Deklarative Pipeline** aus sicheren Primitiven (Heading-Shift, Regex-Regeln, Footnote-Ops,
-  Reihenfolge) ist **das Kernformat**. Ein Transform ist damit *Daten*, kein Code → PR-/Import-
-  reviewbar **ohne** Ausführung, und „macht nur Markdown-Operationen" gilt **per Konstruktion**
-  (die Primitiven sind die einzige Capability). Deckt H/C/O/D/M vollständig ab.
-- **(B) Beliebiges JS** bleibt ein optionaler, deutlich gekennzeichneter **Power-User-Escape-Hatch**:
-  desktop-only, pro Installation expliziter „du führst Fremdcode aus"-Consent, **nie** automatisch
-  aus der Quell-Liste gezogen.
+### Bezug & Trust (zwei Wege)
+1. **Download aus dem offiziellen, geprüften Repo** (spezielles Skript-Verzeichnis): Skripte werden
+   per PR eingereicht, **brauchen eine Doku**, was sie tun, und dürfen **nur Markdown in der Notiz**
+   bearbeiten — **kein** Netzwerk, **keine** externen Aufrufe, **kein** Cross-Plugin-Zugriff (sonst
+   nicht gemerged). Das ist die geprüfte Stufe.
+2. **Copy aus dem Vault → Import** (eigene oder Community-Skripte): **auf eigenes Ermessen/Risiko**.
+   Community-Sharing läuft über den **Forum-/Diskussionsbereich** des Repos; von dort kopiert der
+   Nutzer ins Vault und importiert. Es gibt **keinen** stillen Netzwerk-Installer für ungeprüften Code.
 
-### Self-describing Transform-Format (eine Datei pro Transform)
-Weil der Kern deklarativ ist, ist ein Transform ein strukturiertes Dokument und trägt seine
-Metadaten **in sich** — keine Sidecar-Dateien für Changelog/Doku:
+### Ausführungsmodell (wiederverwendet aus `miyo-tomo-hashi` `src/hooks/`)
+- **Fresh-Load pro Lauf** via `createRequire` + **Cache-Evict per Verzeichnis-Präfix** (kein stales
+  Helper-Modul nach Edit).
+- **Policy `enabled | disabled | ask`** — `disabled` ist der **Kill-Switch**.
+- **Disclosure-Modal:** „läuft mit vollen Plugin-Rechten (Vault, Node fs/Netzwerk, Shell, env)".
+- **Consent: einmal pro Checksum/Version** (nicht pro Session); **Re-Prompt** bei Fingerprint-
+  Änderung (size+mtime). Geprüfte Repo-Skripte: leichtes Enable; importierte/Community: volle Disclosure.
+- **hooksDir-Escape-Guard:** ein per Sync manipulierter Pfad, der aus dem zulässigen Verzeichnis
+  ausbricht, wird abgelehnt.
+- **Timeout** (async) + **Fehler-Fallback:** wirft ein Skript oder läuft in den Timeout, bleibt der
+  Paste/die Selektion roh erhalten — nie ein stiller Teil-Edit.
 
-```yaml
-id: perplexity-citations
-version: 3
-description: Wandelt Perplexity-Inline-Citations [n] in [^n]-Fußnoten …
-changelog:
-  - v3: "Citations:"-Block-Variante unterstützt
-  - v2: Dedup über normalisierte URL
-  - v1: initial
-transform: [ … die deklarative Pipeline … ]
-```
-
-Vorteile: **eine** Datei zum Hashen/Holen/Speichern; der Update-Prompt liest `changelog` direkt
-aus der eingehenden Version (kein zweiter Fetch); ein Changelog-Eintrag ändert den Checksum —
-korrekt, weil er versionierter Inhalt ist. Längere „warum"-Prosa lebt zusätzlich als Repo-Doku
-für den kuratierten Satz; zur Laufzeit braucht es nur die eine Datei. JS-Escape-Hatch-Transforms
-tragen dieselben Felder als Header-Kommentarblock.
-
-### Speicher- & Integritäts-Modell (Manifest/Lockfile)
-`data.json` hält **nur Metadaten** pro Transform — die Skripte selbst liegen als Dateien im
-Skript-Verzeichnis:
+### Self-describing Skript-Metadaten + Manifest/Integrität
+Jedes Skript trägt seine Metadaten im Header (`id`, `version`, `description`, `changelog`,
+`required-api-version`). `data.json` hält **nur Metadaten** pro Skript:
 
 ```json
-{ "source": "…repo-url | vault-pfad", "checksum": "sha256:…", "version": 3, "enabled": true }
+{ "source": "offizielles-repo | vault-pfad", "checksum": "sha256:…", "version": 3, "enabled": true }
 ```
 
 Regeln (Paketmanager-Logik: Hash pinnt Integrität, Version signalisiert Absicht):
-
-- **Auf Disk** wird nur **Existenz** geprüft. Fehlt die Datei → von `source` holen; stimmt der
-  geholte Checksum mit dem gespeicherten überein → **Autoinstall** (still). Mismatch → **nicht**
-  still installieren (Quelle ist abgedriftet).
-- **Drift-Erkennung** vergleicht Quell-Checksum gegen den gespeicherten:
-  - **gleiche Version + anderer Checksum → unerwartete Drift → Fehler/Warnung** (Quelle hat sich
-    ohne Ankündigung geändert: Manipulation oder schlampige Pflege — nie automatisch anwenden).
-  - **höhere Version → legitime Änderung → Update-Prompt** (mit `changelog`) → Nutzer entscheidet.
-    **Keine** Auto-Upgrades.
-- Die Drift-Prüfung *bedeutet* je nach Quelle Unterschiedliches: bei einem **geprüften Repo**
-  Manipulations-/Integritätsschutz; bei einem **Vault-Pfad** nur „du hast deine lokale Kopie
-  editiert — neu importieren?". Gleiche Mechanik, andere Schwere.
-
-**Cross-Instanz-Self-Heal (emergente Eigenschaft):** Obsidian Sync repliziert die **Plugin-Daten
-(`data.json`)**, aber **nicht** die Skript-Dateien (→ §9, **noch zu verifizieren**). Auf einem
-zweiten Gerät kommt also die Metadaten-Liste an, die Dateien fehlen → der Checksum-/Existenz-Pfad
-zieht sie automatisch aus `source` nach. **Grenze:** das funktioniert nur für Transforms mit
-*auflösbarer* `source` (geprüftes Repo / gehostete Datei). Rein selbstgeschriebene, aus dem Vault
-importierte Skripte haben **keine** Remote-Quelle → auf einem zweiten Gerät müssen sie erneut aus
-dem Vault importiert (oder selbst gehostet) werden.
+- **Auf Disk** nur **Existenz**-Check. Fehlt die Datei → von `source` holen; Checksum-Match →
+  Autoinstall, Mismatch → **nicht** still installieren.
+- **gleiche Version + anderer Checksum → Hard-Block** (deaktivieren bis explizite Auflösung).
+- **höhere Version → nutzer-bestätigtes Update** (mit `changelog`), **keine** Auto-Upgrades.
+- **Per-Device `enabled`/Consent NICHT in `data.json`** (das synct), sondern in einem **Sidecar**
+  via `vault.adapter` — sonst propagiert ungeprüftes JS bzw. eine Freigabe still auf alle Geräte (§9).
 
 ---
 
 ## 8. Architektur-Skizze
 
 ```
-core/                 reine Transform-Funktionen (kein Obsidian-Import) — unit-testbar
+core/                 reine Operationen (kein Obsidian-Import) — unit-testbar
   headings.ts         H
-  footnotes.ts        C, O, D, M
-  pipeline.ts         Verkettung + Preset-Definitionen
+  footnotes.ts        C, O+D (Footnote-Identity), M
+  api.ts              versionierte Operations-API (mason.*) — Registry der Operationen
 sources/              dünne Adapter, die Input + Kontext liefern
-  paste.ts            Clipboard → Cursor (Paste-Event)
+  paste.ts            Clipboard → Cursor (editor-paste-Hook)
   selection.ts        markierter Bereich
   note.ts             ganze Notiz
-registry/             Transform-Bibliothek
-  builtin/            mitgelieferte Transforms (inkl. Perplexity-Beispiele)
-  format.ts           self-describing Transform-Schema (id/version/changelog/description/transform)
-  sources.ts          Quell-Liste + Abruf/Import + Checksum-/Drift-/Update-Logik (kein Auto-Installer)
-  store.ts            Manifest (data.json: source/checksum/version/enabled) + Skript-Verzeichnis (NICHT im Vault-Baum)
-main.ts               Plugin-Lifecycle, Command-Registrierung, Settings-UI
+scripts/              Skript-Runtime (Modell aus miyo-tomo-hashi src/hooks/)
+  loader.ts           Fresh-Load via createRequire + Cache-Evict per Präfix; Fingerprint
+  runner.ts           Policy enabled|disabled|ask, Kill-Switch, Timeout, Fehler-Fallback
+  disclosure.ts       Consent-Modal (volle Rechte), Acknowledge pro Checksum/Version
+  store.ts            Manifest (data.json) + Per-Device-Sidecar (enabled/Consent)
+  distribution.ts     Download aus offiziellem Repo + Vault-Import + Drift-/Update-Logik
+main.ts               Lifecycle, Command-Registrierung (Ops + gebundene Skripte), Settings-UI, Paste-Hook
 ```
 
-Leitprinzip: **Kern weiß nichts von Obsidian.** Quellen + Registry + UI sind die dünne Hülle.
-Damit ist derselbe Kern später trivial in einen Auto-on-Cmd+V-Modus portierbar.
+Leitprinzip: **Kern (Operationen) weiß nichts von Obsidian** und ist via Fixtures testbar. Quellen,
+Skript-Runtime und UI sind die dünne Hülle; Skripte komponieren die Operations-API.
 
 ---
 
@@ -281,15 +260,14 @@ Damit ist derselbe Kern später trivial in einen Auto-on-Cmd+V-Modus portierbar.
   `registerEvent` — sauberes Cleanup beachten.
 - **`requestUrl`** statt `fetch` für den Quell-Abruf/Import aus Repos (CORS/Obsidian-Konvention).
 - **`normalizePath`** für jegliche Pfade; Persistenz über die Plugin-Data-API, nicht direkt im Vault.
-- **Sync-Annahme (LOAD-BEARING, zu verifizieren):** Das Self-Heal- und Re-Import-Modell aus §7
-  setzt voraus, dass Obsidian Sync **`data.json` repliziert, aber Skript-Dateien im Plugin-Verzeichnis
-  nicht**. Das ist die zentrale Unbekannte: synct Obsidian beliebige Plugin-Verzeichnis-Dateien,
-  ist das Self-Heal hinfällig **und** ungeprüftes JS würde still auf alle Geräte propagieren (anderes
-  Risiko). Vor dem Festzurren von §7/§10 gegen die Obsidian-Doc / Skill `tcs-patterns:obsidian-plugin`
-  klären.
-- **Mobile:** wenn Netzwerk/Import kritisch → `isDesktopOnly` erwägen; JS-Escape-Hatch ohnehin
-  desktop-only.
-- **DOM-Sicherheit:** kein `innerHTML` mit Fremdinhalt (Transform-`description`/`changelog`) — XSS-sicher rendern.
+- **Sync (Recherche-Befund, LOAD-BEARING, noch per 2-Geräte-Test zu bestätigen):** Obsidian Sync
+  repliziert bei aktivem „Installed community plugin list" **das ganze Plugin-Verzeichnis inkl.
+  Unterordner** (Forum-Sync-Logs, hoch-confident, nicht vendor-bestätigt). Konsequenz: ungeprüftes
+  JS könnte **still auf alle Geräte propagieren** → **Per-Device-Consent zwingend**, `enabled`/Consent
+  in einem **Sidecar** (nicht `data.json`). Vor v0.2 empirisch verifizieren.
+- **Desktop-only:** `isDesktopOnly: true` — die Skript-Runtime braucht Node (`require`, Fresh-Load +
+  Cache-Evict). Kein Mobile-Gating nötig, weil Mobile gar nicht unterstützt wird.
+- **DOM-Sicherheit:** kein `innerHTML` mit Fremdinhalt (Skript-`description`/`changelog`) — XSS-sicher rendern.
 - Vor Community-Einreichung: Skill **`tcs-patterns:obsidian-plugin`** durchlaufen (Manifest-Regeln,
   Lifecycle/Cleanup, Sample-Plugin-Reste, `console.debug` etc.).
 
@@ -297,70 +275,65 @@ Damit ist derselbe Kern später trivial in einen Auto-on-Cmd+V-Modus portierbar.
 
 ## 10. Sicherheit & Vertrauen
 
+> **Ehrliches Modell:** Alle Skripte sind **echter JS-Code mit vollen Plugin-Rechten** — es gibt
+> **keine** „Safety by construction" mehr (der deklarative Ansatz ist verworfen, §7). Schutz kommt
+> aus **Policy + Disclosure + Consent + Desktop-only**, wie bei Templater/Dataview.
+
 **Vertrauensstufen.** Es gibt genau zwei:
 
-- **Built-in (geprüft):** die mitgelieferten Beispiel-Transforms — von den Maintainern reviewt.
-- **Community & selbstgebaut (ungeprüft):** alles andere. Das Plugin behandelt Community-Skripte
-  **exakt wie deine eigenen handgeschriebenen** — kein Review, keine Sandbox, keine Garantie.
+- **Offizielles Repo (geprüft):** per PR eingereichte Skripte mit Pflicht-Doku, die **nur Markdown in
+  der Notiz** tun. Netzwerk/extern/Cross-Plugin wird **nicht gemerged**. Maintainer-reviewt.
+- **Community & selbstgebaut (ungeprüft):** aus dem Vault importiert. Das Plugin behandelt sie **wie
+  deine eigenen handgeschriebenen** — kein Review, keine Sandbox, keine Garantie.
 
-> **Community- und selbstgeschriebene Transforms sind ungeprüft.** Nur die mit dem Plugin
-> ausgelieferten Built-in-Beispiele sind von den Maintainern geprüft. Das Installieren jedes
-> anderen Transforms — aus dem Vault kopiert oder aus einer Community-Quelle gezogen — führt
-> fremden Code **auf eigenes Ermessen und Risiko** des Nutzers aus.
-
-Es soll zudem einen **expliziten Community-Bereich ohne Überprüfung** geben, in dem Nutzer ihre
-Transforms teilen — mit den entsprechenden Sicherheits-Implikationen prominent dokumentiert.
+> **Community-/selbstgeschriebene Skripte sind ungeprüft** und laufen **auf eigenes Ermessen und
+> Risiko**. Sharing über den Forum-/Diskussionsbereich des Repos → manuell ins Vault → Import.
 
 **Verteidigungslinien (gestaffelt):**
 
-- **Strukturell:** das deklarative Format (§7-A) ist die stärkste Verteidigung — ein Daten-Transform
-  *kann* per Konstruktion nichts außer Markdown-Operationen. „Nur Markdown-Ops" muss nicht geprüft
-  werden, es gilt durch das Format.
-- **Integrität:** Checksum (Drift-Erkennung) + Version (Absicht) aus §7 — geprüfte Repos sind so
-  manipulationssicher, Upgrades immer nutzer-bestätigt, nie automatisch.
-- **Consent:** beim Import/Upgrade Quelle, Autor, Version/Changelog und — bei JS — expliziten
-  „Fremdcode"-Consent zeigen.
-- **PR-Vetting (für den kuratierten Satz):** Einreichungen sollen daraufhin geprüft werden, dass
-  sie ausschließlich Markdown-Operationen ausführen; Zugriff auf Information außerhalb ist zu
-  hinterfragen (idealerweise gar nicht möglich, weil deklarativ). Ein (perspektivisch
-  automatisierbarer) Vetting-Prozess ist noch zu definieren (§12).
+- **Policy (statt Struktur):** das offizielle Repo akzeptiert nur Markdown-in-Note-Skripte (PR-Review
+  + Doku-Pflicht). Das ist die erste Linie — durchgesetzt durch Menschen, nicht durch das Format.
+- **Disclosure + Consent:** vor Ausführung Modal mit vollen Rechten; Acknowledge **pro Checksum/
+  Version**; Re-Prompt bei Fingerprint-Änderung; **Kill-Switch** (`disabled`).
+- **Integrität:** Checksum (Drift = Hard-Block) + Version (Absicht); geprüfte Quellen an Commit-SHA
+  pinnen; Per-Device-Consent im Sidecar (nicht `data.json`).
+- **Isolation-Hygiene:** Fresh-Load + Cache-Evict per Präfix; hooksDir-Escape-Guard; Timeout +
+  Roh-Fallback. (Echte Sandbox ist **nicht** machbar/vorgesehen — ehrlich kommuniziert.)
 - **Keine Telemetrie**, keine stillen Netzwerkaufrufe außer dem expliziten, nutzer-ausgelösten
-  Quell-Pull.
+  Pull aus dem offiziellen Repo.
 
 ---
 
 ## 11. Roadmap (Vorschlag)
 
-- **v0.1 — Kern & Quellen:** Built-in H/C/O/D/M (Kern als Edit-Plan, O+D als eine Footnote-Identity-
-  Stufe — §5), Quellen Paste + Selektion + ganze Notiz, Einzel-Commands + Presets. Perplexity-
-  Beispiele als Built-in im self-describing deklarativen Format (§7). H/M buildbar ohne das
-  Roh-Sample; C/O/D brauchen es (§2).
-- **v0.2 — Bibliothek:** Registry + Quell-Liste + Import/Re-Import (kein Auto-Installer), Manifest/
-  Lockfile in `data.json` (source/checksum/version/enabled), Drift- & Update-Prompts, Cross-Instanz-
-  Self-Heal. Hängt an der Sync-Verifikation aus §9.
-- **v0.3 — Politur:** Settings-UI (Ziel-Sektionsname, Marker-Policy), JS-Escape-Hatch (desktop-only,
-  Consent), ggf. Auto-on-Paste-Modus.
+- **v0.1 — Operationen + Skript-Runtime:** H/C/O+D/M als in-plugin API + Standalone-Commands
+  (Kern als Edit-Plan, O+D als eine Footnote-Identity-Stufe — §5); **Skript-Runtime** (Hashi-Modell)
+  mit Invocation **beim Paste / auf Selektion / als Command**; **Vault-Import**; die **drei Perplexity-
+  Skripte**; versionierte API; desktop-only; Submission-Compliance. Samples vorhanden → C/O/D unblocked.
+- **v0.2 — Distribution:** Download aus dem **offiziellen, geprüften Repo** + Manifest/Integrität
+  (`source/checksum/version/enabled`, Drift = Hard-Block, Update-Prompts), Per-Device-Consent-Sidecar.
+  Hängt an der Sync-Verifikation aus §9.
+- **v0.3 — Politur:** Auto-on-Paste-Modus, Preview/Dry-run, weitere offizielle Skripte (z.B. HTML),
+  reichere Library-UI, Settings-Politur (Ziel-Sektionsname, Marker-Policy).
 
 ---
 
 ## 12. Offene Punkte / benötigte Inputs
 
-1. **Roher Perplexity-Paste** — *teilweise gelöst:* Autor liefert je ein Sample aus Copy/Paste und
-   aus Perplexity-Export. **Fixture-Strategie:** das behaltbare Sample wird als committetes Golden-
-   Fixture für C/D genutzt; das persönliche bleibt **lokal/gitignored** (z.B. `test/fixtures/local/`).
-   Dateien stehen noch aus.
-2. ~~**Deklarativ vs. JS**~~ — **ENTSCHIEDEN** (§7): deklarativer Kern (A) als Format, JS nur als
-   desktop-only, consent-gegateter Escape-Hatch, nie auto-gepullt.
-3. **Sync-Verhalten verifizieren** (§9, LOAD-BEARING): synct Obsidian Plugin-Verzeichnis-Dateien
-   oder nur `data.json`? Das ganze Self-Heal-/Re-Import-Modell hängt daran. → Skill
-   `tcs-patterns:obsidian-plugin`.
-4. **O↔D-Kopplung** (§5): Footnote-Identity als eine Stufe + Edit-Plan als Kern-Rückgabetyp —
-   Design bestätigen, bevor §5 als final gilt.
-5. **Vetting-Prozess** für den kuratierten Satz definieren (perspektivisch automatisierbar: „nur
-   Markdown-Ops, kein Außenzugriff").
-6. **Ziel-Default** für M: bestehende `## Resources` bevorzugen, sonst Notizende — bestätigen.
-7. **Name** final: „Markdown Mason" ist Arbeitstitel; soll der Bibliotheks-/Advanced-Paste-Aspekt
-   im Namen anklingen?
+1. ~~**Roher Perplexity-Paste**~~ — **GELÖST:** drei Samples committed unter `assets/`
+   (`sakura-in-tokyo-{app,web,web-download}.md`) — drei verschiedene Formate, je ein Skript. Keine
+   persönliche/gitignored Variante nötig.
+2. ~~**Deklarativ vs. JS**~~ — **GEÄNDERT (PRD v1.1):** JS-Skripte-first (Advanced-Paste-Modell),
+   deklarativer Kern verworfen. Operationen = in-plugin API; Skripte = Erweiterung; desktop-only.
+3. ~~**O↔D-Kopplung**~~ — **ENTSCHIEDEN** (§5): Footnote-Identity als eine Stufe + Edit-Plan.
+4. **Sync-Verhalten verifizieren** (§9, LOAD-BEARING): 2-Geräte-Test, ob das Plugin-Verzeichnis
+   wirklich wholesale synct. Bestimmt die Per-Device-Consent-Mechanik.
+5. **Vetting-Prozess** für das offizielle Repo definieren: Doku-Template, „Markdown-in-Note-only"-Check
+   (manuell vs. teil-automatisiert), wer reviewt.
+6. **Operations-API-Surface** + wie Skripte die `required-api-version` deklarieren — Detail im SDD.
+7. **Update-Kadenz** für installierte offizielle Skripte: on-load / gedrosselt / nur manuell?
+8. *(bestätigt)* M-Default = `## Resources` am Notizende, Name konfigurierbar, kein Callout; Name
+   „Markdown Mason" bleibt.
 
 ---
 
@@ -373,4 +346,5 @@ Transforms teilen — mit den entsprechenden Sicherheits-Implikationen prominent
 - Tidy Footnotes: https://github.com/charliecm/obsidian-tidy-footnotes
 - Better Footnotes: https://github.com/Oudwins/obsidian-betterfotnotes
 - Obsidian Linter: https://github.com/platers/obsidian-linter
+- MiYo Tomo Hashi (Skript-/Hook-Ausführungsmodell, `src/hooks/`): https://github.com/MMoMM-org/miyo-tomo-hashi
 - Offizieller Katalog (Verifikation): https://github.com/obsidianmd/obsidian-releases

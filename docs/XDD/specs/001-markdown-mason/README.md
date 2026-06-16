@@ -12,7 +12,7 @@
 
 | Document | Status | Notes |
 |----------|--------|-------|
-| requirements.md | completed | Full-plugin scope (v0.1–v0.3); 34 Gherkin acceptance criteria |
+| requirements.md | completed | v1.1 (JS-scripts-first pivot); 11 features, 45 Gherkin acceptance criteria |
 | solution.md | pending | |
 | plan/ | pending | |
 
@@ -27,6 +27,7 @@
 | 2026-06-16 | **Sync finding flips open-decision #3** (Tech + Integration research) | Obsidian Sync replicates the **whole plugin folder** (incl. subdirs) when "Installed community plugin list" is on (off by default) — evidence is forum sync logs, high-confidence but not vendor-confirmed. ⇒ self-heal demotes to a fallback; **JS-propagation via Sync is real**; per-device state (JS `enabled`/consent) must live in a **sidecar via `vault.adapter`, never `data.json`**; execution consent must be **per-device**. **Action:** run the 2-device file-drop test before SDD finalize; update briefing §9. |
 | 2026-06-16 | **O+D fused** (resolves open-decision #4) | Sequential O-then-D collides (gaps/reuse contradiction); the single "footnote-identity" pass (dedup-in-paste → match existing URL/reuse number → assign max+1 to new) is the only consistent design. Core returns an **EditPlan**; two-place edit applied as one CM6 transaction. |
 | 2026-06-16 | **Drift = hard-block** (not dismissable warning) | Security: same-version+different-checksum must disable the transform until explicit user resolution, else a same-version malicious push can be clicked past. |
+| 2026-06-16 | **PIVOT: JS-scripts-first (Advanced Paste model), declarative core dropped** (PRD v1.1) | User feedback on PRD: extensibility is via custom JS scripts invokable on paste or as a command on a selection; ops H/C/O+D/M are an in-plugin **versioned, extensible API** scripts call; the 3 Perplexity surfaces ship as **downloadable scripts, not built-ins**; reuse the in-house `miyo-tomo-hashi` `src/hooks/` execution model. Script support is **foundational v0.1** (no later rewrite). **Desktop-only** accepted (`isDesktopOnly:true`). Storage = plugin dir; download from vetted official repo (Markdown-in-note only, doc-required PR) or vault-import community scripts at user discretion. Consent = once per **checksum/version**. §2 blocker **resolved** — 3 samples committed under `assets/`. |
 
 ### Research agents (resumable via SendMessage)
 

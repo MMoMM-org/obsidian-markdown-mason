@@ -1,7 +1,7 @@
 ---
 title: "Markdown Mason — structure-aware paste & footnote tooling for Obsidian"
 status: draft
-version: "1.0"
+version: "1.1"
 ---
 
 # Product Requirements Document
@@ -68,12 +68,13 @@ When a user pastes an answer from Perplexity (or another LLM/web source) into a 
 Existing plugins each solve only a fragment (heading cascade *or* footnote tidying, never the citation→footnote→dedup→file pipeline), and the closest conceptual predecessor (Advanced Paste) was **removed from the community catalog** (verified against `obsidianmd/obsidian-releases`; archived 2024-08-06, delisted 2024-09-13). The cost of the gap is measurable: a multi-section Perplexity paste today requires manual heading edits plus per-source footnote renumbering and filing — minutes of fiddly work per paste, every paste.
 
 ### Value Proposition
-Markdown Mason is the only Obsidian tool that covers the **whole** paste-to-structured-note flow as composable operations, and it ships them as a **curated, plugin-managed declarative transform library** rather than executable scripts living in the vault. Users get:
+Markdown Mason is the only Obsidian tool that covers the **whole** paste-to-structured-note flow as composable operations **and** is extensible by **custom scripts in the Advanced-Paste spirit** — a script can run **during a paste** or **as a command on a selection**. Users get:
 
-- **One command** for the common case (`Mason: Paste and format`) instead of five manual cleanups.
-- **Surgical control** when needed — each operation (cascade / convert / renumber / dedup / file) is its own command.
-- **Safety by construction** — the core transform format is declarative data, so "this transform only does Markdown operations" is guaranteed by the format, not by trust.
-- **No vault clutter** — transforms live in the plugin's own directory, not as notes Obsidian syncs and surfaces.
+- **One command** for the common case instead of five manual cleanups; the Perplexity flow is a script that composes the operations.
+- **Surgical control** when needed — each operation (cascade / convert / renumber / dedup / file) is its own command and an API scripts can call.
+- **Extensibility without a rebuild** — drop a script into the plugin's script directory (downloaded from the vetted official repo, or copied in from your vault) and bind it to a command/hotkey, à la Templater. Script support is foundational, not bolted on later.
+- **A bounded trust model** — the official repo only hosts maintainer-vetted scripts that do Markdown-in-note only (no network, no cross-plugin, no external access); anything else you bring in from the community is imported from your vault **at your own discretion**, with explicit disclosure and consent.
+- **No vault clutter** — scripts live in the plugin's own directory, not as notes Obsidian surfaces.
 
 ---
 
@@ -85,7 +86,7 @@ Markdown Mason is the only Obsidian tool that covers the **whole** paste-to-stru
 - **Pain Points:** Manual heading re-leveling after each paste; footnote numbers that restart at 1 and collide; citations stranded inline; existing plugins that only fix one piece, run globally on save (breaking writing flow), or discard custom footnote labels (`[^A]`).
 
 ### Secondary Personas
-- **The Transform Tinkerer:** A power user who wants pipelines beyond the built-in Perplexity case — composing declarative transforms, importing community ones, and (desktop-only, with explicit consent) the occasional JavaScript escape-hatch transform. Deferred to v0.2/v0.3 but shapes the library design.
+- **The Transform Tinkerer:** A power user who writes or imports custom JS scripts beyond the Perplexity case, binds them to commands/hotkeys, and runs them on paste or selection (desktop-only, with explicit consent). A first-class v0.1 audience — script support is the extensibility backbone, not a deferred add-on.
 - **The Community Installer:** A general Obsidian user who finds Markdown Mason in the community directory and installs it for its core operations, never touching the library. They must be safe by default: no unvetted code runs, nothing breaks their notes silently, everything is undoable. Their existence is why community-submission compliance and the trust model are Must-Haves, not later polish.
 
 ## User Journey Maps
@@ -99,11 +100,13 @@ Markdown Mason is the only Obsidian tool that covers the **whole** paste-to-stru
 
 ### Secondary User Journeys
 - **Tidy an accumulated note (whole-note):** A note has drifted over many pastes — colliding footnote numbers, scattered definitions. The user runs `Mason: Tidy footnotes` once to renumber, dedup, and file everything into `## Resources`, with a count Notice of what changed.
-- **Import a community transform:** The Tinkerer browses a configured source, imports a declarative transform (seeing its name/author/version), enables it, and later gets an explicit, changelog-bearing prompt when a newer version exists — never an automatic upgrade. A JavaScript transform additionally requires an explicit "this runs unreviewed code" consent, desktop-only.
+- **Add or import a custom script:** The Tinkerer either installs a vetted script from the official repo (name/version/doc shown, enable it) or copies a community script into the vault and imports it — seeing an explicit "this runs unreviewed code with full plugin privileges" disclosure and acknowledging once per checksum/version. They then bind the script to a command/hotkey, or have it fire on paste.
 
 ## Feature Requirements
 
 ### Must Have Features
+
+v0.1 ships the **operations as an in-plugin API + standalone commands** (Features 1–7), the **custom-script runtime and invocation** that is the extensibility backbone (Feature 8), the **script package format with the three Perplexity scripts delivered as downloadable scripts — not built-ins** (Feature 9), and the **compliance + trust model** required for community release (Feature 10).
 
 #### Feature 1: Heading cascade (H)
 - **User Story:** As a research journaler, I want pasted/selected headings shifted relative to my cursor's heading context so my note hierarchy isn't broken.
@@ -160,46 +163,68 @@ Markdown Mason is the only Obsidian tool that covers the **whole** paste-to-stru
   - [ ] Given a change not visible at the cursor (e.g. footnotes filed offscreen), When it completes, Then a success Notice includes a count of what changed.
   - [ ] Given the plugin registers commands, When installed, Then no default hotkeys are assigned; all commands are reachable via the palette.
 
-#### Feature 8: Community-directory compliance & safety baseline
-- **User Story:** As a community installer, I want the plugin to be safe and compliant so installing it can't run unvetted code or break Obsidian conventions.
+#### Feature 8: Custom-script runtime and invocation (extensibility backbone)
+- **User Story:** As a tinkerer, I want to drop a JavaScript script into the plugin and invoke it during a paste or as a command on my selection, so I can extend the plugin without modifying its code.
 - **Acceptance Criteria (Gherkin Format):**
-  - [ ] Given any externally-sourced text (transform description, changelog, author) rendered in the UI, When displayed, Then it is rendered with escaping (never raw HTML injection).
-  - [ ] Given the plugin manifest, When submitted, Then the id contains no "obsidian", the description ends with a period and omits "Obsidian", and submission lint passes.
-  - [ ] Given the codebase, When built for release, Then it uses `console.debug` (not `console.log`), uses the Obsidian-sanctioned network call for any fetch, and ships release-asset attestation.
-  - [ ] Given the core operations, When the plugin runs, Then nothing executes external code and no network call is made without an explicit user action.
+  - [ ] Given an enabled script in the plugin's script directory, When I bind it to a command and run it on a selection, Then it executes against my selection and applies its result as one undoable edit.
+  - [ ] Given an enabled paste-script, When I paste, Then the script runs on the clipboard content before insertion (Advanced-Paste model) and a Notice indicates it fired.
+  - [ ] Given a script is invoked, When it runs, Then it is loaded fresh with its module cache evicted by directory prefix (no stale helper code) and the plugin exposes the operations (H/C/O+D/M) and editor/selection/clipboard context as a documented, versioned API.
+  - [ ] Given a script's policy is `disabled` (kill-switch), When anything would invoke it, Then it does not execute.
+  - [ ] Given an imported/community script (not from the vetted repo), When it would run for the first time at a given checksum/version, Then a disclosure modal states it runs with full plugin privileges and the user must acknowledge once per checksum/version (re-prompted when the file fingerprint changes).
+  - [ ] Given a script throws or exceeds a timeout, When it is invoked, Then the paste/selection is left intact (raw fallback) and the error is surfaced as a Notice, never a silent partial edit.
 
-#### Feature 9: Declarative transform format + built-in Perplexity example
-- **User Story:** As a research journaler, I want the built-in operations expressed as a curated, self-describing transform so the same machinery powers built-ins and (later) community transforms.
+#### Feature 9: Script package format + the Perplexity scripts
+- **User Story:** As a research journaler, I want the Perplexity handling delivered as downloadable scripts so the same machinery powers the built-in case and community scripts, and so each Perplexity surface is handled correctly.
 - **Acceptance Criteria (Gherkin Format):**
-  - [ ] Given a transform, When defined, Then it is a single self-describing file carrying id, version, description, changelog, and an ordered pipeline of safe primitives.
-  - [ ] Given the built-in Perplexity transform, When shipped, Then it is maintainer-reviewed, opt-in to enable, and documented in-repo with the rationale for how it is built.
-  - [ ] Given a declarative transform, When executed, Then it can only perform bounded Markdown operations — no file access beyond the active note, no network, no code evaluation.
+  - [ ] Given a script package, When defined, Then it is self-describing (id, version, description, changelog, required-API-version) and bindable to a command.
+  - [ ] Given the three Perplexity surfaces, When shipped, Then each is a separate downloadable script — *app copy* (bare `[n]` + `Sources` block, restart-per-answer → C→O+D→M), *web copy* (inline `[domain](url)` links), and *web download* (existing `[^a_b]` footnotes + URL-only definition list) — NOT a built-in.
+  - [ ] Given the author's three committed samples (`assets/sakura-in-tokyo-{app,web,web-download}.md`), When the matching script runs, Then the golden-fixture output is produced.
+
+#### Feature 10: Community-directory compliance & bounded trust model
+- **User Story:** As a community installer, I want the plugin safe and compliant so installing it can't silently run unvetted code or break Obsidian conventions.
+- **Acceptance Criteria (Gherkin Format):**
+  - [ ] Given the plugin, When released, Then it is desktop-only (`isDesktopOnly: true`) and its manifest passes submission lint (id without "obsidian", description ends with a period and omits "Obsidian").
+  - [ ] Given any externally-sourced text (script description/changelog/author) rendered in the UI, When displayed, Then it is escaped (never raw HTML injection); and the codebase uses `console.debug`, the sanctioned network API, and ships release-asset attestation.
+  - [ ] Given the official script repo, When a script is submitted by PR, Then it must include a document describing what it does, and scripts performing network/external/cross-plugin access are not merged (Markdown-in-note only).
+  - [ ] Given the plugin runs, When no user action is taken, Then no script executes and no network call is made; the only network activity is a user-triggered pull from the official repo.
+
+#### Feature 11: Extensible, versioned plugin-integrated operations API
+- **User Story:** As a maintainer or contributor, I want to add new first-party operations to the plugin's API over time so scripts gain new built-in capabilities without each script reimplementing them, and so the plugin itself can grow new features that are exposed through the same API.
+- **Acceptance Criteria (Gherkin Format):**
+  - [ ] Given the operations API, When a new plugin-integrated operation is added (e.g. beyond H/C/O+D/M), Then it becomes available to every script under the same documented namespace (e.g. `mason.*`) without changing the script-runtime contract.
+  - [ ] Given operations are registered, When the plugin loads, Then each operation is exposed both as a standalone `Mason:` command and as an API call from a single internal registry (no duplicated logic, no separate code paths).
+  - [ ] Given the API is versioned, When a script declares a required API version it depends on, Then the plugin runs it only if the available API satisfies that version, and otherwise surfaces a clear "requires API vX" Notice instead of failing obscurely.
+  - [ ] Given a new operation is released, When it ships, Then it is additive (existing API surface is not removed or renamed) or it is a documented major API-version bump with a migration note.
+  - [ ] Given the API is the contract scripts depend on, When the plugin documents it, Then the exposed operation signatures, the editor/selection/clipboard context, and the version are published as a stable, documented surface.
 
 ### Should Have Features
-*(Roadmap v0.2 — the transform library. Valuable but not required for the first useful release.)*
-- **Transform library UI:** browse configured sources, import a transform (from a source URL or a vault file), enable/disable, all within the settings tab.
-- **Manifest & integrity model:** per-transform `{source, checksum, version, enabled}`; existence-check → fetch-from-source on missing; **same-version + different-checksum hard-blocks** the transform until the user explicitly resolves it; higher version triggers a user-confirmed update prompt showing the changelog (never auto-upgrade).
-- **Cross-device behavior:** per-device enable/consent state kept outside synced plugin data; on a new device, transforms the user hasn't enabled there require an explicit enable/consent before first use.
+*(Roadmap v0.2 — official-repo distribution on top of the v0.1 script runtime. Because the runtime, invocation, and vault-import are already Must-Haves, v0.2 adds the **download/update** layer without re-architecting.)*
+- **Official-repo download UI:** browse the vetted scripts in the official repo's script directory, install/enable, all within the settings tab; plus the existing vault-import flow.
+- **Manifest & integrity model:** per-script `{source, checksum, version, enabled}`; existence-check → fetch-from-source on missing; **same-version + different-checksum hard-blocks** the script until the user explicitly resolves it; higher version triggers a user-confirmed update prompt showing the changelog (never auto-upgrade).
+- **Cross-device behavior:** per-device enable/consent state kept outside synced plugin data; on a new device, scripts the user hasn't enabled there require explicit enable/consent before first use.
 - **Core settings:** configurable Resources section name; numeric-only renumber policy surfaced as a setting.
 
 ### Could Have Features
-*(Roadmap v0.3 — power and polish.)*
-- **JavaScript escape-hatch transforms:** desktop-only; explicit per-session "you are running unreviewed code with full plugin permissions" consent; re-consent on restart and whenever the file fingerprint changes; a kill-switch that blocks all JS execution; never auto-pulled.
-- **Auto-on-paste mode:** opt-in interception of paste for a chosen preset, with a Notice on every fire and a way to pause it for raw pastes.
+*(Roadmap v0.3 — power and polish. Custom JS scripts are already Must-Have in v0.1; the script runtime should reuse the proven execution model in [`MMoMM-org/miyo-tomo-hashi`](https://github.com/MMoMM-org/miyo-tomo-hashi) `src/hooks/` — fresh-load + prefix cache-evict, fingerprint re-prompt, `enabled|disabled|ask` kill-switch, disclosure modal, hooksDir-escape guard.)*
+- **Auto-on-paste refinement:** per-script paste interception with a Notice on every fire and a way to pause it for raw pastes.
 - **Dry-run / preview:** show the proposed change before applying, especially for whole-note tidy.
+- **More official scripts:** e.g. HTML / rich-text paste handling delivered as its own script (not core).
+- **Richer library UI:** a dedicated view if the script list outgrows the settings tab.
 
 ### Won't Have (This Phase)
+- **Mobile support** (`isDesktopOnly: true` — the script runtime needs desktop Node).
 - **Telemetry or analytics of any kind** (explicit non-goal).
-- **Storing transforms as vault notes** (the problem being solved — transforms live in the plugin directory).
+- **Storing scripts as vault notes** (the problem being solved — scripts live in the plugin directory).
 - **On-save / global auto-formatting** (the Linter pattern, explicitly rejected as flow-breaking).
 - **Renumbering alphabetic footnotes** (`[^A]` are user annotations, outside the operations' authority).
-- **HTML / rich-text paste conversion** (plugin operates on Markdown text only).
-- **Sandboxed JS execution** (the JS hatch runs in-process at full privilege with disclosure; true sandboxing is out of scope — see Risks).
+- **HTML / rich-text paste conversion in core** — delivered later as a separate script (Could-Have), not core.
+- **Official-repo scripts with network / external / cross-plugin access** — rejected at PR review; such scripts exist only as user-discretion community imports.
+- **Sandboxed JS execution** (scripts run in-process at full privilege with disclosure; true sandboxing is out of scope — see Risks).
 
 ## Detailed Feature Specifications
 
 ### Feature: Paste and format (the full footnote pipeline)
-**Description:** The happy-path preset that applies, in order, heading cascade (H), citation→footnote (C), fused offset+dedup (O+D), and move-to-Resources (M) to clipboard content, landing the result as a single undoable edit. It is the heart of the product and carries the most business rules.
+**Description:** The happy-path flow that applies, in order, heading cascade (H), citation→footnote (C), fused offset+dedup (O+D), and move-to-Resources (M) to clipboard content, landing the result as a single undoable edit. It carries the most business rules and is realized as the **perplexity-app script** composing the operations API (Features 8, 9, 11) — the same machinery any script uses. A generic `Mason: Paste and format` preset chains the same operations for non-Perplexity content.
 
 **User Flow:**
 1. User places the cursor under a heading and copies a Perplexity (or similar) answer.
@@ -251,39 +276,41 @@ No in-application telemetry will be implemented (explicit non-goal). "Tracking" 
 ## Constraints and Assumptions
 
 ### Constraints
-- **Platform:** Obsidian plugin (desktop + mobile). Core operations and the declarative engine must run on mobile; the JavaScript escape hatch is desktop-only.
-- **Compliance:** Must pass Obsidian community-directory review (manifest rules, `console.debug`, sanctioned network API, XSS-safe DOM, release attestation).
-- **Privacy:** No telemetry; no silent network calls — the only network activity is an explicit, user-triggered transform-source pull.
-- **Storage:** Transforms live in the plugin's own directory, never as vault notes; per-device state must not ride synced plugin data.
+- **Platform:** Obsidian plugin, **desktop-only** (`isDesktopOnly: true`) — the custom-script runtime needs desktop Node (`require`, fresh-load + cache-evict).
+- **Foundational extensibility:** Custom-script support (invocation on paste / on selection / as command) and the operations API are **v0.1 architecture**, not a later addition — the plugin must not need re-architecting to support external scripts.
+- **Compliance:** Must pass Obsidian community-directory review (manifest rules, `console.debug`, sanctioned network API, XSS-safe DOM, release attestation), with the heightened scrutiny that applies to a plugin which downloads and runs scripts.
+- **Trust policy:** The official repo's script directory accepts only maintainer-vetted, Markdown-in-note-only scripts (PR + descriptive doc required); no network/external/cross-plugin scripts are merged. Community scripts are imported from the vault at the user's discretion, with disclosure + per-checksum/version consent.
+- **Privacy:** No telemetry; no silent network calls — the only network activity is an explicit, user-triggered pull from the official repo.
+- **Storage:** Scripts live in the plugin's own directory, never as vault notes; per-device enable/consent state must not ride synced plugin data.
 - **Verifiability:** Domain logic must be exercisable by committed fixtures independent of Obsidian (a project principle).
-- **Known blocker:** Full implementation of C/O/D depends on a raw Perplexity sample (copy + export) to fix the parser grammar; H and M are unblocked. The author will supply one committable sample (golden fixture) and one personal sample (kept local/gitignored).
+- **Samples in hand:** The three Perplexity samples are committed (`assets/sakura-in-tokyo-{app,web,web-download}.md`); the §2 parser blocker is resolved.
 
 ### Assumptions
-- **Perplexity format (to be confirmed by fixtures):** inline markers are bare `[n]` (superscript is render-only); the sources-block header is a localized alternation (`Citations:`/`Sources:`/`Quellen:` …); copy and export differ, so both fixtures are needed; Perplexity already globally dedups its own numbering, so the restart-at-1 collision occurs *across* pastes.
-- **Sync behavior (to be verified):** Obsidian Sync replicates the entire plugin folder (including subdirectories) when "Installed community plugin list" sync is enabled — evidence from forum sync logs, high-confidence but not vendor-confirmed. The design assumes this and verifies via a two-device test before v0.2.
+- **Perplexity formats (now known from the committed samples):** three distinct surfaces — *app copy* (bare `[n]` + `Sources` block, restart-per-answer), *web copy* (inline `[domain](url)` links, no markers/block), *web download* (existing `[^a_b]` footnotes + URL-only definition list, with HTML cruft). Each is handled by its own script, not one parser.
+- **Sync behavior (to be verified):** Obsidian Sync replicates the entire plugin folder (including subdirectories) when "Installed community plugin list" sync is enabled — evidence from forum sync logs, high-confidence but not vendor-confirmed. Desktop-only narrows the blast radius; per-device consent still required. Verify via a two-device test before v0.2.
 - **User footnote convention:** users keep sources as `[^n]` footnotes filed under a Resources section; the plugin defaults to this convention while allowing the section name to be configured.
 
 ## Risks and Mitigations
 
 | Risk | Impact | Likelihood | Mitigation |
 |------|--------|------------|------------|
-| Raw Perplexity sample unavailable / format more variable than expected | High | Medium | Ship H+M first (unblocked); design C/D as a tolerant, fixture-driven parser; gate C/O/D on the committed sample |
-| Unvetted JavaScript transform propagates across devices via Sync | High | Medium | Per-device enable/consent state outside synced data; consent re-checked per device and on file-fingerprint change; kill-switch; JS desktop-only and never auto-pulled |
-| "Declarative" transform leaks capability (regex ReDoS, unsafe replacement) | High | Medium | Bound the primitive set; string-only regex replacement with a safe parser; import-time pattern validation; formal "no access beyond active note, no network" rule |
-| Trust-on-first-use: first import establishes an unverified checksum baseline | Medium | Medium | Pin curated sources to commit SHAs; reserve a manifest field for signed/attested curated index; display resolved URL at import |
+| Obsidian review wariness of a plugin that downloads and runs scripts | High | Medium | Official source is maintainer-vetted, Markdown-in-note-only, doc-required; full-privilege disclosure + consent; desktop-only; precedent (Templater/Dataview/QuickAdd). Keep v0.1 to local + vault-import; remote download in v0.2 |
+| Full-privilege scripts misbehave or are malicious | High | Medium | Vetting policy for the official repo; disclosure + per-checksum/version consent for imports; kill-switch; fresh-load + prefix cache-evict; timeout; raw-paste fallback on error |
+| Unvetted community script propagates across devices via Sync | High | Medium | Per-device enable/consent state outside synced data; consent re-checked per device and on file-fingerprint change; desktop-only |
+| Trust-on-first-use: first import establishes an unverified checksum baseline | Medium | Medium | Pin official-repo sources to commit SHAs; reserve a manifest field for signed/attested index; display resolved URL at import |
 | Same-version malicious source change clicked past as a warning | Medium | Low | Drift at same-version+different-checksum hard-blocks (disable until explicit resolution), not a dismissable notice |
-| Scope creep across v0.1–v0.3 in one spec | Medium | Medium | MoSCoW gating; v0.1 = core ops + compliance; library and JS hatch are Should/Could |
-| In-place edits lose data on partial failure | High | Low | Single atomic editor transaction per command; one-undo guarantee; on parse failure apply nothing and report |
+| Retrofitting script support later forces a rewrite | High | Low | **Eliminated** — script runtime + operations API are foundational v0.1 |
+| Scope creep across v0.1–v0.3 in one spec | Medium | Medium | MoSCoW gating; v0.1 = ops + script runtime + local/import; remote repo download is v0.2 |
+| In-place edits lose data on partial failure | High | Low | Single atomic editor transaction per command; one-undo guarantee; on parse/script failure apply nothing and report |
 
 ## Open Questions
-- [ ] Deliver the two raw Perplexity samples (copy + export) so the C/O/D parser grammar and golden fixtures can be finalized.
-- [ ] Regex-primitive policy for declarative transforms: none / denylist / linear-time validator / worker-timeout? (security vs. capability trade-off)
-- [ ] Should the curated transform index be cryptographically signed/attested, and with what key material?
-- [ ] Update-check cadence for installed transforms: on load / throttled on first command (e.g. 24h) / manual only?
+- [ ] Official-repo vetting process specifics: who reviews, the required per-script doc template, and whether the "Markdown-in-note only" check can be (partly) automated vs. purely manual PR review.
+- [ ] Exact operations-API surface and how scripts declare a required API version (signatures, context shape) — to be designed in the SDD.
+- [ ] Do vetted official-repo scripts still show a disclosure prompt, or only community/vault-imported ones? (Proposed: vetted = light enable; community = full disclosure + per-checksum/version consent — confirm.)
+- [ ] Update-check cadence for installed official scripts: on load / throttled on first command (e.g. 24h) / manual only?
 - [ ] Preset source resolution: should `Mason: Paste and format` fall back to the selection when the clipboard is empty, or stay strictly clipboard-scoped?
-- [ ] Should pastes inside code fences / frontmatter be excluded from Mason handling?
+- [ ] Should pastes inside code fences / frontmatter be excluded from Mason/script handling?
 - [ ] Blank-line policy between Resources entries: enforce exactly one between all entries, or only for newly written ones?
-- [ ] Library UI home: settings-tab section (simpler) vs. a dedicated view (scales better) — confirm for v0.2.
 
 ---
 
@@ -294,7 +321,7 @@ No existing plugin covers the citation→footnote→offset→dedup→file pipeli
 
 | Plugin | Status / License | Covers | Gap |
 |---|---|---|---|
-| Advanced Paste (kxxt) | Removed (archived 2024-08-06, delisted 2024-09-13) | Custom JS transforms on clipboard | Dead; conceptual predecessor; "scripts loose in vault" is the anti-pattern Mason fixes |
+| Advanced Paste (kxxt) | Removed (archived 2024-08-06, delisted 2024-09-13) | Custom JS transforms on clipboard | Dead, but its **custom-script-on-paste model is what Mason adopts**; Mason fixes its "scripts loose in vault" weakness with a managed plugin-dir + vetted official source |
 | Paste Reformatter (keathmilligan) | Active / 0BSD | Heading cascade incl. "Contextual Cascade" (== Mason H), regex rules | No footnote logic at all |
 | Perplexity Converter (heseber) | Active / BSD-3 | Fixes Perplexity citation hyperlinks; confirms localized `Citations:`/`Sources:`/`Quellen.` block | No real `[^n]` footnotes |
 | Paste transform (rekby) | Active / Apache-2.0 | Sequential regex/JS rules on paste | Regex-only; no stateful renumber/dedup |
