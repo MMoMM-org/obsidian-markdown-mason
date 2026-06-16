@@ -349,3 +349,63 @@ describe("newRefDefinitions — returns empty array for no new refs", () => {
 		expect(defs).toHaveLength(0);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// INTEGRATION — inline rename and new definitions agree on a single resolution
+//
+// Proves that applyFootnoteInlineRename and newRefDefinitions are in sync when
+// fed the same resolveFootnoteIdentity result.  Both emitters must refer to the
+// same id (7 for urlB) and the reused existing id (6 for urlA) must NOT produce
+// a new definition.
+//
+// Golden inputs (SDD traced example):
+//   incoming = [{incomingId:1, urlB}, {incomingId:2, urlA}, {incomingId:3, urlB}]
+//   existing = [{id:6, urlA}]
+//   → idMap = {1:7, 2:6, 3:7}, newRefs = [{id:7, url:urlB, ...}]
+// ---------------------------------------------------------------------------
+
+describe("integration — inline rename and new definitions in sync from one resolution", () => {
+	const incoming: FootnoteRef[] = [
+		makeRef({ incomingId: 1, url: urlB, title: "Beta Page", snippet: "B snippet" }),
+		makeRef({ incomingId: 2, url: urlA, title: "Alpha Page", snippet: "A snippet" }),
+		makeRef({ incomingId: 3, url: urlB, title: "Beta Page Again", snippet: "B snippet 2" }),
+	];
+	const existing: ExistingRef[] = [makeExisting(6, urlA)];
+
+	const { idMap, newRefs } = resolveFootnoteIdentity(incoming, existing);
+
+	const body = "Intro [^1] and [^2] then [^3] end.";
+
+	const applyPlan = (src: string, plan: ReturnType<typeof applyFootnoteInlineRename>): string => {
+		const sorted = [...plan].sort((a, b) => b.from - a.from);
+		let result = src;
+		for (const edit of sorted) {
+			result = result.slice(0, edit.from) + edit.insert + result.slice(edit.to);
+		}
+		return result;
+	};
+
+	it("rewritten body has inline markers updated to [^7], [^6], [^7] in sync with idMap", () => {
+		const plan = applyFootnoteInlineRename(body, idMap);
+		const rewritten = applyPlan(body, plan);
+		expect(rewritten).toBe("Intro [^7] and [^6] then [^7] end.");
+	});
+
+	it("new definitions contain exactly one entry — for id 7 (urlB) only", () => {
+		const defs = newRefDefinitions(newRefs);
+		expect(defs).toHaveLength(1);
+	});
+
+	it("the single new definition is for [^7] matching the inline rewrite", () => {
+		const defs = newRefDefinitions(newRefs);
+		expect(defs[0]).toMatch(/^\[\^7\]:/);
+		expect(defs[0]).toContain("Beta Page");
+		expect(defs[0]).toContain(urlB);
+	});
+
+	it("no new definition is emitted for id 6 (urlA was reused from existing, not new)", () => {
+		const defs = newRefDefinitions(newRefs);
+		const hasId6Def = defs.some((d) => d.startsWith("[^6]:"));
+		expect(hasId6Def).toBe(false);
+	});
+});
