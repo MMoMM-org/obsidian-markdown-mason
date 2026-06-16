@@ -83,7 +83,7 @@ Each phase is a separate file. Tasks follow red-green-refactor: **Prime** → **
 **Implement** (green) → **Validate** (refactor + verify).
 
 - [x] [Phase 1: Scaffolding & Build Harness](phase-1.md)
-- [ ] [Phase 2: Core Operations (pure domain)](phase-2.md)
+- [x] [Phase 2: Core Operations (pure domain)](phase-2.md)
 - [ ] [Phase 3: Registry, mason.* API, Commands & Editor Adapters](phase-3.md)
 - [ ] [Phase 4: Perplexity Parsers & Auto-Dispatcher](phase-4.md)
 - [ ] [Phase 5: Script Runtime & Trust](phase-5.md)

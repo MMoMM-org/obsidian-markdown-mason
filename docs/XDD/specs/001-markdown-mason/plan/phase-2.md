@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: Core Operations (pure domain)"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 2
 ---
@@ -56,12 +56,12 @@ Delivers the pure, unit-tested operation logic that everything else composes. Al
   4. Validate: unit tests pass against the walkthrough.
   - Success: `[ref: PRD/AC F3.1–F3.4]`
 
-- [ ] **T2.5 Citation→footnote (C) + move-to-Resources (M)** `[activity: domain-modeling]` `[parallel: true]`
+- [x] **T2.5 Citation→footnote (C) + move-to-Resources (M)** `[activity: domain-modeling]` `[parallel: true]`
   1. Prime: `[ref: README §5 C,M]` `[ref: PRD/Feature 2,4]`
   2. Test (C): converts a `ParseResult`'s inline markers to `[^n]`; leaves alpha untouched; no-op on empty. Test (M): two-line format; create `## Resources` at note end (configurable name, no callout) only when there are defs; orphaned resources untouched; nothing-to-file → no section.
   3. Implement: C and M in `src/core/footnotes.ts` returning `EditPlan` (two-place edit for M).
   4. Validate: unit tests pass.
   - Success: `[ref: PRD/AC F2.1–F2.4, F4.1–F4.5]`
 
-- [ ] **T2.6 Phase Validation** `[activity: validate]`
+- [x] **T2.6 Phase Validation** `[activity: validate]`
   - All core tests green; zero `obsidian` imports under `src/core/`; lint + typecheck clean.
