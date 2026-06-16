@@ -1,20 +1,8 @@
 import { Plugin } from "obsidian";
+import { DEFAULT_SETTINGS, type MasonSettings } from "./core/types";
 
-// ---------------------------------------------------------------------------
-// Settings
-// ---------------------------------------------------------------------------
-
-export interface MasonSettings {
-	/** Enable verbose console.debug traces. Off by default. */
-	debugLogging: boolean;
-	/** Folder name used as a Resources section when building heading cascades. */
-	resourcesName: string;
-}
-
-export const DEFAULT_SETTINGS: MasonSettings = {
-	debugLogging: false,
-	resourcesName: "Resources",
-};
+// Re-export so consumers that import from "src/main" still resolve.
+export { DEFAULT_SETTINGS, type MasonSettings };
 
 // ---------------------------------------------------------------------------
 // Plugin

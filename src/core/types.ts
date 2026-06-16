@@ -1,5 +1,20 @@
 // No obsidian import — this module is pure domain; unit-testable without Obsidian.
-import type { MasonSettings } from "../main";
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
+
+export interface MasonSettings {
+	/** Enable verbose console.debug traces. Off by default. */
+	debugLogging: boolean;
+	/** Folder name used as a Resources section when building heading cascades. */
+	resourcesName: string;
+}
+
+export const DEFAULT_SETTINGS: MasonSettings = {
+	debugLogging: false,
+	resourcesName: "Resources",
+};
 
 // ---------------------------------------------------------------------------
 // Edit primitives
@@ -48,9 +63,14 @@ export interface ExistingRef {
 	url: string;
 }
 
+export interface InlineMarker {
+	marker: string;
+	n: number;
+}
+
 export interface ParseResult {
 	body: string;
-	inline: { marker: string; n: number }[];
+	inline: InlineMarker[];
 	sources: FootnoteRef[];
 }
 
