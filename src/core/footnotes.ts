@@ -58,7 +58,7 @@
 //     - JSON-serialisable without conversion (easier to pass across seams).
 //     - No iteration-order ambiguity for the small cardinality of footnote maps.
 
-import type { EditPlan, FootnoteRef, ExistingRef, ParseResult, OperationContext } from "./types";
+import type { Edit, EditPlan, FootnoteRef, ExistingRef, InlineMarker, ParseResult, OperationContext } from "./types";
 import { normalizeUrl } from "./url";
 
 // ---------------------------------------------------------------------------
@@ -249,7 +249,7 @@ export function fromCitations(parseResult: ParseResult): EditPlan {
 
 	for (const [n, count] of Object.entries(targetCount)) {
 		const numeric = Number(n);
-		const re = new RegExp(`\\[${numeric}\\]`, "g");
+		const re = new RegExp(`\\[${numeric}\\](?!\\()`, "g");
 		let m: RegExpExecArray | null;
 		let found = 0;
 
@@ -268,7 +268,7 @@ export function fromCitations(parseResult: ParseResult): EditPlan {
 }
 
 /** Count occurrences of each n in the inline marker list. */
-function countTargets(inline: ParseResult["inline"]): Record<number, number> {
+function countTargets(inline: InlineMarker[]): Record<number, number> {
 	const counts: Record<number, number> = {};
 	for (const marker of inline) {
 		counts[marker.n] = (counts[marker.n] ?? 0) + 1;
@@ -315,6 +315,10 @@ export function moveToResources(ctx: OperationContext, defs: string[]): EditPlan
  * "## <headingLine>" section.  The insertion point is just before the next
  * "## " heading (or EOF if the section runs to the end).
  *
+ * Only top-level "## " headings terminate the section scan.  Sub-headings
+ * (###, ####, …) inside the Resources section are valid content and do not
+ * stop the scan.
+ *
  * Returns null if the heading is not found.
  */
 function findSectionInsertOffset(doc: string, headingLine: string): number | null {
@@ -350,17 +354,20 @@ function findSectionInsertOffset(doc: string, headingLine: string): number | nul
 	// sectionEndOffset is set to the accumulated offset at the end of the section.
 	// We want to insert at the end of the section content (offset points to after
 	// the last character of the last line in the section, or before the next ##).
-	return sectionEndOffset;
+	// Clamp to doc.length to guard against the trailing-newline off-by-one where
+	// split("\n") yields a final empty element and offset overshoots by 1 (ADR-1).
+	return Math.min(sectionEndOffset!, doc.length);
 }
 
 /** Build an insert Edit that appends defs at the given offset within the section. */
-function buildSectionAppend(offset: number, defs: string[]): import("./types").Edit {
-	const content = "\n" + defs.join("\n\n");
+function buildSectionAppend(offset: number, defs: string[]): Edit {
+	// Trailing "\n" ensures the next "## Heading" starts on its own line (Bug 1 fix).
+	const content = "\n" + defs.join("\n\n") + "\n";
 	return { from: offset, to: offset, insert: content };
 }
 
 /** Build an insert Edit that creates a new section at note end. */
-function buildNoteEndInsert(doc: string, headingLine: string, defs: string[]): import("./types").Edit {
+function buildNoteEndInsert(doc: string, headingLine: string, defs: string[]): Edit {
 	const content = `\n${headingLine}\n\n${defs.join("\n\n")}`;
 	return { from: doc.length, to: doc.length, insert: content };
 }

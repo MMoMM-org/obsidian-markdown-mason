@@ -938,3 +938,84 @@ describe("end-to-end — formatF4Def → moveToResources places F4 format in doc
 		expect(result).not.toContain("[^6]: ");
 	});
 });
+
+// ---------------------------------------------------------------------------
+// REGRESSION — Bug 1: buildSectionAppend trailing newline
+//
+// When ## Resources is followed by another ## heading, the inserted defs
+// must end with "\n" so the next heading stays on its own line and is not
+// concatenated into the last definition line.
+// ---------------------------------------------------------------------------
+
+describe("moveToResources — Bug 1 regression: next ## heading stays at line-start after append", () => {
+	// Resources section is followed immediately by ## Other.
+	// After appending a new def, the char immediately before "## Other" must be "\n".
+	const doc = "## Resources\n[^1]: s\n[t](u)\n## Other\n";
+	const defs = ["[^2]: new\n[New](https://new.com)"];
+
+	it("result contains '\\n## Other' (heading stays at line-start, not fused to def)", () => {
+		const ctx = makeCtx(doc);
+		const plan = moveToResources(ctx, defs);
+		const result = applyPlan(doc, plan);
+		expect(result).toContain("\n## Other");
+	});
+
+	it("## Other is still a heading line (not fused to previous content)", () => {
+		const ctx = makeCtx(doc);
+		const plan = moveToResources(ctx, defs);
+		const result = applyPlan(doc, plan);
+		// The heading must appear at the very start of a line
+		const lines = result.split("\n");
+		expect(lines.some((l) => l === "## Other")).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// REGRESSION — Bug 2: fromCitations must not rewrite [n] inside markdown links
+//
+// A citation [1] appearing as the display text of a link [1](url) must not
+// be rewritten — only standalone [1] citations should become [^1].
+// ---------------------------------------------------------------------------
+
+describe("fromCitations — Bug 2 regression: [n](url) link text is not rewritten", () => {
+	// Body has [1](https://example.com) (a markdown link) AND cite[1] (a citation).
+	// Only the standalone [1] should become [^1]; the link display text is unchanged.
+	const body = "[1](https://example.com) and cite[1].";
+	const pr = makeParseResult({
+		body,
+		inline: [{ marker: "[1]", n: 1 }],
+	});
+
+	it("link display text [1](url) is NOT rewritten", () => {
+		const plan = fromCitations(pr);
+		const result = applyPlan(body, plan);
+		expect(result).toContain("[1](https://example.com)");
+	});
+
+	it("standalone citation [1] IS rewritten to [^1]", () => {
+		const plan = fromCitations(pr);
+		const result = applyPlan(body, plan);
+		expect(result).toBe("[1](https://example.com) and cite[^1].");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// REGRESSION — Bug 3: sectionEndOffset off-by-one at EOF
+//
+// When the Resources section runs to EOF and the doc ends with "\n",
+// split("\n") yields a trailing empty element that causes sectionEndOffset
+// to overshoot doc.length by 1.  The offset must be clamped to doc.length.
+// ---------------------------------------------------------------------------
+
+describe("moveToResources — Bug 3 regression: existing section at EOF offset pin", () => {
+	// Resources section runs to EOF (no trailing ## heading).
+	const doc = "# Title\n\n## Resources\n\n[^1]: old\n[Old](https://old.com)\n";
+	const defs = ["[^2]: new\n[New](https://new.com)"];
+
+	it("edit offset is <= doc.length (not off-by-one past EOF)", () => {
+		const ctx = makeCtx(doc);
+		const plan = moveToResources(ctx, defs);
+		expect(plan).toHaveLength(1);
+		expect(plan[0].from).toBeLessThanOrEqual(doc.length);
+	});
+});
