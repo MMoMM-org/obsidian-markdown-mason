@@ -3,8 +3,10 @@ import {
 	resolveFootnoteIdentity,
 	applyFootnoteInlineRename,
 	newRefDefinitions,
+	fromCitations,
+	moveToResources,
 } from "../../src/core/footnotes";
-import type { FootnoteRef, ExistingRef } from "../../src/core/types";
+import type { FootnoteRef, ExistingRef, ParseResult, OperationContext, MasonSettings } from "../../src/core/types";
 import type { ResolvedRef } from "../../src/core/footnotes";
 
 // ---------------------------------------------------------------------------
@@ -470,5 +472,375 @@ describe("integration — inline rename and new definitions in sync from one res
 		const defs = newRefDefinitions(newRefs);
 		const hasId6Def = defs.some((d) => d.startsWith("[^6]:"));
 		expect(hasId6Def).toBe(false);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// T2.5  fromCitations — Citation→Footnote inline rewrite (C)
+//
+// Converts inline citation markers [n] → [^n] in ParseResult.body using the
+// positions from inline: InlineMarker[].  Alphabetic markers like [A] are
+// never altered.  Empty/no citations → empty EditPlan.
+//
+// ADR-1: offsets vs the ORIGINAL body string.
+// ---------------------------------------------------------------------------
+
+/** Shared applyPlan helper (reverse-sorted, ADR-1 compliant). */
+const applyPlan = (src: string, plan: { from: number; to: number; insert: string }[]): string => {
+	const sorted = [...plan].sort((a, b) => b.from - a.from);
+	let result = src;
+	for (const edit of sorted) {
+		result = result.slice(0, edit.from) + edit.insert + result.slice(edit.to);
+	}
+	return result;
+};
+
+const makeParseResult = (overrides: Partial<ParseResult>): ParseResult => ({
+	body: "",
+	inline: [],
+	sources: [],
+	...overrides,
+});
+
+describe("fromCitations — basic citation-to-footnote rewrite", () => {
+	// body has [1] and [2] inline citation markers.
+	// ParseResult.inline lists both with their numeric n values.
+	// fromCitations should rewrite [1]→[^1] and [2]→[^2].
+	const body = "First claim[1] and second claim[2].";
+	const pr = makeParseResult({
+		body,
+		inline: [
+			{ marker: "[1]", n: 1 },
+			{ marker: "[2]", n: 2 },
+		],
+	});
+
+	it("produces two edits (one per inline citation marker)", () => {
+		const plan = fromCitations(pr);
+		expect(plan).toHaveLength(2);
+	});
+
+	it("applying the plan rewrites [1]→[^1] and [2]→[^2]", () => {
+		const plan = fromCitations(pr);
+		const result = applyPlan(body, plan);
+		expect(result).toBe("First claim[^1] and second claim[^2].");
+	});
+
+	it("each edit targets the exact source span of [n]", () => {
+		const plan = fromCitations(pr);
+		// First [1] is at index 11; length 3
+		expect(plan.some((e) => e.from === 11 && e.to === 14 && e.insert === "[^1]")).toBe(true);
+	});
+});
+
+describe("fromCitations — alphabetic markers are never altered", () => {
+	// [A] is an alpha marker; it must be ignored even if it appears in inline
+	// (the spec says alpha markers like [A] are NEVER treated as citations).
+	const body = "Note[A] and citation[1].";
+	const pr = makeParseResult({
+		body,
+		// Only numeric n=1 is in inline; alpha [A] would never be in inline
+		// (InlineMarker.n is a number), so it simply isn't present.
+		inline: [{ marker: "[1]", n: 1 }],
+	});
+
+	it("alpha marker [A] in body is not touched", () => {
+		const plan = fromCitations(pr);
+		const result = applyPlan(body, plan);
+		expect(result).toContain("[A]");
+	});
+
+	it("only [1] is rewritten to [^1]", () => {
+		const plan = fromCitations(pr);
+		const result = applyPlan(body, plan);
+		expect(result).toBe("Note[A] and citation[^1].");
+	});
+});
+
+describe("fromCitations — empty inline → empty EditPlan", () => {
+	it("returns [] when inline is empty", () => {
+		const pr = makeParseResult({ body: "No citations here.", inline: [] });
+		const plan = fromCitations(pr);
+		expect(plan).toHaveLength(0);
+	});
+
+	it("returns [] when body is empty and inline is empty", () => {
+		const pr = makeParseResult({ body: "", inline: [] });
+		const plan = fromCitations(pr);
+		expect(plan).toHaveLength(0);
+	});
+});
+
+describe("fromCitations — does NOT renumber; existing [^n] pass through unchanged", () => {
+	// C does not renumber — it only converts [n]→[^n].
+	// If body already has existing [^n] footnote markers, those are left alone.
+	// fromCitations only targets markers explicitly listed in inline[].
+	const body = "Existing[^3] and new citation[1].";
+	const pr = makeParseResult({
+		body,
+		inline: [{ marker: "[1]", n: 1 }],
+	});
+
+	it("leaves existing [^3] untouched", () => {
+		const plan = fromCitations(pr);
+		const result = applyPlan(body, plan);
+		expect(result).toContain("[^3]");
+	});
+
+	it("converts citation [1] to [^1]", () => {
+		const plan = fromCitations(pr);
+		const result = applyPlan(body, plan);
+		expect(result).toBe("Existing[^3] and new citation[^1].");
+	});
+});
+
+describe("fromCitations — multiple occurrences of the same n are each rewritten", () => {
+	// If [1] appears twice in body and inline has two entries for n=1,
+	// both occurrences must be rewritten.
+	const body = "First[1] and again[1].";
+	const pr = makeParseResult({
+		body,
+		inline: [
+			{ marker: "[1]", n: 1 },
+			{ marker: "[1]", n: 1 },
+		],
+	});
+
+	it("produces two edits for two occurrences of [1]", () => {
+		const plan = fromCitations(pr);
+		expect(plan).toHaveLength(2);
+	});
+
+	it("both occurrences are rewritten to [^1]", () => {
+		const plan = fromCitations(pr);
+		const result = applyPlan(body, plan);
+		expect(result).toBe("First[^1] and again[^1].");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// T2.5  moveToResources — definition placement (M)
+//
+// Accepts an OperationContext (ctx.doc = full note, ctx.settings.resourcesName)
+// and a string[] of formatted definitions in two-line format:
+//   "[^n]: snippet"
+//   "[title](url)"
+//
+// Returns an EditPlan (offsets vs ORIGINAL doc, ADR-1):
+//   - If defs is empty → return [].
+//   - If "## <resourcesName>" section exists → append defs after existing content
+//     in that section (before next "## " heading or EOF), preserving orphans.
+//   - If section absent and defs non-empty → insert at note end:
+//     "\n## <resourcesName>\n\n<defs joined by \n\n>"
+//
+// The two-line format per def: "[^n]: snippet\n[title](url)"
+// (Differs from newRefDefinitions which uses "[^n]: title\n    url".)
+// ---------------------------------------------------------------------------
+
+const DEFAULT_SETTINGS: MasonSettings = {
+	debugLogging: false,
+	resourcesName: "Resources",
+};
+
+const makeCtx = (doc: string, overrides: Partial<MasonSettings> = {}): OperationContext => ({
+	doc,
+	cursor: 0,
+	settings: { ...DEFAULT_SETTINGS, ...overrides },
+});
+
+describe("moveToResources — empty defs → empty EditPlan (no section created)", () => {
+	it("returns [] when defs array is empty", () => {
+		const ctx = makeCtx("Some note without resources.\n");
+		const plan = moveToResources(ctx, []);
+		expect(plan).toHaveLength(0);
+	});
+
+	it("does not insert an empty ## Resources section", () => {
+		const ctx = makeCtx("Some note.\n");
+		const plan = moveToResources(ctx, []);
+		expect(plan).toHaveLength(0);
+	});
+});
+
+describe("moveToResources — no existing section → creates ## Resources at note end", () => {
+	const doc = "# Title\n\nSome body text.\n";
+	const defs = ["[^1]: A snippet\n[A Title](https://example.com)"];
+
+	it("returns exactly one edit (an insert at end of doc)", () => {
+		const ctx = makeCtx(doc);
+		const plan = moveToResources(ctx, defs);
+		expect(plan).toHaveLength(1);
+	});
+
+	it("the edit is an insert (from === to)", () => {
+		const ctx = makeCtx(doc);
+		const plan = moveToResources(ctx, defs);
+		expect(plan[0].from).toBe(plan[0].to);
+	});
+
+	it("the inserted text contains '## Resources'", () => {
+		const ctx = makeCtx(doc);
+		const plan = moveToResources(ctx, defs);
+		expect(plan[0].insert).toContain("## Resources");
+	});
+
+	it("the inserted text contains the definition", () => {
+		const ctx = makeCtx(doc);
+		const plan = moveToResources(ctx, defs);
+		expect(plan[0].insert).toContain("[^1]: A snippet");
+		expect(plan[0].insert).toContain("[A Title](https://example.com)");
+	});
+
+	it("applying the plan produces a doc that ends with the Resources section", () => {
+		const ctx = makeCtx(doc);
+		const plan = moveToResources(ctx, defs);
+		const result = applyPlan(doc, plan);
+		expect(result).toContain("## Resources");
+		expect(result).toContain("[^1]: A snippet");
+	});
+
+	it("insert offset is at the end of the original doc (ADR-1)", () => {
+		const ctx = makeCtx(doc);
+		const plan = moveToResources(ctx, defs);
+		expect(plan[0].from).toBe(doc.length);
+	});
+});
+
+describe("moveToResources — configurable resourcesName", () => {
+	const doc = "# Title\n\nBody.\n";
+	const defs = ["[^1]: snippet\n[Link](https://x.com)"];
+
+	it("uses settings.resourcesName instead of 'Resources' when configured", () => {
+		const ctx = makeCtx(doc, { resourcesName: "References" });
+		const plan = moveToResources(ctx, defs);
+		const result = applyPlan(doc, plan);
+		expect(result).toContain("## References");
+		expect(result).not.toContain("## Resources");
+	});
+});
+
+describe("moveToResources — existing ## Resources section: appends after existing content", () => {
+	// Note has an existing ## Resources section with one entry and an orphaned line.
+	const existingEntry = "[^5]: Old snippet\n[Old Title](https://old.com)";
+	const orphan = "Some orphaned text";
+	const doc = `# Title\n\nBody text.\n\n## Resources\n\n${existingEntry}\n${orphan}\n`;
+	const defs = ["[^7]: New snippet\n[New Title](https://new.com)"];
+
+	it("returns exactly one edit", () => {
+		const ctx = makeCtx(doc);
+		const plan = moveToResources(ctx, defs);
+		expect(plan).toHaveLength(1);
+	});
+
+	it("the insert is an insert edit (from === to), not a replacement", () => {
+		const ctx = makeCtx(doc);
+		const plan = moveToResources(ctx, defs);
+		expect(plan[0].from).toBe(plan[0].to);
+	});
+
+	it("applying the plan: new def appears inside Resources section", () => {
+		const ctx = makeCtx(doc);
+		const plan = moveToResources(ctx, defs);
+		const result = applyPlan(doc, plan);
+		const resourcesIdx = result.indexOf("## Resources");
+		const newDefIdx = result.indexOf("[^7]: New snippet");
+		expect(newDefIdx).toBeGreaterThan(resourcesIdx);
+	});
+
+	it("applying the plan: orphaned text is preserved unchanged", () => {
+		const ctx = makeCtx(doc);
+		const plan = moveToResources(ctx, defs);
+		const result = applyPlan(doc, plan);
+		expect(result).toContain(orphan);
+	});
+
+	it("applying the plan: old entry is preserved", () => {
+		const ctx = makeCtx(doc);
+		const plan = moveToResources(ctx, defs);
+		const result = applyPlan(doc, plan);
+		expect(result).toContain("[^5]: Old snippet");
+	});
+});
+
+describe("moveToResources — Resources section followed by another ## heading", () => {
+	// New defs must NOT be inserted after the next ## heading.
+	const doc = "# Title\n\nBody.\n\n## Resources\n\n[^1]: Old\n[Old](https://old.com)\n\n## Next Section\n\nMore content.\n";
+	const defs = ["[^2]: New\n[New](https://new.com)"];
+
+	it("new def appears before '## Next Section'", () => {
+		const ctx = makeCtx(doc);
+		const plan = moveToResources(ctx, defs);
+		const result = applyPlan(doc, plan);
+		const newDefIdx = result.indexOf("[^2]: New");
+		const nextSectionIdx = result.indexOf("## Next Section");
+		expect(newDefIdx).toBeLessThan(nextSectionIdx);
+	});
+
+	it("## Next Section is preserved", () => {
+		const ctx = makeCtx(doc);
+		const plan = moveToResources(ctx, defs);
+		const result = applyPlan(doc, plan);
+		expect(result).toContain("## Next Section");
+	});
+});
+
+describe("moveToResources — multiple defs are all inserted", () => {
+	const doc = "# Title\n\nBody.\n";
+	const defs = [
+		"[^1]: First snippet\n[First](https://first.com)",
+		"[^2]: Second snippet\n[Second](https://second.com)",
+	];
+
+	it("all definitions appear in the result", () => {
+		const ctx = makeCtx(doc);
+		const plan = moveToResources(ctx, defs);
+		const result = applyPlan(doc, plan);
+		expect(result).toContain("[^1]: First snippet");
+		expect(result).toContain("[^2]: Second snippet");
+	});
+});
+
+describe("moveToResources — orphaned resources (no [^n]: prefix) are NOT modified", () => {
+	// An orphaned resource is a snippet+link pair with no "[^n]:" prefix.
+	// These must be left exactly as they are — no deletion, movement, or modification.
+	const orphanedLine = "Some snippet without footnote marker";
+	const doc = `# Title\n\nBody.\n\n## Resources\n\n${orphanedLine}\n`;
+	const defs = ["[^1]: New snippet\n[New](https://new.com)"];
+
+	it("orphaned line is still present after moveToResources", () => {
+		const ctx = makeCtx(doc);
+		const plan = moveToResources(ctx, defs);
+		const result = applyPlan(doc, plan);
+		expect(result).toContain(orphanedLine);
+	});
+
+	it("the plan is not a replacement of the orphaned line (no 'to' span covering it)", () => {
+		const ctx = makeCtx(doc);
+		const plan = moveToResources(ctx, defs);
+		// All edits must be inserts (from === to), not replacements
+		for (const edit of plan) {
+			expect(edit.from).toBe(edit.to);
+		}
+	});
+});
+
+describe("moveToResources — two-line definition format", () => {
+	// The F4 spec mandates: "[^n]: snippet" on line 1, "[title](url)" on line 2.
+	// moveToResources receives pre-formatted defs in this exact format.
+	const doc = "# Title\n\nBody.\n";
+	const defs = ["[^3]: A snippet about something\n[The Title](https://example.org/page)"];
+
+	it("inserted content contains the snippet on the first definition line", () => {
+		const ctx = makeCtx(doc);
+		const plan = moveToResources(ctx, defs);
+		const result = applyPlan(doc, plan);
+		expect(result).toContain("[^3]: A snippet about something");
+	});
+
+	it("inserted content contains the link on the second definition line", () => {
+		const ctx = makeCtx(doc);
+		const plan = moveToResources(ctx, defs);
+		const result = applyPlan(doc, plan);
+		expect(result).toContain("[The Title](https://example.org/page)");
 	});
 });
