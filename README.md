@@ -139,7 +139,18 @@ keine Obsidian-Abhängigkeit im Kern (testbar ohne Obsidian — vgl. MiYo-Consti
 3. **Verwaiste Resources nicht anfassen.**
 
 **Edit-Plan:** Body (mit Inline-`[^n]`) an den Cursor; Definitionen ans Ziel → **Zwei-Stellen-Edit**
-in einer Editor-Transaktion.
+in einer Editor-Transaktion. Kern-Rückgabetyp ist ein **Edit-Plan** (`{from, to, insert}[]`),
+kein transformierter Text — nur so lässt sich der Zwei-Stellen-Edit atomar in **einer**
+CodeMirror-Transaktion anwenden (alle Ranges gegen das **Original**-Dokument berechnen, als ein
+`changes`-Array dispatchen, damit Offsets nicht verrutschen).
+
+> ⚠️ **Kopplung O↔D (zu entscheiden):** O und D sind **nicht** unabhängig hintereinander
+> ausführbar. Versetzt O zuerst auf frische Hoch-Nummern und merged D danach per URL, entstehen
+> Lücken/Kollisionen, und „bestehende Nummer wiederverwenden" widerspricht der gerade vergebenen
+> Offset-Nummer. Vorschlag: O+D zu **einer** „Footnote-Identity"-Stufe verschmelzen, die
+> (1) im Paste per URL dedupliziert, (2) gegen bestehende URLs matcht (Nummer wiederverwenden),
+> (3) nur den echt neuen Quellen `max(bestehend)+1…` vergibt. Als Commands dürfen O/D getrennt
+> bleiben; der reine Kern braucht eine Stufe, die die Nummerierung end-to-end besitzt.
 
 ---
 
@@ -159,32 +170,82 @@ in einer Editor-Transaktion.
 Das Hauptproblem mit Advanced Paste war: **Skripte lebten lose im Vault** → Obsidian
 schleppt/synct sie mit, unübersichtlich. Markdown Mason dreht das um:
 
-- **Transforms werden vom Plugin verwaltet**, gespeichert im **Plugin-Datenverzeichnis**
-  (`.obsidian/plugins/markdown-mason/…`), **nicht** als Notiz-Dateien im Vault-Baum.
-- **Built-in-Transforms** werden mit dem Plugin ausgeliefert (u.a. die obigen H/C/O/D/M +
-  die Perplexity-Beispiele des Autors als kanonische Vorlage).
-- **Community-Beiträge per PR** ins Plugin-Repo: andere reichen geprüfte Transforms ein.
-- **In-Plugin-Galerie:** ein Browser im Plugin listet die im Repo geprüften Transforms und
-  **installiert sie direkt** (Pull aus dem Repo / einem Manifest) ins Plugin-Datenverzeichnis.
-  → Kein manuelles Ablegen im Vault mehr.
+- **Transforms werden vom Plugin verwaltet**, gespeichert in einem **eigenen Skript-Verzeichnis
+  im Plugin-Datenverzeichnis** (`.obsidian/plugins/markdown-mason/scripts/…`), **nicht** als
+  Notiz-Dateien im Vault-Baum.
+- **Built-in-Transforms** werden mit dem Plugin ausgeliefert (die obigen H/C/O/D/M + die
+  Perplexity-Beispiele des Autors als kanonische Vorlage). Sie sind die **einzige durch die
+  Maintainer geprüfte** Stufe; jede Aktivierung ist **Opt-in**. Pro Beispiel liegt im Repo eine
+  Doku, *warum* es so gebaut ist (Feature-Set orientiert am Perplexity-Use-Case, ergänzt um
+  Ideen — **nicht Code** — aus Paste Reformatter).
+- **Import statt Auto-Galerie:** Es gibt **keinen** stillen Netzwerk-Installer. Sowohl
+  Community- als auch selbstgebaute Transforms laufen über **denselben manuellen Pfad**: Datei
+  im Vault ablegen → ins Skript-Verzeichnis importieren. Das Plugin führt eine **Quell-Liste**
+  (kuratierte Repos + eigene Vault-Pfade), aus der re-importiert/aktualisiert werden kann — aber
+  Installation und Upgrade sind immer **nutzer-bestätigt** (siehe §10).
 
-### Wichtige Design-Gabelung: deklarativ vs. beliebiges JS
-Beim „Transforms aus dem Internet ziehen und ausführen" entsteht eine **Trust-/Supply-Chain-Fläche**
-(Code-Ausführung mit vollem Plugin-Rechten). Zwei Wege:
+### Entschieden: deklarativer Kern (A), JS nur als Escape-Hatch
+Beim „Transforms aus einer Quelle ziehen und ausführen" entsteht eine **Trust-/Supply-Chain-Fläche**
+(Code-Ausführung mit vollem Plugin-Rechten). Die Entscheidung ist gefallen:
 
 - **(A) Deklarative Pipeline** aus sicheren Primitiven (Heading-Shift, Regex-Regeln, Footnote-Ops,
-  Reihenfolge). PR-reviewbar **ohne** Code-Ausführung, deutlich sicherer, etwas weniger mächtig.
-- **(B) Beliebiges JS** (wie Advanced Paste). Maximal flexibel, aber jeder installierte Transform
-  ist ausführbarer Fremdcode → expliziter „du führst Code aus dem Netz aus"-Consent nötig.
+  Reihenfolge) ist **das Kernformat**. Ein Transform ist damit *Daten*, kein Code → PR-/Import-
+  reviewbar **ohne** Ausführung, und „macht nur Markdown-Operationen" gilt **per Konstruktion**
+  (die Primitiven sind die einzige Capability). Deckt H/C/O/D/M vollständig ab.
+- **(B) Beliebiges JS** bleibt ein optionaler, deutlich gekennzeichneter **Power-User-Escape-Hatch**:
+  desktop-only, pro Installation expliziter „du führst Fremdcode aus"-Consent, **nie** automatisch
+  aus der Quell-Liste gezogen.
 
-**Empfehlung:** Kern als **(A) deklarativ** bauen (deckt H/C/O/D/M vollständig ab), JS als
-optionalen, deutlich gekennzeichneten Power-User-Escape-Hatch. Diese Entscheidung vor v0.2 final treffen.
+### Self-describing Transform-Format (eine Datei pro Transform)
+Weil der Kern deklarativ ist, ist ein Transform ein strukturiertes Dokument und trägt seine
+Metadaten **in sich** — keine Sidecar-Dateien für Changelog/Doku:
 
-**note:**
-Ich würde a) nehmen, außerdem sollte es auch möglich sein scripte aus dem vault in das Plugin Verzeichnis zu kopieren.
-Dafür müssen wir dann die Referenzen woher die einzelnen scripte incl. einer hash summe (freigabe) speichern.
-Damit kann der Nutzer in jeder Instanz von Obsidian seine freigebenen scripte (offiziell, Community, selbstgebaut) wieder
-automatisch in das Pluginverzeichnis pullen lassen und nutzen.
+```yaml
+id: perplexity-citations
+version: 3
+description: Wandelt Perplexity-Inline-Citations [n] in [^n]-Fußnoten …
+changelog:
+  - v3: "Citations:"-Block-Variante unterstützt
+  - v2: Dedup über normalisierte URL
+  - v1: initial
+transform: [ … die deklarative Pipeline … ]
+```
+
+Vorteile: **eine** Datei zum Hashen/Holen/Speichern; der Update-Prompt liest `changelog` direkt
+aus der eingehenden Version (kein zweiter Fetch); ein Changelog-Eintrag ändert den Checksum —
+korrekt, weil er versionierter Inhalt ist. Längere „warum"-Prosa lebt zusätzlich als Repo-Doku
+für den kuratierten Satz; zur Laufzeit braucht es nur die eine Datei. JS-Escape-Hatch-Transforms
+tragen dieselben Felder als Header-Kommentarblock.
+
+### Speicher- & Integritäts-Modell (Manifest/Lockfile)
+`data.json` hält **nur Metadaten** pro Transform — die Skripte selbst liegen als Dateien im
+Skript-Verzeichnis:
+
+```json
+{ "source": "…repo-url | vault-pfad", "checksum": "sha256:…", "version": 3, "enabled": true }
+```
+
+Regeln (Paketmanager-Logik: Hash pinnt Integrität, Version signalisiert Absicht):
+
+- **Auf Disk** wird nur **Existenz** geprüft. Fehlt die Datei → von `source` holen; stimmt der
+  geholte Checksum mit dem gespeicherten überein → **Autoinstall** (still). Mismatch → **nicht**
+  still installieren (Quelle ist abgedriftet).
+- **Drift-Erkennung** vergleicht Quell-Checksum gegen den gespeicherten:
+  - **gleiche Version + anderer Checksum → unerwartete Drift → Fehler/Warnung** (Quelle hat sich
+    ohne Ankündigung geändert: Manipulation oder schlampige Pflege — nie automatisch anwenden).
+  - **höhere Version → legitime Änderung → Update-Prompt** (mit `changelog`) → Nutzer entscheidet.
+    **Keine** Auto-Upgrades.
+- Die Drift-Prüfung *bedeutet* je nach Quelle Unterschiedliches: bei einem **geprüften Repo**
+  Manipulations-/Integritätsschutz; bei einem **Vault-Pfad** nur „du hast deine lokale Kopie
+  editiert — neu importieren?". Gleiche Mechanik, andere Schwere.
+
+**Cross-Instanz-Self-Heal (emergente Eigenschaft):** Obsidian Sync repliziert die **Plugin-Daten
+(`data.json`)**, aber **nicht** die Skript-Dateien (→ §9, **noch zu verifizieren**). Auf einem
+zweiten Gerät kommt also die Metadaten-Liste an, die Dateien fehlen → der Checksum-/Existenz-Pfad
+zieht sie automatisch aus `source` nach. **Grenze:** das funktioniert nur für Transforms mit
+*auflösbarer* `source` (geprüftes Repo / gehostete Datei). Rein selbstgeschriebene, aus dem Vault
+importierte Skripte haben **keine** Remote-Quelle → auf einem zweiten Gerät müssen sie erneut aus
+dem Vault importiert (oder selbst gehostet) werden.
 
 ---
 
@@ -201,8 +262,9 @@ sources/              dünne Adapter, die Input + Kontext liefern
   note.ts             ganze Notiz
 registry/             Transform-Bibliothek
   builtin/            mitgelieferte Transforms (inkl. Perplexity-Beispiele)
-  gallery.ts          Repo/Manifest abrufen, geprüfte Transforms installieren
-  store.ts            Persistenz im Plugin-Datenverzeichnis (NICHT im Vault-Baum)
+  format.ts           self-describing Transform-Schema (id/version/changelog/description/transform)
+  sources.ts          Quell-Liste + Abruf/Import + Checksum-/Drift-/Update-Logik (kein Auto-Installer)
+  store.ts            Manifest (data.json: source/checksum/version/enabled) + Skript-Verzeichnis (NICHT im Vault-Baum)
 main.ts               Plugin-Lifecycle, Command-Registrierung, Settings-UI
 ```
 
@@ -217,49 +279,87 @@ Damit ist derselbe Kern später trivial in einen Auto-on-Cmd+V-Modus portierbar.
   in einem Schritt, damit Offsets nicht verrutschen.
 - **Paste-Event** abfangen via `this.app.workspace.on("editor-paste", …)` bzw.
   `registerEvent` — sauberes Cleanup beachten.
-- **`requestUrl`** statt `fetch` für den Galerie-Abruf (CORS/Obsidian-Konvention).
+- **`requestUrl`** statt `fetch` für den Quell-Abruf/Import aus Repos (CORS/Obsidian-Konvention).
 - **`normalizePath`** für jegliche Pfade; Persistenz über die Plugin-Data-API, nicht direkt im Vault.
-- **Sync-Hinweis:** Plugin-Datenverzeichnis kann von Obsidian Sync (Plugin-Sync) erfasst werden,
-  ist aber **getrennt von Vault-Content** — löst das „liegt als Notiz herum"-Problem trotzdem.
-  **note:**
-  es wird nur obsidian plugin spezifisches material gesynced, keine zusätzlichen dateien die ein plugin erzeugt (unsere scripte)
-- **Mobile:** wenn Galerie/Netzwerk kritisch → `isDesktopOnly` erwägen; sonst Feature-Gate.
-- **DOM-Sicherheit:** kein `innerHTML` mit Fremdinhalt (Galerie-Beschreibungen) — XSS-sicher rendern.
+- **Sync-Annahme (LOAD-BEARING, zu verifizieren):** Das Self-Heal- und Re-Import-Modell aus §7
+  setzt voraus, dass Obsidian Sync **`data.json` repliziert, aber Skript-Dateien im Plugin-Verzeichnis
+  nicht**. Das ist die zentrale Unbekannte: synct Obsidian beliebige Plugin-Verzeichnis-Dateien,
+  ist das Self-Heal hinfällig **und** ungeprüftes JS würde still auf alle Geräte propagieren (anderes
+  Risiko). Vor dem Festzurren von §7/§10 gegen die Obsidian-Doc / Skill `tcs-patterns:obsidian-plugin`
+  klären.
+- **Mobile:** wenn Netzwerk/Import kritisch → `isDesktopOnly` erwägen; JS-Escape-Hatch ohnehin
+  desktop-only.
+- **DOM-Sicherheit:** kein `innerHTML` mit Fremdinhalt (Transform-`description`/`changelog`) — XSS-sicher rendern.
 - Vor Community-Einreichung: Skill **`tcs-patterns:obsidian-plugin`** durchlaufen (Manifest-Regeln,
   Lifecycle/Cleanup, Sample-Plugin-Reste, `console.debug` etc.).
-**note:**
-wir müssen uns einen Vettingprozess für die PR überlegen und am besten dann einen automatischen prozess haben ob wir die Scripte erlauben wollen.
-Generell sollten nur Scripte akzeptiert werden die Markdown Operationen ausführen, es ist zu prüfen ob zugriff auf andere informationen außerhalb überhaupt notwendig sind.
-ich denke wir sollten einen community bereich einrichten wo user ihre scripte sharen können (ohne überprüfung).
-alles natürlich ordentlich in der Readme mit den entsprechenden sicherheits implikationen dokumentiert.
+
 ---
 
 ## 10. Sicherheit & Vertrauen
 
-- Galerie-Transforms = potenziell Fremdcode. PR-Review ist die erste Verteidigungslinie;
-  deklaratives Format (§7-A) ist die strukturelle.
-- Beim Installieren eines Galerie-Transforms: Quelle, Autor und (bei JS) expliziten Consent zeigen.
-- Keine Telemetrie, keine stillen Netzwerkaufrufe außer dem expliziten Galerie-Pull.
+**Vertrauensstufen.** Es gibt genau zwei:
+
+- **Built-in (geprüft):** die mitgelieferten Beispiel-Transforms — von den Maintainern reviewt.
+- **Community & selbstgebaut (ungeprüft):** alles andere. Das Plugin behandelt Community-Skripte
+  **exakt wie deine eigenen handgeschriebenen** — kein Review, keine Sandbox, keine Garantie.
+
+> **Community- und selbstgeschriebene Transforms sind ungeprüft.** Nur die mit dem Plugin
+> ausgelieferten Built-in-Beispiele sind von den Maintainern geprüft. Das Installieren jedes
+> anderen Transforms — aus dem Vault kopiert oder aus einer Community-Quelle gezogen — führt
+> fremden Code **auf eigenes Ermessen und Risiko** des Nutzers aus.
+
+Es soll zudem einen **expliziten Community-Bereich ohne Überprüfung** geben, in dem Nutzer ihre
+Transforms teilen — mit den entsprechenden Sicherheits-Implikationen prominent dokumentiert.
+
+**Verteidigungslinien (gestaffelt):**
+
+- **Strukturell:** das deklarative Format (§7-A) ist die stärkste Verteidigung — ein Daten-Transform
+  *kann* per Konstruktion nichts außer Markdown-Operationen. „Nur Markdown-Ops" muss nicht geprüft
+  werden, es gilt durch das Format.
+- **Integrität:** Checksum (Drift-Erkennung) + Version (Absicht) aus §7 — geprüfte Repos sind so
+  manipulationssicher, Upgrades immer nutzer-bestätigt, nie automatisch.
+- **Consent:** beim Import/Upgrade Quelle, Autor, Version/Changelog und — bei JS — expliziten
+  „Fremdcode"-Consent zeigen.
+- **PR-Vetting (für den kuratierten Satz):** Einreichungen sollen daraufhin geprüft werden, dass
+  sie ausschließlich Markdown-Operationen ausführen; Zugriff auf Information außerhalb ist zu
+  hinterfragen (idealerweise gar nicht möglich, weil deklarativ). Ein (perspektivisch
+  automatisierbarer) Vetting-Prozess ist noch zu definieren (§12).
+- **Keine Telemetrie**, keine stillen Netzwerkaufrufe außer dem expliziten, nutzer-ausgelösten
+  Quell-Pull.
 
 ---
 
 ## 11. Roadmap (Vorschlag)
 
-- **v0.1 — Kern & Quellen:** Built-in H/C/O/D/M, Quellen Paste + Selektion + ganze Notiz,
-  Einzel-Commands + Presets. Perplexity-Beispiele als Built-in. (Braucht das Roh-Sample aus §2.)
-- **v0.2 — Bibliothek:** Registry + In-Plugin-Galerie, Pull geprüfter Transforms aus dem Repo,
-  deklaratives Transform-Format finalisiert.
-- **v0.3 — Politur:** Settings-UI (Ziel-Sektionsname, Marker-Policy), optionaler JS-Escape-Hatch,
-  ggf. Auto-on-Paste-Modus.
+- **v0.1 — Kern & Quellen:** Built-in H/C/O/D/M (Kern als Edit-Plan, O+D als eine Footnote-Identity-
+  Stufe — §5), Quellen Paste + Selektion + ganze Notiz, Einzel-Commands + Presets. Perplexity-
+  Beispiele als Built-in im self-describing deklarativen Format (§7). H/M buildbar ohne das
+  Roh-Sample; C/O/D brauchen es (§2).
+- **v0.2 — Bibliothek:** Registry + Quell-Liste + Import/Re-Import (kein Auto-Installer), Manifest/
+  Lockfile in `data.json` (source/checksum/version/enabled), Drift- & Update-Prompts, Cross-Instanz-
+  Self-Heal. Hängt an der Sync-Verifikation aus §9.
+- **v0.3 — Politur:** Settings-UI (Ziel-Sektionsname, Marker-Policy), JS-Escape-Hatch (desktop-only,
+  Consent), ggf. Auto-on-Paste-Modus.
 
 ---
 
 ## 12. Offene Punkte / benötigte Inputs
 
-1. **Roher Perplexity-Paste** (1–2 Sektionen, unbearbeitet) — Blocker für C/D-Parser.
-2. **Deklarativ vs. JS** (§7) — vor v0.2 entscheiden.
-3. **Ziel-Default** für M: bestehende `## Resources` bevorzugen, sonst Notizende — bestätigen.
-4. **Name** final: „Markdown Mason" ist Arbeitstitel; soll der Bibliotheks-/Advanced-Paste-Aspekt
+1. **Roher Perplexity-Paste** — *teilweise gelöst:* Autor liefert je ein Sample aus Copy/Paste und
+   aus Perplexity-Export. **Fixture-Strategie:** das behaltbare Sample wird als committetes Golden-
+   Fixture für C/D genutzt; das persönliche bleibt **lokal/gitignored** (z.B. `test/fixtures/local/`).
+   Dateien stehen noch aus.
+2. ~~**Deklarativ vs. JS**~~ — **ENTSCHIEDEN** (§7): deklarativer Kern (A) als Format, JS nur als
+   desktop-only, consent-gegateter Escape-Hatch, nie auto-gepullt.
+3. **Sync-Verhalten verifizieren** (§9, LOAD-BEARING): synct Obsidian Plugin-Verzeichnis-Dateien
+   oder nur `data.json`? Das ganze Self-Heal-/Re-Import-Modell hängt daran. → Skill
+   `tcs-patterns:obsidian-plugin`.
+4. **O↔D-Kopplung** (§5): Footnote-Identity als eine Stufe + Edit-Plan als Kern-Rückgabetyp —
+   Design bestätigen, bevor §5 als final gilt.
+5. **Vetting-Prozess** für den kuratierten Satz definieren (perspektivisch automatisierbar: „nur
+   Markdown-Ops, kein Außenzugriff").
+6. **Ziel-Default** für M: bestehende `## Resources` bevorzugen, sonst Notizende — bestätigen.
+7. **Name** final: „Markdown Mason" ist Arbeitstitel; soll der Bibliotheks-/Advanced-Paste-Aspekt
    im Namen anklingen?
 
 ---
