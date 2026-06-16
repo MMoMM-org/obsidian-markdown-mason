@@ -45,3 +45,4 @@ claude-docker/
 claude-docker-home/
 begin-code.sh
 /generated-images/
+.mcp.json
