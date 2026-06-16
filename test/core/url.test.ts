@@ -90,6 +90,38 @@ describe("normalizeUrl — non-URL fallback", () => {
 	});
 });
 
+describe("normalizeUrl — collision avoidance and encoding correctness", () => {
+	it("treats a percent-encoded ampersand in a value as ONE param (not two)", () => {
+		// "?a=x%26b%3D2" is one param: key "a", value "x&b=2"
+		// "?a=x&b=2"     is two params: key "a" value "x", key "b" value "2"
+		// They must NOT share the same dedup key.
+		expect(normalizeUrl("https://e.com/?a=x%26b%3D2")).not.toBe(
+			normalizeUrl("https://e.com/?a=x&b=2"),
+		);
+	});
+
+	it("collapses encoding variants of the same decoded value (space)", () => {
+		// "?a=x%20y" and "?a=x y" decode to the same param value — same key.
+		expect(normalizeUrl("https://e.com/?a=x%20y")).toBe(
+			normalizeUrl("https://e.com/?a=x y"),
+		);
+	});
+});
+
+describe("normalizeUrl — non-http(s) scheme fallback", () => {
+	it("returns trimmed lowercase for mailto: (not a mangled mailto:// key)", () => {
+		expect(normalizeUrl("mailto:User@Example.com")).toBe(
+			"mailto:user@example.com",
+		);
+	});
+
+	it("returns trimmed lowercase for data: URIs", () => {
+		expect(normalizeUrl("data:text/plain,Hello")).toBe(
+			"data:text/plain,hello",
+		);
+	});
+});
+
 describe("normalizeUrl — real dedup case (n-kishou.com)", () => {
 	// The committed fixtures all contain the same n-kishou.com URL verbatim:
 	//   https://n-kishou.com/corp/news-contents/sakura/?lang=en

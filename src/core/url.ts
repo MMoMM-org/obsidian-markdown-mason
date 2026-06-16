@@ -10,9 +10,11 @@
  *  1. Lowercase scheme and host (WHATWG URL does this automatically).
  *  2. Strip one trailing slash from pathname, including the root path.
  *     Canonical root form: "https://x.com" (no trailing slash).
- *  3. Sort query parameters alphabetically so param order is irrelevant.
+ *  3. Sort query parameters by UTF-16 code-unit order (locale-independent).
+ *     Encoding is preserved correctly via URLSearchParams.toString().
  *  4. Drop the fragment (hash).
- *  5. Non-URL input: return raw.trim().toLowerCase().
+ *  5. Non-http(s) scheme: return raw.trim().toLowerCase() (same as non-URL).
+ *  6. Non-URL input: return raw.trim().toLowerCase().
  */
 export function normalizeUrl(raw: string): string {
 	let parsed: URL;
@@ -22,13 +24,25 @@ export function normalizeUrl(raw: string): string {
 		return raw.trim().toLowerCase();
 	}
 
+	// Only canonicalize web URLs; route other schemes through the text fallback
+	// to avoid producing malformed keys like "mailto://user@example.com".
+	if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+		return raw.trim().toLowerCase();
+	}
+
 	return buildCanonical(parsed);
 }
 
 function buildCanonical(url: URL): string {
 	const host = url.host; // already lowercased by WHATWG URL
 	const pathname = stripTrailingSlash(url.pathname);
-	const query = sortedQuery(url.searchParams);
+
+	// Sort by UTF-16 code-unit order (locale-independent, stable for duplicate
+	// keys) and let URLSearchParams.toString() handle percent-encoding correctly.
+	// This avoids the collision bug where decoded reconstruction would merge
+	// "?a=x%26b%3D2" (one param) with "?a=x&b=2" (two params).
+	url.searchParams.sort();
+	const query = url.searchParams.toString();
 	const suffix = query ? `?${query}` : "";
 
 	return `${url.protocol}//${host}${pathname}${suffix}`;
@@ -43,10 +57,4 @@ function stripTrailingSlash(pathname: string): string {
 		return "";
 	}
 	return pathname;
-}
-
-function sortedQuery(params: URLSearchParams): string {
-	const entries = [...params.entries()];
-	entries.sort(([a], [b]) => a.localeCompare(b));
-	return entries.map(([k, v]) => `${k}=${v}`).join("&");
 }
