@@ -304,13 +304,14 @@ No in-application telemetry will be implemented (explicit non-goal). "Tracking" 
 | In-place edits lose data on partial failure | High | Low | Single atomic editor transaction per command; one-undo guarantee; on parse/script failure apply nothing and report |
 
 ## Open Questions
-- [ ] Official-repo vetting process specifics: who reviews, the required per-script doc template, and whether the "Markdown-in-note only" check can be (partly) automated vs. purely manual PR review.
-- [ ] Exact operations-API surface and how scripts declare a required API version (signatures, context shape) — to be designed in the SDD.
-- [ ] Do vetted official-repo scripts still show a disclosure prompt, or only community/vault-imported ones? (Proposed: vetted = light enable; community = full disclosure + per-checksum/version consent — confirm.)
-- [ ] Update-check cadence for installed official scripts: on load / throttled on first command (e.g. 24h) / manual only?
-- [ ] Preset source resolution: should `Mason: Paste and format` fall back to the selection when the clipboard is empty, or stay strictly clipboard-scoped?
-- [ ] Should pastes inside code fences / frontmatter be excluded from Mason/script handling?
-- [ ] Blank-line policy between Resources entries: enforce exactly one between all entries, or only for newly written ones?
+*(Classified after spec validation — none block v0.1; each has a v0.1 default or a deferral.)*
+- [ ] **[v0.2]** Official-repo vetting process specifics: who reviews, the required per-script doc template, automated vs. manual "Markdown-in-note only" check. *(v0.1 ships local + vault-import only.)*
+- [x] **[RESOLVED in SDD]** Operations-API surface + `requiredApiVersion` declaration — specified in SDD §Internal API + ScriptContext.
+- [x] **[RESOLVED in SDD/ADR-4]** Disclosure for vetted vs community scripts — vetted-repo = light enable; community/vault-imported = full disclosure + per-checksum/version consent.
+- [ ] **[v0.2]** Update-check cadence for installed official scripts — only relevant once remote download exists.
+- [ ] **[v0.1 default]** Preset source resolution: `Mason: Paste and format` is **clipboard-scoped**; a separate `Mason: Format selection` handles selections (no implicit fallback). Revisit if it feels wrong in use.
+- [ ] **[v0.1 default: out of scope]** Pastes inside code fences / frontmatter are **not specially excluded** — explicit-invoke (ADR-10) means the user chose to run the command; a guard can be added later if needed. *(Non-blocking.)*
+- [ ] **[v0.1 default]** Blank-line policy: enforce exactly **one** blank line between newly written Resources entries; do not reflow pre-existing spacing. *(Covered by M tests.)*
 
 ---
 

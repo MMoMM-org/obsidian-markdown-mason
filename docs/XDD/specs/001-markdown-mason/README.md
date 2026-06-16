@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-06-16 |
-| **Current Phase** | SDD |
+| **Current Phase** | Ready |
 | **Last Updated** | 2026-06-16 |
 
 ## Documents
@@ -14,7 +14,7 @@
 |----------|--------|-------|
 | requirements.md | completed | v1.1 (JS-scripts-first pivot); 11 features, 45 Gherkin acceptance criteria |
 | solution.md | completed | Hexagonal; 10 ADRs all confirmed; EARS acceptance criteria |
-| plan/ | pending | |
+| plan/ | completed | 7 phases (v0.1), TDD tasks; v0.2/v0.3 noted as future |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
 
