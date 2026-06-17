@@ -255,8 +255,8 @@ export class ScriptStore {
 	}
 
 	private async _readDeviceState(): Promise<DeviceState> {
-		const absent = await this._vault.exists(this._devicePath);
-		if (!absent) {
+		const fileExists = await this._vault.exists(this._devicePath);
+		if (!fileExists) {
 			return { enabled: {}, consent: {} };
 		}
 		try {

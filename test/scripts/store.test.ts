@@ -467,4 +467,39 @@ describe("ScriptStore — robustness", () => {
 
 		expect(pluginData.saveCount).toBe(1);
 	});
+
+	it("[W1] corrupt device.json resolves to empty state without throwing", async () => {
+		const pluginData = makePluginDataPort();
+		const vault = makeVaultAdapterPort();
+		// Seed a non-JSON string so exists() returns true but JSON.parse throws
+		vault._files.set(DEVICE_PATH, "this is not valid json {{{");
+		const store = makeStore(pluginData, vault);
+
+		const device = await store.getDevice();
+		expect(device).toEqual({ enabled: {}, consent: {} });
+	});
+});
+
+// ---------------------------------------------------------------------------
+// (j) enabled key absent → needs-consent, not disabled
+// ---------------------------------------------------------------------------
+
+describe("ScriptStore — evaluateTrust: enabled key absent", () => {
+	it("[W2] script in manifest but no enabled entry → needs-consent (not disabled)", async () => {
+		const pluginData = makePluginDataPort({
+			scripts: {
+				"script-j": { source: "j.cjs", checksum: "hash-j", version: 1 },
+			},
+		});
+		const vault = makeVaultAdapterPort();
+		// device.json exists but enabled:{} has no entry for script-j
+		vault._files.set(
+			DEVICE_PATH,
+			JSON.stringify({ enabled: {}, consent: {} }),
+		);
+		const store = makeStore(pluginData, vault);
+
+		const result = await store.evaluateTrust("script-j");
+		expect(result.status).toBe("needs-consent");
+	});
 });
