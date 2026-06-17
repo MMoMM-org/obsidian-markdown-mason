@@ -6,16 +6,27 @@ import type { CitationParser } from "./types";
 // ---------------------------------------------------------------------------
 // Contracts
 //
-// body:    Full input text, inline [n] markers retained, Sources blocks kept.
-//          Nothing is stripped — downstream offset-based rewrites depend on
-//          the original text being intact.
+// sources: All FootnoteRef entries across ALL answer blocks, concatenated in
+//          document order. incomingId is GLOBALLY UNIQUE and SEQUENTIAL
+//          starting at 1. Block 1's entries receive ids 1..N₁; block 2's
+//          entries receive ids (N₁+1)..(N₁+N₂); etc. No URL dedup here —
+//          the fused-identity stage (resolveFootnoteIdentity) owns dedup.
+//          snippet === title (consistent short descriptor).
 //
-// sources: All FootnoteRef entries from every answer block, concatenated in
-//          document order. incomingId RESTARTS at 1 for each block.
-//          snippet = title (same short descriptor, keeps things consistent).
+// inline:  Every inline prose [n] occurrence (NOT source-list lines), in
+//          document order, with n = the GLOBAL incomingId of the source it
+//          references. Block-local [n] values are shifted by the block's
+//          offset (count of all sources in preceding blocks).
 //
-// inline:  Every [n] occurrence in answer prose (non-source lines),
-//          in document order, per-block numbering as they appear in text.
+// body:    Answer prose with:
+//          (a) inline prose markers renumbered to global [n], and
+//          (b) Sources blocks REMOVED — the bare "Sources" marker line AND
+//              every following [n] title url source-entry line are stripped.
+//          Headings (## Question / ## Answer / ## Key dates … / ## Practical
+//          planning tip) and prose are preserved. Answer ordering preserved.
+//
+// canParse: reads the INPUT (not body) — detects a bare Sources/Citations:/
+//           Quellen block. UNCHANGED.
 // ---------------------------------------------------------------------------
 
 // Matches a bare "Sources" (or "Citations:" / "Quellen") marker line.
@@ -25,8 +36,7 @@ const SOURCES_MARKER_RE = /^(Sources|Citations:|Quellen)\s*$/m;
 // url is the last whitespace-separated http(s) token on the line.
 const SOURCE_LINE_RE = /^\[(\d+)\]\s+(.+?)\s+(https?:\/\/\S+)\s*$/;
 
-// Matches inline citation markers such as [1], [12], but NOT source entry
-// lines (those start at column 0 with [n]).
+// Matches inline citation markers such as [1], [12].
 const INLINE_MARKER_RE = /\[(\d+)\]/g;
 
 // ---------------------------------------------------------------------------
@@ -68,15 +78,17 @@ function splitIntoAnswerBlocks(lines: string[]): AnswerBlock[] {
 
 		if (SOURCES_MARKER_RE.test(line)) {
 			inSources = true;
-			current.proseLines.push(line);
+			// Do NOT push the Sources marker line into proseLines — it will be stripped.
 			continue;
 		}
 
 		if (inSources) {
-			current.proseLines.push(line);
 			if (SOURCE_LINE_RE.test(line)) {
 				current.sourceLines.push(line);
+				// Do NOT push source-entry lines into proseLines — they are stripped.
 			}
+			// Skip blank lines that are part of the sources section too:
+			// any non-source content after Sources marker is also not kept.
 		} else {
 			current.proseLines.push(line);
 		}
@@ -97,29 +109,37 @@ function parseSourceLine(line: string): Omit<FootnoteRef, "incomingId"> | null {
 
 function collectSources(blocks: AnswerBlock[]): FootnoteRef[] {
 	const result: FootnoteRef[] = [];
+	let globalCounter = 0;
 	for (const block of blocks) {
-		let n = 0;
 		for (const line of block.sourceLines) {
 			const parsed = parseSourceLine(line);
 			if (!parsed) continue;
-			n++;
-			result.push({ incomingId: n, ...parsed });
+			globalCounter++;
+			result.push({ incomingId: globalCounter, ...parsed });
 		}
 	}
 	return result;
 }
 
-function collectInlineMarkers(lines: string[]): InlineMarker[] {
+/**
+ * Renumber all inline [n] markers in a prose line by adding offset to each n.
+ * Source-entry lines and Sources marker lines are never passed here.
+ */
+function renumberProseMarkers(line: string, offset: number): string {
+	if (offset === 0) return line;
+	return line.replace(INLINE_MARKER_RE, (_match, digits: string) => {
+		return `[${parseInt(digits, 10) + offset}]`;
+	});
+}
+
+function collectInlineMarkersFromProseLines(proseLines: string[], offset: number): InlineMarker[] {
 	const markers: InlineMarker[] = [];
-	for (const line of lines) {
-		// Skip source entry lines (start with "[n]" at column 0)
-		if (SOURCE_LINE_RE.test(line)) continue;
-		// Skip bare Sources/Citations/Quellen marker lines
-		if (SOURCES_MARKER_RE.test(line)) continue;
-		let match: RegExpExecArray | null;
+	for (const line of proseLines) {
 		INLINE_MARKER_RE.lastIndex = 0;
+		let match: RegExpExecArray | null;
 		while ((match = INLINE_MARKER_RE.exec(line)) !== null) {
-			markers.push({ marker: `[${match[1]}]`, n: parseInt(match[1], 10) });
+			const globalN = parseInt(match[1], 10) + offset;
+			markers.push({ marker: `[${globalN}]`, n: globalN });
 		}
 	}
 	return markers;
@@ -130,12 +150,46 @@ function collectInlineMarkers(lines: string[]): InlineMarker[] {
 // ---------------------------------------------------------------------------
 
 function parse(input: string): ParseResult {
-	const lines = input.split("\n");
-	const blocks = splitIntoAnswerBlocks(lines);
+	const inputLines = input.split("\n");
+	const blocks = splitIntoAnswerBlocks(inputLines);
+
+	// Compute per-block source offsets (count of sources in all preceding blocks).
+	const offsets: number[] = [];
+	let running = 0;
+	for (const block of blocks) {
+		offsets.push(running);
+		running += block.sourceLines.filter((l) => SOURCE_LINE_RE.test(l)).length;
+	}
+
 	const sources = collectSources(blocks);
-	const inline = collectInlineMarkers(lines);
-	// body = full input, nothing stripped
-	return { body: input, inline, sources };
+
+	// Collect inline markers from each block's prose using the block's offset.
+	const inline: InlineMarker[] = [];
+	for (let i = 0; i < blocks.length; i++) {
+		const blockMarkers = collectInlineMarkersFromProseLines(blocks[i].proseLines, offsets[i]);
+		inline.push(...blockMarkers);
+	}
+
+	// Build body: pre-answer content + per-block prose lines with renumbered markers.
+	// Pre-answer content = everything before the first ## Answer heading.
+	const firstAnswerIdx = inputLines.findIndex((l) => l.startsWith("## Answer"));
+	const preLines = firstAnswerIdx >= 0 ? inputLines.slice(0, firstAnswerIdx) : [];
+
+	const bodyLines: string[] = [...preLines];
+	for (let i = 0; i < blocks.length; i++) {
+		const offset = offsets[i];
+		for (const line of blocks[i].proseLines) {
+			bodyLines.push(renumberProseMarkers(line, offset));
+		}
+		// Append a blank line between blocks if there is a next block
+		if (i < blocks.length - 1) {
+			bodyLines.push("");
+		}
+	}
+
+	const body = bodyLines.join("\n");
+
+	return { body, inline, sources };
 }
 
 // ---------------------------------------------------------------------------

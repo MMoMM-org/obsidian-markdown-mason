@@ -29,7 +29,7 @@ Delivers the pure, fixture-tested parsers producing `ParseResult` for the core o
 parsers are `[parallel: true]` after T4.1.
 
 **Expected `ParseResult` per fixture (golden targets):**
-- **app:** per `## Answer`/`Sources` pair → `sources` with `incomingId` 1..N **restarting each answer** (no global offset — identity assigns final numbers later), `url` from the `[n] <title> <url>` line, `title` the text between; `body` retains inline `[n]` positions; multiple pairs preserved.
+- **app:** per `## Answer`/`Sources` pair → `sources` with `incomingId` **globally-unique sequential across all answer blocks** (block 1 → 1..N₁, block 2 → (N₁+1)..(N₁+N₂), etc.) — ~~incomingId restarting per answer (no global offset)~~ (revised in Phase 5; see T4.2 note); `url` from the `[n] <title> <url>` line, `title` the text between; `body` strips `Sources` marker + entry lines and renumbers prose inline markers to global values; identity stage deduplicates by URL downstream; multiple pairs preserved.
 - **web:** `sources` derived from each inline `[text](url)` (title=text, url=href, `incomingId` sequential in document order); `body` is the text with those links marked for footnote conversion; no `Sources` block.
 - **web-download:** HTML stripped; `sources` from `[^a_b]: <url>` lines (url only → title = URL host); inline `[^a_b]` mapped; `a_b` namespacing preserved until identity renumbers; `---` separates answers.
 
@@ -42,7 +42,7 @@ parsers are `[parallel: true]` after T4.1.
 
 - [x] **T4.2 perplexity-app parser** `[activity: domain-modeling]` `[parallel: true]`
   1. Prime: `assets/sakura-in-tokyo-app.md` `[ref: SDD/parser strategies]`
-  2. Test: splits on the bare `Sources` marker (NOT a heading) within each `## Answer` block; parses inline `[\d+]`; parses `Sources` lines `[\d+] <title> <url>`; **outputs `incomingId` starting at 1 within each answer block (no global offset — the fused identity stage owns final numbering)**; golden output for the fixture.
+  2. Test: splits on the bare `Sources` marker (NOT a heading) within each `## Answer` block; parses inline `[\d+]`; parses `Sources` lines `[\d+] <title> <url>`; **outputs globally-unique sequential `incomingId` across all answer blocks (block 1 → 1..N₁, block 2 → (N₁+1)..(N₁+N₂), etc.); `body` strips the `Sources` marker line and all `[n] title url` source-entry lines, and renumbers inline prose markers to their global values; `sources[]` carries all source data; identity stage deduplicates by URL downstream**. (revised in Phase 5: fixed per-block incomingId restart that caused silent collision in `resolveFootnoteIdentity` — second block's sources were dropped because duplicate incomingIds keyed the same identity slot.)
   3. Implement: `src/parsers/perplexityApp.ts`.
   4. Validate: golden-fixture test passes.
   - Success: `[ref: PRD/AC F9.2 (app), F9.3]`
