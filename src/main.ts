@@ -1,5 +1,6 @@
 import { Plugin } from "obsidian";
 import { DEFAULT_SETTINGS, type MasonSettings } from "./core/types";
+import { registerCommands } from "./commands";
 
 // Re-export so consumers that import from "src/main" still resolve.
 export { DEFAULT_SETTINGS, type MasonSettings };
@@ -19,12 +20,13 @@ export class MarkdownMasonPlugin extends Plugin {
 
 	/**
 	 * Called once the workspace layout is ready.
-	 * Commands and paste bindings will attach here in later phases.
+	 * Registers all Mason commands via the registry-driven command layer (T3.4).
 	 */
 	onLayoutReady(): void {
 		if (this.settings.debugLogging) {
 			console.debug("[MarkdownMason] layout ready");
 		}
+		registerCommands(this);
 	}
 
 	override onunload(): void {
