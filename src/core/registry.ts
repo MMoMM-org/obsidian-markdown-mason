@@ -19,6 +19,12 @@
 //   identityFull? — footnotes.identity only: (ctx, parseResult) → { plan, newRefs }
 //                   so T3.4/scripts can get newRefs to thread into footnotes.move
 //
+// Two-path split for fromCitations / identity:
+//   entry.run(ctx) → [] (safe no-op stub; Phase-4 seam)
+//   api.footnotes.fromCitations/identity(ctx, parseResult) → real EditPlan
+//   This gap closes when Phase 4 plumbs ctx parsing so entry.run can obtain
+//   a ParseResult from ctx.doc directly and produce a real result.
+//
 // SIGNATURE DECISIONS
 // -------------------
 //
@@ -77,11 +83,34 @@ export const API_VERSION = "1.0";
 // ---------------------------------------------------------------------------
 
 /**
+ * Pure compatibility predicate: returns true iff `required` is satisfied by
+ * `available` under the additive-minor model.
+ *
+ * Exported so tests can call it with arbitrary version pairs, exercising the
+ * lower-minor and major-mismatch branches independently of API_VERSION.
+ *
+ * Returns false for any malformed input (fail-closed design).
+ */
+export function isApiCompatible(available: string, required: string): boolean {
+	const VERSION_RE = /^\d+\.\d+$/;
+	if (!VERSION_RE.test(available) || !VERSION_RE.test(required)) {
+		return false;
+	}
+	const [aMaj, aMin] = parseVersion(available);
+	const [rMaj, rMin] = parseVersion(required);
+	if (isNaN(aMaj) || isNaN(aMin) || isNaN(rMaj) || isNaN(rMin)) {
+		return false;
+	}
+	return rMaj === aMaj && rMin <= aMin;
+}
+
+/**
  * Check whether the available API satisfies a required version.
  *
  * Compatibility rule (additive-minor model):
  *   ok iff major matches AND required minor ≤ available minor.
  *   Any major mismatch is a breaking change → rejected.
+ *   Malformed input fails CLOSED: returns { ok: false }.
  *
  * Returns { ok: true } on success, { ok: false, message } on failure.
  * The message is a plain string — surfacing a Notice is the command layer's job.
@@ -89,10 +118,7 @@ export const API_VERSION = "1.0";
 export function checkRequiredApiVersion(
 	required: string,
 ): { ok: boolean; message?: string } {
-	const [aMaj, aMin] = parseVersion(API_VERSION);
-	const [rMaj, rMin] = parseVersion(required);
-
-	if (rMaj !== aMaj || rMin > aMin) {
+	if (!isApiCompatible(API_VERSION, required)) {
 		return { ok: false, message: `requires API v${required}` };
 	}
 	return { ok: true };

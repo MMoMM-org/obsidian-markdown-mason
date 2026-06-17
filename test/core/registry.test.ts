@@ -2,9 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
 	buildRegistry,
 	checkRequiredApiVersion,
+	isApiCompatible,
 	API_VERSION,
 } from "../../src/core/registry";
-import { fromCitations as coreFomCitations } from "../../src/core/footnotes";
+import { fromCitations as coreFromCitations } from "../../src/core/footnotes";
 import type { OperationContext, ParseResult, MasonSettings } from "../../src/core/types";
 
 // ---------------------------------------------------------------------------
@@ -201,7 +202,7 @@ describe("No duplication — api and registry entry share implementation", () =>
 		expect(fromApi).toEqual(fromEntry);
 	});
 
-	it("util.normalizeUrl: api and entry normalizeUrl produce identical results", () => {
+	it("util.normalizeUrl: api delegates to core normalizeUrl", () => {
 		const { entries, api } = buildRegistry();
 		const entry = entries.find((e) => e.id === "util.normalizeUrl")!;
 		const url = "https://EXAMPLE.COM/path/";
@@ -231,7 +232,7 @@ describe("No duplication — api and registry entry share implementation", () =>
 	it("footnotes.fromCitations api produces same plan as calling core fromCitations", () => {
 		const { api } = buildRegistry();
 		const parseResult = makeParseResult();
-		const fromCore = coreFomCitations(parseResult);
+		const fromCore = coreFromCitations(parseResult);
 		const fromApi = api.footnotes.fromCitations(makeCtx(), parseResult);
 		expect(fromApi).toEqual(fromCore);
 	});
@@ -293,6 +294,32 @@ describe("footnotes.identity — composition", () => {
 		const full = entry.identityFull!(ctx, parseResult);
 		expect(Array.isArray(full.plan)).toBe(true);
 		expect(Array.isArray(full.newRefs)).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Phase-4 seam stubs — entry.run for fromCitations / identity
+// ---------------------------------------------------------------------------
+//
+// W3: These stubs return [] to signal "no EditPlan without a ParseResult".
+// Tests guard against a silent no-op if T3.4 accidentally routes through
+// entry.run instead of the api.footnotes.* two-argument paths.
+
+describe("footnotes.fromCitations — entry.run stub", () => {
+	it("entry.run returns empty plan (Phase-4 seam, ParseResult not yet available from ctx)", () => {
+		const { entries } = buildRegistry();
+		const entry = entries.find((e) => e.id === "footnotes.fromCitations")!;
+		const plan = entry.run(makeCtx());
+		expect(plan).toEqual([]);
+	});
+});
+
+describe("footnotes.identity — entry.run stub", () => {
+	it("entry.run returns empty plan (Phase-4 seam, ParseResult not yet available from ctx)", () => {
+		const { entries } = buildRegistry();
+		const entry = entries.find((e) => e.id === "footnotes.identity")!;
+		const plan = entry.run(makeCtx());
+		expect(plan).toEqual([]);
 	});
 });
 
@@ -398,5 +425,76 @@ describe("checkRequiredApiVersion", () => {
 		expect(result).toHaveProperty("message");
 		// Ensure it's a plain object, not a class instance with Obsidian internals
 		expect(Object.keys(result).sort()).toEqual(["message", "ok"].sort());
+	});
+
+	// W1 — fail-closed on malformed input
+	it("rejects malformed minor '1.abc' (fail-closed)", () => {
+		expect(checkRequiredApiVersion("1.abc").ok).toBe(false);
+	});
+
+	it("rejects malformed minor '1.' (fail-closed)", () => {
+		expect(checkRequiredApiVersion("1.").ok).toBe(false);
+	});
+
+	it("rejects empty string (fail-closed)", () => {
+		expect(checkRequiredApiVersion("").ok).toBe(false);
+	});
+
+	it("rejects non-version string 'abc' (fail-closed)", () => {
+		expect(checkRequiredApiVersion("abc").ok).toBe(false);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// isApiCompatible — pure predicate, testable with arbitrary version pairs
+// ---------------------------------------------------------------------------
+
+describe("isApiCompatible — additive-minor compatibility predicate", () => {
+	// Well-formed: same major
+	it("available '1.0' satisfies required '1.0' (exact match)", () => {
+		expect(isApiCompatible("1.0", "1.0")).toBe(true);
+	});
+
+	it("available '1.1' satisfies required '1.0' (lower minor ok)", () => {
+		expect(isApiCompatible("1.1", "1.0")).toBe(true);
+	});
+
+	it("available '1.9' satisfies required '1.3' (higher available minor ok)", () => {
+		expect(isApiCompatible("1.9", "1.3")).toBe(true);
+	});
+
+	it("available '1.0' does NOT satisfy required '1.1' (required minor too high)", () => {
+		expect(isApiCompatible("1.0", "1.1")).toBe(false);
+	});
+
+	it("available '1.0' does NOT satisfy required '1.10' (multi-digit minor, required too high)", () => {
+		// rMin=10 > aMin=0 → reject
+		expect(isApiCompatible("1.0", "1.10")).toBe(false);
+	});
+
+	// Major mismatch
+	it("available '1.0' does NOT satisfy required '2.0' (major mismatch, required higher)", () => {
+		expect(isApiCompatible("1.0", "2.0")).toBe(false);
+	});
+
+	it("available '2.5' does NOT satisfy required '1.0' (major mismatch, available higher)", () => {
+		expect(isApiCompatible("2.5", "1.0")).toBe(false);
+	});
+
+	// Malformed input → fail-closed
+	it("returns false for malformed required '1.abc'", () => {
+		expect(isApiCompatible("1.0", "1.abc")).toBe(false);
+	});
+
+	it("returns false for malformed required '1.'", () => {
+		expect(isApiCompatible("1.0", "1.")).toBe(false);
+	});
+
+	it("returns false for empty required string", () => {
+		expect(isApiCompatible("1.0", "")).toBe(false);
+	});
+
+	it("returns false for malformed available string", () => {
+		expect(isApiCompatible("bad", "1.0")).toBe(false);
 	});
 });
