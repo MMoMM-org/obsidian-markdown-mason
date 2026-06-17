@@ -180,7 +180,7 @@ describe("perplexityWebDownload.parse — inline markers", () => {
 		expect(m!.n).toBe(16);
 	});
 
-	it("maps inline [^2_11] to n=26 (last source)", () => {
+	it("maps inline [^2_9] to n=24 (hidden [^2_11] is absent from inline)", () => {
 		const { inline } = perplexityWebDownload.parse(webDownload);
 		// [^2_11] does not appear inline in the fixture (it's hidden), so this
 		// tests that [^2_9] maps to n=24 (answer 2 source 9 = global 24)
@@ -203,6 +203,10 @@ describe("perplexityWebDownload.parse — inline markers", () => {
 			["[^1_12]", "[^1_13]", "[^1_14]", "[^1_15]"].includes(m.marker),
 		);
 		expect(hiddenAnsw1).toHaveLength(0);
+		const hiddenAnsw2 = inline.filter((m) =>
+			["[^2_10]", "[^2_11]"].includes(m.marker),
+		);
+		expect(hiddenAnsw2).toHaveLength(0);
 	});
 
 	it("markers n values correspond to valid source incomingIds", () => {

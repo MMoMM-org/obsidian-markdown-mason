@@ -66,9 +66,9 @@ function buildSourceMap(lines: string[]): {
 }
 
 /** Build body by removing HTML noise and definition lines, keeping prose. */
-function buildBody(noised: string): string {
+function buildBody(stripped: string): string {
 	// Work from the noise-stripped version, then remove definition lines
-	const strippedLines = noised.split("\n");
+	const strippedLines = stripped.split("\n");
 	const bodyLines = strippedLines.filter((line) => {
 		return !DEF_LINE_RE.test(line.trim());
 	});
@@ -78,17 +78,18 @@ function buildBody(noised: string): string {
 
 /** Extract inline markers from the prose (noise-stripped but defs still present). */
 function extractInlineMarkers(
-	noised: string,
+	stripped: string,
 	markerToId: Map<string, number>,
 ): InlineMarker[] {
 	// Remove definition lines before scanning so we don't match inside them
-	const prose = noised
+	const prose = stripped
 		.split("\n")
 		.filter((line) => !DEF_LINE_RE.test(line.trim()))
 		.join("\n");
 
 	const inline: InlineMarker[] = [];
 	let m: RegExpExecArray | null;
+	// Fresh instance to avoid shared lastIndex state across calls
 	const re = new RegExp(INLINE_RE.source, "g");
 	while ((m = re.exec(prose)) !== null) {
 		const marker = `[^${m[1]}_${m[2]}]`;
@@ -102,10 +103,10 @@ function extractInlineMarkers(
 
 function parse(input: string): ParseResult {
 	const lines = input.split("\n");
-	const noised = stripHtmlNoise(input);
+	const stripped = stripHtmlNoise(input);
 	const { sources, markerToId } = buildSourceMap(lines);
-	const body = buildBody(noised);
-	const inline = extractInlineMarkers(noised, markerToId);
+	const body = buildBody(stripped);
+	const inline = extractInlineMarkers(stripped, markerToId);
 	return { body, inline, sources };
 }
 
