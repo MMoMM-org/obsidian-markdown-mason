@@ -179,7 +179,7 @@ export class ScriptRunner {
 				Promise.resolve(script(ctx)),
 				timeoutPromise,
 			]);
-			plan = result ?? undefined;
+			plan = result;
 		} catch (err: unknown) {
 			// ------------------------------------------------------------------
 			// 3. Failure: script threw or timed out.

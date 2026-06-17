@@ -76,7 +76,7 @@ function makeCtx() {
 const samplePlan: EditPlan = [{ from: 0, to: 0, insert: "X" }];
 
 // Script that returns a non-empty plan synchronously
-const scriptReturnsplan: ScriptFunction = (_ctx) => samplePlan;
+const scriptReturnsPlan: ScriptFunction = (_ctx) => samplePlan;
 
 // Script that returns undefined
 const scriptReturnsUndefined: ScriptFunction = (_ctx) => undefined;
@@ -102,6 +102,11 @@ const makeScriptSlowAsync = (delayMs: number): ScriptFunction => (_ctx) =>
 		globalThis.setTimeout(() => resolve(samplePlan), delayMs);
 	});
 
+// Script that returns a rejected promise (async throw)
+const scriptAsyncThrows: ScriptFunction = async (_ctx): Promise<EditPlan> => {
+	throw new Error("async crash");
+};
+
 // ---------------------------------------------------------------------------
 // Policy: disabled
 // ---------------------------------------------------------------------------
@@ -124,7 +129,7 @@ describe("ScriptRunner — policy 'disabled'", () => {
 		const effects = makeEffects();
 		const runner = new ScriptRunner(effects, { policy: "disabled" });
 
-		await runner.run(scriptReturnsplan, makeCtx());
+		await runner.run(scriptReturnsPlan, makeCtx());
 
 		expect(effects.appliedPlans).toHaveLength(0);
 		expect(effects.fallbackCount).toBe(0);
@@ -140,7 +145,7 @@ describe("ScriptRunner — policy 'enabled', success", () => {
 		const effects = makeEffects();
 		const runner = new ScriptRunner(effects, { policy: "enabled" });
 
-		const outcome = await runner.run(scriptReturnsplan, makeCtx());
+		const outcome = await runner.run(scriptReturnsPlan, makeCtx());
 
 		expect(outcome.kind).toBe("applied");
 		if (outcome.kind === "applied") {
@@ -152,7 +157,7 @@ describe("ScriptRunner — policy 'enabled', success", () => {
 		const effects = makeEffects();
 		const runner = new ScriptRunner(effects, { policy: "enabled" });
 
-		await runner.run(scriptReturnsplan, makeCtx());
+		await runner.run(scriptReturnsPlan, makeCtx());
 
 		expect(effects.appliedPlans).toHaveLength(1);
 		expect(effects.appliedPlans[0]).toEqual(samplePlan);
@@ -162,7 +167,7 @@ describe("ScriptRunner — policy 'enabled', success", () => {
 		const effects = makeEffects();
 		const runner = new ScriptRunner(effects, { policy: "enabled" });
 
-		await runner.run(scriptReturnsplan, makeCtx());
+		await runner.run(scriptReturnsPlan, makeCtx());
 
 		expect(effects.fallbackCount).toBe(0);
 	});
@@ -232,6 +237,7 @@ describe("ScriptRunner — policy 'enabled', failure", () => {
 
 		const outcome = await runner.run(scriptThrows, makeCtx());
 
+		expect(outcome.kind).toBe("failed");
 		if (outcome.kind === "failed") {
 			expect(typeof outcome.reason).toBe("string");
 			expect(outcome.reason.length).toBeGreaterThan(0);
@@ -263,6 +269,21 @@ describe("ScriptRunner — policy 'enabled', failure", () => {
 
 		await runner.run(scriptThrows, makeCtx());
 
+		expect(effects.appliedPlans).toHaveLength(0);
+	});
+
+	it("returns failed outcome when async script rejects", async () => {
+		const effects = makeEffects();
+		const runner = new ScriptRunner(effects, { policy: "enabled" });
+
+		const outcome = await runner.run(scriptAsyncThrows, makeCtx());
+
+		expect(outcome.kind).toBe("failed");
+		if (outcome.kind === "failed") {
+			expect(outcome.reason).toContain("async crash");
+		}
+		expect(effects.fallbackCount).toBe(1);
+		expect(effects.notices).toHaveLength(1);
 		expect(effects.appliedPlans).toHaveLength(0);
 	});
 });
@@ -345,7 +366,7 @@ describe("ScriptRunner — policy 'ask'", () => {
 		const askCallback: AskCallback = async (): Promise<AskDecision> => "enable-session";
 		const runner = new ScriptRunner(effects, { policy: "ask", askCallback });
 
-		const outcome = await runner.run(scriptReturnsplan, makeCtx());
+		const outcome = await runner.run(scriptReturnsPlan, makeCtx());
 
 		expect(outcome.kind).toBe("applied");
 		expect(effects.appliedPlans).toHaveLength(1);
@@ -356,7 +377,7 @@ describe("ScriptRunner — policy 'ask'", () => {
 		const askCallback: AskCallback = async (): Promise<AskDecision> => "enable-once";
 		const runner = new ScriptRunner(effects, { policy: "ask", askCallback });
 
-		const outcome = await runner.run(scriptReturnsplan, makeCtx());
+		const outcome = await runner.run(scriptReturnsPlan, makeCtx());
 
 		expect(outcome.kind).toBe("applied");
 	});
@@ -366,7 +387,7 @@ describe("ScriptRunner — policy 'ask'", () => {
 		const askSpy = vi.fn(async (): Promise<AskDecision> => "enable-once");
 		const runner = new ScriptRunner(effects, { policy: "ask", askCallback: askSpy });
 
-		await runner.run(scriptReturnsplan, makeCtx());
+		await runner.run(scriptReturnsPlan, makeCtx());
 
 		expect(askSpy).toHaveBeenCalledTimes(1);
 	});
@@ -376,8 +397,23 @@ describe("ScriptRunner — policy 'ask'", () => {
 		const askCallback: AskCallback = async (): Promise<AskDecision> => "disable";
 		const runner = new ScriptRunner(effects, { policy: "ask", askCallback });
 
-		await runner.run(scriptReturnsplan, makeCtx());
+		await runner.run(scriptReturnsPlan, makeCtx());
 
+		expect(effects.appliedPlans).toHaveLength(0);
+		expect(effects.fallbackCount).toBe(0);
+	});
+
+	it("returns blocked when policy is 'ask' but no askCallback is wired", async () => {
+		const effects = makeEffects();
+		// Deliberately omit askCallback — the runner must treat this as blocked.
+		const runner = new ScriptRunner(effects, { policy: "ask" });
+		const invoked = vi.fn();
+		const script: ScriptFunction = (_ctx) => { invoked(); return samplePlan; };
+
+		const outcome = await runner.run(script, makeCtx());
+
+		expect(outcome.kind).toBe("blocked");
+		expect(invoked).not.toHaveBeenCalled();
 		expect(effects.appliedPlans).toHaveLength(0);
 		expect(effects.fallbackCount).toBe(0);
 	});
