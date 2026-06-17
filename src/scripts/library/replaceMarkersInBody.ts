@@ -1,8 +1,19 @@
 // Shared helper for web and web-download scripts.
 // No obsidian import — pure utility.
 
-import type { EditPlan, InlineMarker } from "../../core/types";
+import type { EditPlan, FootnoteRef, InlineMarker } from "../../core/types";
 import { applyToString } from "../../core/applyToString";
+
+/**
+ * Filter sources to those whose incomingId appears at least once in the
+ * inline marker list.  Sources that are listed in the Sources block (or
+ * produced by the parser) but never cited in prose are excluded so they
+ * don't produce orphan footnote defs in the Resources section.
+ */
+export function filterCitedSources(sources: FootnoteRef[], inline: InlineMarker[]): FootnoteRef[] {
+	const citedIds = new Set(inline.map((m) => m.n));
+	return sources.filter((s) => citedIds.has(s.incomingId));
+}
 
 /**
  * Replace each InlineMarker.marker string in body with `[^n]` where n is the

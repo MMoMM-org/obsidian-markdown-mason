@@ -88,6 +88,23 @@ describe("applyToString — multiple non-overlapping edits", () => {
 });
 
 // ---------------------------------------------------------------------------
+// same-from tie-break — plan order preserved
+// ---------------------------------------------------------------------------
+
+describe("applyToString — same-from tie-break", () => {
+	it("two zero-length inserts at the same offset land in plan order", () => {
+		// The scripts rely on body-before-resources ordering: when cascade and
+		// moveToResources both produce an insert at the same cursor position,
+		// the first plan entry (body/BODY) must appear before the second (RESOURCES).
+		const plan: EditPlan = [
+			{ from: 5, to: 5, insert: "BODY" },
+			{ from: 5, to: 5, insert: "RESOURCES" },
+		];
+		expect(applyToString("hello", plan)).toBe("helloBODYRESOURCES");
+	});
+});
+
+// ---------------------------------------------------------------------------
 // insert at end
 // ---------------------------------------------------------------------------
 

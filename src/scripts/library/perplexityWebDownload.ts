@@ -32,7 +32,7 @@
 // 7. moveToResources(ctx.op, newRefDefinitions(newRefs)) → insert defs into Resources
 
 import type { ScriptContext, ScriptFunction } from "../context";
-import type { EditPlan, FootnoteRef } from "../../core/types";
+import type { EditPlan } from "../../core/types";
 import { perplexityWebDownload } from "../../parsers/perplexityWebDownload";
 import {
 	resolveFootnoteIdentity,
@@ -42,18 +42,7 @@ import {
 } from "../../core/footnotes";
 import { applyToString } from "../../core/applyToString";
 import { cascade } from "../../core/headings";
-import { replaceMarkersInBody } from "./replaceMarkersInBody";
-
-/**
- * Filter sources to those whose incomingId appears at least once in the
- * inline marker list.  Sources that are never cited in prose (e.g. those
- * from hidden <span> elements stripped by the parser) are excluded so they
- * don't produce orphan defs in Resources.
- */
-function filterCitedSources(sources: FootnoteRef[], inline: Array<{ n: number }>): FootnoteRef[] {
-	const citedIds = new Set(inline.map((m) => m.n));
-	return sources.filter((s) => citedIds.has(s.incomingId));
-}
+import { replaceMarkersInBody, filterCitedSources } from "./replaceMarkersInBody";
 
 /**
  * Transform a Perplexity web-download copy-paste into a structured Obsidian note fragment.

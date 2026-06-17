@@ -41,20 +41,23 @@ import { perplexityWebDownloadScript } from "./perplexityWebDownload";
  * parser recognizes the input.  The returned EditPlan has offsets against
  * ctx.op.doc (ADR-1), identical to what the concrete script would produce.
  */
-export const perplexityAutoScript: ScriptFunction = async (
+export const perplexityAutoScript: ScriptFunction = (
 	ctx: ScriptContext,
-): Promise<EditPlan | undefined> => {
+): EditPlan | undefined => {
 	const parser = detect(ctx.input);
 	if (parser === null) return undefined;
 
 	// Map the detected CitationParser to its concrete script.
 	// Use identity checks against the parser singletons.
+	// Cast: all three concrete scripts are synchronous (no await); the
+	// ScriptFunction union type includes Promise but these implementations
+	// never return one.
 	if (parser === perplexityApp) {
-		return perplexityAppScript(ctx);
+		return perplexityAppScript(ctx) as EditPlan | undefined;
 	}
 	if (parser === perplexityWebDownload) {
-		return perplexityWebDownloadScript(ctx);
+		return perplexityWebDownloadScript(ctx) as EditPlan | undefined;
 	}
 	// Remaining case: perplexityWeb
-	return perplexityWebScript(ctx);
+	return perplexityWebScript(ctx) as EditPlan | undefined;
 };
