@@ -37,6 +37,7 @@ import type { Editor } from "obsidian";
 import { buildRegistry } from "./core/registry";
 import type { RegistryEntry } from "./core/registry";
 import { applyEditPlan } from "./sources/apply";
+import { selectionContext } from "./sources/selection";
 import type { EditPlan, MasonSettings, OperationContext } from "./core/types";
 
 // ---------------------------------------------------------------------------
@@ -67,18 +68,33 @@ function showEmptyNotice(opId: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// Build OperationContext synchronously from an editor
+// OperationContext factory type — passed into runOperation / runPreset so
+// selection-scoped and whole-note paths can share the same dispatch logic.
+// ---------------------------------------------------------------------------
+
+type CtxFactory = (editor: Editor) => OperationContext;
+
+// ---------------------------------------------------------------------------
+// Context factories
 // (editorCallback always provides an Editor — no vault read needed)
 // ---------------------------------------------------------------------------
 
-function editorCtx(editor: Editor, settings: MasonSettings): OperationContext {
-	const doc = editor.getValue();
-	return {
-		doc,
-		cursor: 0,
-		input: doc,
-		settings,
+/** Whole-note context: full doc as input, real caret position as cursor. */
+function wholeNoteCtx(settings: MasonSettings): CtxFactory {
+	return (editor: Editor): OperationContext => {
+		const doc = editor.getValue();
+		return {
+			doc,
+			cursor: editor.posToOffset(editor.getCursor()),
+			input: doc,
+			settings,
+		};
 	};
+}
+
+/** Selection-scoped context: selected text as input, head offset as cursor. */
+function selectionCtx(settings: MasonSettings): CtxFactory {
+	return (editor: Editor): OperationContext => selectionContext(editor, settings);
 }
 
 // ---------------------------------------------------------------------------
@@ -91,14 +107,15 @@ function editorCtx(editor: Editor, settings: MasonSettings): OperationContext {
  *
  * Returns the EditPlan produced (may be empty) — used by preset chaining.
  * `apply` flag: false means collect the plan without applying (preset mode).
+ * `buildCtx` controls whether context is whole-note or selection-scoped.
  */
 function runOperation(
 	entry: RegistryEntry,
 	editor: Editor,
-	settings: MasonSettings,
+	buildCtx: CtxFactory,
 	apply: boolean,
 ): EditPlan {
-	const ctx = editorCtx(editor, settings);
+	const ctx = buildCtx(editor);
 
 	// cascade: use runRich to surface noContextHeading Notice (F7 / SDD)
 	if (entry.id === "headings.cascade" && entry.runRich) {
@@ -154,13 +171,13 @@ function runOperation(
 function runPreset(
 	entries: RegistryEntry[],
 	editor: Editor,
-	settings: MasonSettings,
+	buildCtx: CtxFactory,
 	presetNoOpNotice: string,
 ): void {
 	// Collect plans without applying individually (apply=false)
 	const combined: EditPlan = [];
 	for (const entry of entries) {
-		const plan = runOperation(entry, editor, settings, false);
+		const plan = runOperation(entry, editor, buildCtx, false);
 		combined.push(...plan);
 	}
 
@@ -208,12 +225,14 @@ export function registerCommands(
 				byId["footnotes.identity"],
 				byId["footnotes.move"],
 			].filter((e): e is RegistryEntry => e !== undefined);
-			runPreset(steps, editor, plugin.settings, "No footnotes found to tidy");
+			runPreset(steps, editor, wholeNoteCtx(plugin.settings), "No footnotes found to tidy");
 		},
 	});
 
 	// "Mason: Format selection" — cascade → normalize → fromCitations → identity → move
-	// PARSER-PENDING: footnote steps are stubs until Phase 4. Cascade + normalize work now.
+	// Operates on the SELECTION (F5.2): context is built via selectionContext so cascade
+	// and normalize act on the selected text, not the whole document.
+	// PARSER-PENDING: footnote steps are stubs until Phase 4.
 	// TODO(Phase 4): wire selection-scoped context for footnote steps.
 	plugin.addCommand({
 		id: "preset.formatSelection",
@@ -226,7 +245,7 @@ export function registerCommands(
 				byId["footnotes.identity"],
 				byId["footnotes.move"],
 			].filter((e): e is RegistryEntry => e !== undefined);
-			runPreset(steps, editor, plugin.settings, "Nothing to format");
+			runPreset(steps, editor, selectionCtx(plugin.settings), "Nothing to format");
 		},
 	});
 
@@ -248,7 +267,7 @@ export function registerCommands(
 				byId["footnotes.identity"],
 				byId["footnotes.move"],
 			].filter((e): e is RegistryEntry => e !== undefined);
-			runPreset(steps, editor, plugin.settings, "Nothing to paste and format");
+			runPreset(steps, editor, wholeNoteCtx(plugin.settings), "Nothing to paste and format");
 		},
 	});
 
@@ -271,7 +290,7 @@ export function registerCommands(
 			id: capturedEntry.id,
 			name: capturedEntry.command.name,
 			editorCallback(editor: Editor): void {
-				runOperation(capturedEntry, editor, plugin.settings, true);
+				runOperation(capturedEntry, editor, wholeNoteCtx(plugin.settings), true);
 			},
 		});
 	}

@@ -37,7 +37,14 @@ interface HeadlessEditor {
 	cm: HeadlessCm;
 }
 
-function makeCmEditor(doc: string): HeadlessEditor & Editor {
+interface CmEditorOptions {
+	/** Override the cursor position returned by getCursor(). Defaults to {line:0, ch:0}. */
+	cursor?: EditorPosition;
+	/** Override the selection returned by listSelections(). Defaults to zero-length at {line:0, ch:0}. */
+	selections?: EditorSelection[];
+}
+
+function makeCmEditor(doc: string, opts: CmEditorOptions = {}): HeadlessEditor & Editor {
 	let currentState = EditorState.create({ doc, extensions: [history()] });
 
 	const cm: HeadlessCm = {
@@ -60,15 +67,18 @@ function makeCmEditor(doc: string): HeadlessEditor & Editor {
 		return offset + pos.ch;
 	}
 
+	const defaultCursor: EditorPosition = opts.cursor ?? { line: 0, ch: 0 };
+	const defaultSelections: EditorSelection[] = opts.selections ?? [
+		{ anchor: { line: 0, ch: 0 }, head: { line: 0, ch: 0 } },
+	];
+
 	const editor = {
 		cm,
 		getValue: () => currentState.doc.toString(),
 		getSelection: () => "",
-		listSelections: (): EditorSelection[] => [
-			{ anchor: { line: 0, ch: 0 }, head: { line: 0, ch: 0 } },
-		],
+		listSelections: (): EditorSelection[] => defaultSelections,
 		getCursor: (_side?: "from" | "to" | "head" | "anchor") =>
-			({ line: 0, ch: 0 } as EditorPosition),
+			defaultCursor,
 		posToOffset,
 		refresh: () => undefined,
 		setValue: () => undefined,
@@ -309,7 +319,9 @@ describe("T3.4(d) — preset chains ops; changes are fully undone in one step", 
 
 	it("preset.formatSelection with heading skip: doc changes then ONE undo fully restores it", async () => {
 		// H1 → H3: normalize will demote ### to ##.
-		// (cascade uses whole-note ctx with cursor=0 → noContextHeading, contributes no plan)
+		// Selection context: default zero-length selection at offset 0 → cascade gets empty
+		// input (no headings in selection) → no cascade plan. Normalize still operates on
+		// whole ctx.doc → produces one edit demoting ### to ##.
 		const doc = "# Title\n\n### Skipped Level\n\nContent.\n";
 		const editor = makeCmEditor(doc);
 
@@ -415,5 +427,187 @@ describe("T3.4 single-undo integration — preset produces one undo step", () =>
 		// One undo must restore the original document exactly
 		undo(editor.cm);
 		expect(editor.getValue()).toBe(doc);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// (f) Format selection scoping — cascade receives selection as input, not whole doc
+//
+// Proof: place a selection covering "## Sub\n" (a level-2 heading) with the
+// selection head positioned AFTER "## Sub\n" (offset 18). The heading
+// "# Heading" precedes the selection in ctx.doc. With selectionContext:
+//   ctx.input  = "## Sub\n"   (selected text)
+//   ctx.cursor = 18           (head offset)
+//   findContextLevel(doc, 18) finds "## Sub" as the last heading → ctxLevel=2
+//   cascade shifts "## Sub" by (ctxLevel+1 - minIn) = (3-2) = 1 → "### Sub"
+//   plan = [{from:18, to:18, insert:"### Sub\n"}]
+//
+// After applying, the doc contains "### Sub" — proving cascade used the
+// selection as input (not the whole doc). With whole-note ctx and cursor=0
+// (incorrect path), cascade would find ctxLevel=0 → noContextHeading → no
+// plan → doc unchanged.
+// ---------------------------------------------------------------------------
+
+describe("T3.4(f) — Format selection scopes cascade to the selection", () => {
+	beforeEach(() => clearNoticeLog());
+
+	it("preset.formatSelection inserts a cascade-shifted heading at the selection head", async () => {
+		// Doc layout (offsets):
+		//   "# Heading\n"  → 10 chars (line 0, offsets 0-9)
+		//   "\n"           →  1 char  (line 1, offset 10)
+		//   "## Sub\n"     →  7 chars (line 2, offsets 11-17)
+		//   "\n"           →  1 char  (line 3, offset 18)
+		//   "Rest.\n"      →  6 chars (line 4)
+		const doc = "# Heading\n\n## Sub\n\nRest.\n";
+
+		// Selection: anchor = start of "## Sub" (line 2, ch 0, offset 11)
+		//            head   = start of blank line after (line 3, ch 0, offset 18)
+		// selectionContext produces: input="## Sub\n", cursor=18, from=11, to=18
+		const editor = makeCmEditor(doc, {
+			cursor: { line: 3, ch: 0 },
+			selections: [
+				{ anchor: { line: 2, ch: 0 }, head: { line: 3, ch: 0 } },
+			],
+		});
+
+		const plugin = makePlugin();
+		await plugin.onload();
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		(plugin.app as any).workspace._fireLayoutReady();
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const commands = (plugin as any)._commands as Array<{
+			id: string;
+			editorCallback(editor: Editor): void;
+		}>;
+
+		const presetCmd = commands.find((c) => c.id === "preset.formatSelection");
+		expect(presetCmd, "preset.formatSelection must be registered").toBeDefined();
+
+		presetCmd!.editorCallback(editor as unknown as Editor);
+
+		// cascade must have transformed "## Sub" → "### Sub" and inserted at offset 18.
+		// The resulting doc must contain "### Sub" — proving selection-scoped input was used.
+		// If whole-note ctx with cursor=0 were used instead, cascade would find ctxLevel=0
+		// (noContextHeading) and produce no plan, leaving the doc unchanged.
+		expect(
+			editor.getValue(),
+			"cascade must have inserted a shifted heading — proving selectionContext was used",
+		).toContain("### Sub");
+
+		// A count Notice must have been shown (plan was non-empty)
+		const countNotices = noticeLog().filter((m: string) => /^Mason: \d+ change/.test(m));
+		expect(
+			countNotices.length,
+			"expected a count Notice after Format selection applied a cascade plan",
+		).toBeGreaterThanOrEqual(1);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// (g) Cascade functional with real cursor — Bug 2 regression
+//
+// Before the fix, editorCtx hardcoded cursor=0, so cascade always found
+// ctxLevel=0 → noContextHeading=true even when a heading existed above the
+// real caret. This test proves that the whole-note ctx now reads the real
+// caret position, making cascade functional.
+//
+// Doc: "## Context\n\n### Target\n"
+//   "## Context\n" = 11 chars (line 0)
+//   "\n"           =  1 char  (line 1, offset 11)
+//   "### Target\n" = 11 chars (line 2)
+//
+// Caret at {line:1, ch:0} → offset 11.
+// doc.slice(0, 11) = "## Context\n" → ctxLevel = 2.
+// cascade input = whole doc (## Context, level 2 and ### Target, level 3).
+// minIn = 2, shift = (2+1) - 2 = 1 → ## Context → ### Context, ### Target → #### Target.
+// plan.length = 1 → one insert at offset 11 → count Notice shown.
+// noContextHeading Notice must NOT be shown.
+// ---------------------------------------------------------------------------
+
+describe("T3.4(g) — cascade is functional when caret is below a real heading", () => {
+	beforeEach(() => clearNoticeLog());
+
+	it("cascade shows count Notice (not noContextHeading) when caret is below a heading", async () => {
+		// ## Context is above the caret; ### Target is below. Caret on the blank line.
+		const doc = "## Context\n\n### Target\n";
+
+		// Caret at line 1, ch 0 → offset 11 (the blank line between the headings)
+		const editor = makeCmEditor(doc, {
+			cursor: { line: 1, ch: 0 },
+		});
+
+		const plugin = makePlugin();
+		await plugin.onload();
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		(plugin.app as any).workspace._fireLayoutReady();
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const commands = (plugin as any)._commands as Array<{
+			id: string;
+			editorCallback(editor: Editor): void;
+		}>;
+
+		const cascadeCmd = commands.find((c) => c.id === "headings.cascade");
+		expect(cascadeCmd, "headings.cascade must be registered").toBeDefined();
+
+		cascadeCmd!.editorCallback(editor as unknown as Editor);
+
+		const notices = noticeLog();
+		expect(notices.length, "expected at least one Notice").toBeGreaterThan(0);
+
+		// Must NOT show noContextHeading Notice (heading IS above cursor)
+		const hasNoHeadingNotice = notices.some(
+			(m: string) => /no heading above cursor/i.test(m),
+		);
+		expect(
+			hasNoHeadingNotice,
+			`noContextHeading Notice must NOT fire when a heading is above cursor; got: ${JSON.stringify(notices)}`,
+		).toBe(false);
+
+		// Must show a count Notice (plan was non-empty)
+		const countNotices = notices.filter((m: string) => /^Mason: \d+ change/.test(m));
+		expect(
+			countNotices.length,
+			"expected a count Notice after cascade applied a non-empty plan",
+		).toBeGreaterThanOrEqual(1);
+
+		// Doc must have changed (cascade inserted the transformed content)
+		expect(editor.getValue(), "cascade must mutate the doc").not.toBe(doc);
+	});
+
+	it("cascade on a doc with no heading above cursor still shows noContextHeading Notice", async () => {
+		// Regression: existing behavior — no heading above caret → noContextHeading Notice.
+		// This test was T3.4(e); we verify it still passes with the real-cursor fix.
+		const doc = "Just plain text, no headings at all.\n";
+
+		// Default cursor {line:0, ch:0} → offset 0; doc.slice(0,0)="" → ctxLevel=0
+		const editor = makeCmEditor(doc);
+
+		const plugin = makePlugin();
+		await plugin.onload();
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		(plugin.app as any).workspace._fireLayoutReady();
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const commands = (plugin as any)._commands as Array<{
+			id: string;
+			editorCallback(editor: Editor): void;
+		}>;
+
+		const cascadeCmd = commands.find((c) => c.id === "headings.cascade");
+		expect(cascadeCmd).toBeDefined();
+
+		cascadeCmd!.editorCallback(editor as unknown as Editor);
+
+		const notices = noticeLog();
+		expect(notices.length, "expected at least one Notice").toBeGreaterThan(0);
+		const hasHeadingNotice = notices.some(
+			(m: string) => /head/i.test(m) || /context/i.test(m) || /cursor/i.test(m) || /no heading/i.test(m),
+		);
+		expect(
+			hasHeadingNotice,
+			`expected a heading-related Notice; got: ${JSON.stringify(notices)}`,
+		).toBe(true);
 	});
 });
