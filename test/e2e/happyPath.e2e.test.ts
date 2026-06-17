@@ -119,6 +119,7 @@ function makeCtx(input: string) {
 		source: "paste",
 		op: makeOp(input),
 		mason: api,
+		logger: { info: () => {}, warn: () => {}, error: () => {} },
 	});
 }
 
@@ -291,9 +292,9 @@ describe("E2E happy path — app fixture (sakura-in-tokyo-app.md)", () => {
 		assertGoldenStructure(outputStr);
 	});
 
-	it("perplexityAppScript output has no Sources/Quellen/Citations scaffolding", async () => {
-		const { outputStr } = await runE2E(perplexityAppScript, appInput);
-		assertNoScaffolding(outputStr);
+	it("perplexityAppScript EditPlan has exactly 2 operations (one body edit + one Resources edit)", async () => {
+		const { plan } = await runE2E(perplexityAppScript, appInput);
+		expect(plan).toHaveLength(2);
 	});
 
 	it("perplexityAppScript body has [^n] markers, no bare [n] citations", async () => {
@@ -343,9 +344,9 @@ describe("E2E happy path — web fixture (sakura-in-tokyo-web.md)", () => {
 		assertGoldenStructure(outputStr);
 	});
 
-	it("perplexityWebScript output has no Sources/Quellen/Citations scaffolding", async () => {
-		const { outputStr } = await runE2E(perplexityWebScript, webInput);
-		assertNoScaffolding(outputStr);
+	it("perplexityWebScript EditPlan has exactly 2 operations (one body edit + one Resources edit)", async () => {
+		const { plan } = await runE2E(perplexityWebScript, webInput);
+		expect(plan).toHaveLength(2);
 	});
 
 	it("perplexityWebScript body has no raw [text](url) citation links", async () => {
@@ -382,9 +383,9 @@ describe("E2E happy path — web-download fixture (sakura-in-tokyo-web-download.
 		assertGoldenStructure(outputStr);
 	});
 
-	it("perplexityWebDownloadScript output has no Sources/Quellen/Citations scaffolding", async () => {
-		const { outputStr } = await runE2E(perplexityWebDownloadScript, webDownloadInput);
-		assertNoScaffolding(outputStr);
+	it("perplexityWebDownloadScript EditPlan has exactly 2 operations (one body edit + one Resources edit)", async () => {
+		const { plan } = await runE2E(perplexityWebDownloadScript, webDownloadInput);
+		expect(plan).toHaveLength(2);
 	});
 
 	it("perplexityWebDownloadScript body has no [^a_b] web-download markers remaining", async () => {
@@ -419,19 +420,22 @@ describe("E2E happy path — web-download fixture (sakura-in-tokyo-web-download.
 describe("E2E happy path — perplexity-auto dispatcher end-to-end (all three fixtures)", () => {
 	beforeEach(() => clearNoticeLog());
 
-	it("perplexity-auto on app fixture: structured output, no scaffolding, gap-free footnotes", async () => {
+	it("perplexity-auto on app fixture: structured output, no scaffolding, gap-free footnotes, equals concrete script", async () => {
 		const { outputStr } = await runE2E(perplexityAutoScript, appInput);
 		assertGoldenStructure(outputStr);
+		await assertAutoEquivalence(perplexityAppScript, appInput);
 	});
 
-	it("perplexity-auto on web fixture: structured output, no scaffolding, gap-free footnotes", async () => {
+	it("perplexity-auto on web fixture: structured output, no scaffolding, gap-free footnotes, equals concrete script", async () => {
 		const { outputStr } = await runE2E(perplexityAutoScript, webInput);
 		assertGoldenStructure(outputStr);
+		await assertAutoEquivalence(perplexityWebScript, webInput);
 	});
 
-	it("perplexity-auto on web-download fixture: structured output, no scaffolding, gap-free footnotes", async () => {
+	it("perplexity-auto on web-download fixture: structured output, no scaffolding, gap-free footnotes, equals concrete script", async () => {
 		const { outputStr } = await runE2E(perplexityAutoScript, webDownloadInput);
 		assertGoldenStructure(outputStr);
+		await assertAutoEquivalence(perplexityWebDownloadScript, webDownloadInput);
 	});
 
 	it("perplexity-auto single undo holds for app fixture", async () => {
