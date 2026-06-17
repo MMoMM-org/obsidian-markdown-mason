@@ -47,6 +47,42 @@ describe("perplexityWeb.canParse", () => {
 		const input = "This is plain prose with no links at all.";
 		expect(perplexityWeb.canParse(input)).toBe(false);
 	});
+
+	it("returns false for input with a Quellen block (German heading disqualifier)", () => {
+		const input = "Quellen\n- https://example.com";
+		expect(perplexityWeb.canParse(input)).toBe(false);
+	});
+
+	it("returns false for image-only input (no plain inline links)", () => {
+		const input = "See ![a chart](https://example.com/c.png) here.";
+		expect(perplexityWeb.canParse(input)).toBe(false);
+	});
+
+	it("returns true and excludes the image when input has both a plain link and an image", () => {
+		const input = "Read [this article](https://example.com/article) and see ![diagram](https://example.com/d.png) for details.";
+		expect(perplexityWeb.canParse(input)).toBe(true);
+	});
+});
+
+describe("perplexityWeb.parse — image handling", () => {
+	it("image-only input produces zero sources", () => {
+		const input = "See ![a chart](https://example.com/c.png) here.";
+		const result = perplexityWeb.parse(input);
+		expect(result.sources).toHaveLength(0);
+		expect(result.inline).toHaveLength(0);
+	});
+
+	it("mixed input: only the plain link becomes a source, not the image", () => {
+		const input = "Read [this article](https://example.com/article) and see ![diagram](https://example.com/d.png).";
+		const result = perplexityWeb.parse(input);
+		expect(result.sources).toHaveLength(1);
+		expect(result.sources[0]).toMatchObject({
+			incomingId: 1,
+			title: "this article",
+			url: "https://example.com/article",
+			snippet: "[this article](https://example.com/article)",
+		});
+	});
 });
 
 describe("perplexityWeb.parse — web fixture", () => {

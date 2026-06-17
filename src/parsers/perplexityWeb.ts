@@ -18,8 +18,9 @@ import type { FootnoteRef, InlineMarker, ParseResult } from "../core/types";
 import type { CitationParser } from "./types";
 
 // Matches a Markdown inline link: [text](url)
+// Negative lookbehind (?<!!) excludes image syntax ![alt](url).
 // Capture group 1 = text, capture group 2 = url.
-const INLINE_LINK_RE = /\[([^\]]+)\]\(([^)]+)\)/g;
+const INLINE_LINK_RE = /(?<!!)\[([^\]]+)\]\(([^)]+)\)/g;
 
 // Patterns that disqualify this format (signals a different parser should run).
 const SOURCES_BLOCK_RE = /^Sources\b/m;
