@@ -178,6 +178,11 @@ export class MockHTMLElement {
 		this._dispatch({ type: "click" });
 	}
 
+	/** Returns true if cls is in the element's class list. */
+	_hasClass(cls: string): boolean {
+		return this._classes.includes(cls);
+	}
+
 	/** Find the first descendant (or self) that has _focused === true. */
 	_findFocusedElement(): MockHTMLElement | undefined {
 		if (this._focused) {

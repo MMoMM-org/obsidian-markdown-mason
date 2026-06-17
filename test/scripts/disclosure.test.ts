@@ -23,7 +23,7 @@ import { App } from "obsidian";
 import { MockHTMLElement } from "../__mocks__/obsidian";
 import { ScriptDisclosureModal, makeAskCallback } from "../../src/scripts/disclosure";
 import type { AskDecision } from "../../src/scripts/runner";
-import type { ScriptStore } from "../../src/scripts/store";
+import type { ScriptStore, TrustStatus } from "../../src/scripts/store";
 
 /**
  * Cast the modal's contentEl to MockHTMLElement so tests can use test-only helpers
@@ -37,8 +37,6 @@ function mockEl(modal: ScriptDisclosureModal): MockHTMLElement {
 // ---------------------------------------------------------------------------
 // Helpers — fake ScriptStore
 // ---------------------------------------------------------------------------
-
-type TrustStatus = "ok" | "needs-consent" | "drift-blocked" | "disabled" | "unknown";
 
 interface FakeStore {
 	evaluateTrust: ReturnType<typeof vi.fn>;
@@ -266,7 +264,6 @@ describe("makeAskCallback — trust ok → skip modal", () => {
 	it("returns 'enable-session' without showing modal when trust is ok", async () => {
 		const app = new App();
 		const store = makeStore("ok");
-		const openSpy = vi.fn();
 
 		const callback = makeAskCallback(
 			app,
@@ -277,10 +274,6 @@ describe("makeAskCallback — trust ok → skip modal", () => {
 			1,
 		);
 
-		// Patch ScriptDisclosureModal.open to detect if modal was shown
-		const origMake = ScriptDisclosureModal;
-		// We cannot intercept the constructor easily here; instead we verify
-		// via the store evaluateTrust being called and the result being immediate.
 		const decision = await callback();
 
 		expect(decision).toBe("enable-session");
@@ -288,9 +281,6 @@ describe("makeAskCallback — trust ok → skip modal", () => {
 		expect(store.evaluateTrust).toHaveBeenCalledWith("script-id");
 		// Consent was NOT recorded (already ok)
 		expect(store.recordConsent).not.toHaveBeenCalled();
-
-		void origMake;
-		void openSpy;
 	});
 });
 
@@ -585,5 +575,76 @@ describe("makeAskCallback — disabled kill-switch", () => {
 		expect(store.recordConsent).not.toHaveBeenCalled();
 
 		ScriptDisclosureModal.prototype.present = origPresent;
+	});
+});
+
+// ---------------------------------------------------------------------------
+// (W1) makeAskCallback — "unknown" trust status → modal IS shown
+// ---------------------------------------------------------------------------
+
+describe("makeAskCallback — unknown trust → modal shown", () => {
+	it("shows modal when trust is unknown; Disable resolves 'disable' without recording consent", async () => {
+		const app = new App();
+		const store = makeStore("unknown");
+
+		const callback = makeAskCallback(
+			app,
+			store as unknown as ScriptStore,
+			"script-unknown",
+			{ vaultRelativePath: "scripts/unlisted.cjs", fileSizeBytes: 512 },
+			"checksum-unknown",
+			1,
+		);
+
+		let capturedModal: ScriptDisclosureModal | null = null;
+		const origPresent = ScriptDisclosureModal.prototype.present;
+		ScriptDisclosureModal.prototype.present = function (this: ScriptDisclosureModal) {
+			capturedModal = this;
+			return origPresent.call(this);
+		};
+
+		const callbackPromise = callback();
+
+		// Drain the microtask queue so evaluateTrust resolves and present() fires
+		await Promise.resolve();
+
+		expect(capturedModal).not.toBeNull();
+		clickButton(capturedModal!, "Disable");
+
+		const decision = await callbackPromise;
+
+		expect(decision).toBe("disable");
+		expect(store.recordConsent).not.toHaveBeenCalled();
+
+		ScriptDisclosureModal.prototype.present = origPresent;
+	});
+});
+
+// ---------------------------------------------------------------------------
+// (W2) Disable button carries mod-cta class; Enable / Enable once do NOT
+// ---------------------------------------------------------------------------
+
+describe("ScriptDisclosureModal — Disable button has mod-cta class", () => {
+	it("Disable button has mod-cta; Enable and Enable once do not", () => {
+		const app = new App();
+		const modal = new ScriptDisclosureModal(app, {
+			vaultRelativePath: "scripts/class-test.cjs",
+			fileSizeBytes: 100,
+		});
+
+		modal.present();
+
+		const el = mockEl(modal);
+		const disableBtn = el._findButtonByText("Disable");
+		const enableOnceBtn = el._findButtonByText("Enable once");
+		const enableBtn = el._findButtonByText("Enable");
+
+		expect(disableBtn).toBeDefined();
+		expect(enableOnceBtn).toBeDefined();
+		expect(enableBtn).toBeDefined();
+
+		expect(disableBtn!._hasClass("mod-cta")).toBe(true);
+		expect(enableOnceBtn!._hasClass("mod-cta")).toBe(false);
+		expect(enableBtn!._hasClass("mod-cta")).toBe(false);
 	});
 });
