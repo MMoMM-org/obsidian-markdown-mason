@@ -20,7 +20,10 @@
 //
 // I3. Empty clipboard → Notice no-op
 //     Empty clipboard on "Mason: Paste and format" produces no edit and shows a
-//     descriptive Notice.  Empty selection on a selection command → no-op.
+//     descriptive Notice.  Empty selection on a selection command → script
+//     receives empty string as input → returns undefined → no-op (applyPlan and
+//     replaceSelection never called).  Unrecognized non-empty selection → script
+//     returns undefined → same no-op.
 //
 // I4. `disabled` script never runs
 //     A script whose policy is "disabled" is never executed — applyPlan is not
@@ -307,7 +310,7 @@ describe("I1 — Alpha footnotes survive a full perplexityAppScript run", () => 
 		"[1] New Article https://new.example.com/research",
 	].join("\n");
 
-	it("alpha marker [^a] in body is preserved after a full script run", async () => {
+	it("alpha marker [^a] in body is preserved after a full script run", () => {
 		const doc = PRE_EXISTING_ALPHA_NOTE;
 		const ctx = makeCtx(doc, PERPLEXITY_APP_INPUT);
 		const plan = perplexityAppScript(ctx) as EditPlan;
@@ -315,7 +318,7 @@ describe("I1 — Alpha footnotes survive a full perplexityAppScript run", () => 
 		expect(result).toContain("[^a]");
 	});
 
-	it("alpha marker [^note] in body is preserved after a full script run", async () => {
+	it("alpha marker [^note] in body is preserved after a full script run", () => {
 		const doc = PRE_EXISTING_ALPHA_NOTE;
 		const ctx = makeCtx(doc, PERPLEXITY_APP_INPUT);
 		const plan = perplexityAppScript(ctx) as EditPlan;
@@ -323,7 +326,7 @@ describe("I1 — Alpha footnotes survive a full perplexityAppScript run", () => 
 		expect(result).toContain("[^note]");
 	});
 
-	it("alpha footnote definition [^a]: is preserved after a full script run", async () => {
+	it("alpha footnote definition [^a]: is preserved after a full script run", () => {
 		const doc = PRE_EXISTING_ALPHA_NOTE;
 		const ctx = makeCtx(doc, PERPLEXITY_APP_INPUT);
 		const plan = perplexityAppScript(ctx) as EditPlan;
@@ -331,7 +334,7 @@ describe("I1 — Alpha footnotes survive a full perplexityAppScript run", () => 
 		expect(result).toContain("[^a]: Alpha footnote definition");
 	});
 
-	it("alpha footnote definition [^note]: is preserved after a full script run", async () => {
+	it("alpha footnote definition [^note]: is preserved after a full script run", () => {
 		const doc = PRE_EXISTING_ALPHA_NOTE;
 		const ctx = makeCtx(doc, PERPLEXITY_APP_INPUT);
 		const plan = perplexityAppScript(ctx) as EditPlan;
@@ -339,7 +342,7 @@ describe("I1 — Alpha footnotes survive a full perplexityAppScript run", () => 
 		expect(result).toContain("[^note]: Named footnote definition");
 	});
 
-	it("new numeric footnote from paste is inserted (production: starts from id=1, not from maxExisting+1)", async () => {
+	it("new numeric footnote from paste is inserted (production: starts from id=1, not from maxExisting+1)", () => {
 		// PRODUCTION GAP (documented): perplexityAppScript passes [] as the existing
 		// refs to resolveFootnoteIdentity, so new paste footnotes always start from 1
 		// rather than from maxExisting+1 (the note's highest numeric id + 1). This
@@ -358,7 +361,7 @@ describe("I1 — Alpha footnotes survive a full perplexityAppScript run", () => 
 		expect(result).toContain("[^1]");
 	});
 
-	it("existing numeric [^3] is not renumbered by the script run", async () => {
+	it("existing numeric [^3] is not renumbered by the script run", () => {
 		const doc = PRE_EXISTING_ALPHA_NOTE;
 		const ctx = makeCtx(doc, PERPLEXITY_APP_INPUT);
 		const plan = perplexityAppScript(ctx) as EditPlan;
@@ -368,7 +371,7 @@ describe("I1 — Alpha footnotes survive a full perplexityAppScript run", () => 
 		expect(result).toContain("[^3]: Numeric footnote three");
 	});
 
-	it("no alpha footnote is accidentally converted to a numeric id by a full script run", async () => {
+	it("no alpha footnote is accidentally converted to a numeric id by a full script run", () => {
 		const doc = PRE_EXISTING_ALPHA_NOTE;
 		const ctx = makeCtx(doc, PERPLEXITY_APP_INPUT);
 		const plan = perplexityAppScript(ctx) as EditPlan;
@@ -390,7 +393,7 @@ describe("I1 — Alpha footnotes survive a full perplexityAppScript run", () => 
 // ---------------------------------------------------------------------------
 
 describe("I1 (unit) — resolveFootnoteIdentity excludes alpha from maxExisting", () => {
-	it("alpha markers in body body text ([^a]) are never touched by applyFootnoteInlineRename", async () => {
+	it("alpha markers in body text ([^a]) are never touched by applyFootnoteInlineRename", async () => {
 		const { applyFootnoteInlineRename } = await import("../src/core/footnotes");
 		const body = "Text[^a] and more[^b].";
 		// idMap has only numeric keys — alpha names are not numeric
@@ -442,7 +445,7 @@ describe("I2 — Orphaned resources survive a full perplexityAppScript run", () 
 		"[1] New Source https://new-source.example.com/page",
 	].join("\n");
 
-	it("orphaned definition [^99]: is preserved after a full script run", async () => {
+	it("orphaned definition [^99]: is preserved after a full script run", () => {
 		const doc = ORPHAN_NOTE;
 		const ctx = makeCtx(doc, PERPLEXITY_APP_INPUT);
 		const plan = perplexityAppScript(ctx) as EditPlan;
@@ -450,7 +453,7 @@ describe("I2 — Orphaned resources survive a full perplexityAppScript run", () 
 		expect(result).toContain("[^99]: Orphaned definition — no [^99] in body");
 	});
 
-	it("orphaned markdown link [Orphaned Source](...) is preserved after a full script run", async () => {
+	it("orphaned markdown link [Orphaned Source](...) is preserved after a full script run", () => {
 		const doc = ORPHAN_NOTE;
 		const ctx = makeCtx(doc, PERPLEXITY_APP_INPUT);
 		const plan = perplexityAppScript(ctx) as EditPlan;
@@ -458,7 +461,7 @@ describe("I2 — Orphaned resources survive a full perplexityAppScript run", () 
 		expect(result).toContain("[Orphaned Source](https://orphaned.example.com)");
 	});
 
-	it("orphaned plain-text line is preserved after a full script run", async () => {
+	it("orphaned plain-text line is preserved after a full script run", () => {
 		const doc = ORPHAN_NOTE;
 		const ctx = makeCtx(doc, PERPLEXITY_APP_INPUT);
 		const plan = perplexityAppScript(ctx) as EditPlan;
@@ -466,7 +469,7 @@ describe("I2 — Orphaned resources survive a full perplexityAppScript run", () 
 		expect(result).toContain("Some plain orphaned text with no footnote marker");
 	});
 
-	it("existing linked footnote [^1] is also preserved after a full script run", async () => {
+	it("existing linked footnote [^1] is also preserved after a full script run", () => {
 		const doc = ORPHAN_NOTE;
 		const ctx = makeCtx(doc, PERPLEXITY_APP_INPUT);
 		const plan = perplexityAppScript(ctx) as EditPlan;
@@ -474,7 +477,7 @@ describe("I2 — Orphaned resources survive a full perplexityAppScript run", () 
 		expect(result).toContain("[^1]: Existing linked snippet");
 	});
 
-	it("new source is correctly appended without disturbing the orphaned entries", async () => {
+	it("new source is correctly appended without disturbing the orphaned entries", () => {
 		const doc = ORPHAN_NOTE;
 		const ctx = makeCtx(doc, PERPLEXITY_APP_INPUT);
 		const plan = perplexityAppScript(ctx) as EditPlan;
@@ -536,12 +539,13 @@ describe("I3 — Empty clipboard → Notice no-op (paste command)", () => {
 	});
 });
 
-describe("I3 — Empty selection → noop (selection command)", () => {
+describe("I3 — Unrecognized selection input → script noop (selection command)", () => {
 	beforeEach(() => clearNoticeLog());
 
 	it("script returning undefined for unrecognized input calls neither applyPlan nor replaceSelection", async () => {
 		const plugin = await makePlugin();
-		// "unrecognized" plain text — perplexityAutoScript returns undefined (noop)
+		// Non-empty but unrecognized plain text — perplexityAutoScript returns undefined (noop).
+		// The no-op comes from the script returning undefined, not an empty-selection guard.
 		const doc = "# My Note\n\nPlain text with no Perplexity format.";
 		const editor = makeSelectionEditor(doc);
 		const applyPlanSpy = vi.fn();
@@ -553,6 +557,73 @@ describe("I3 — Empty selection → noop (selection command)", () => {
 
 		expect(applyPlanSpy, "applyPlan must not be called for noop selection").not.toHaveBeenCalled();
 		expect(editor._replaced, "replaceSelection must not be called for noop selection").toHaveLength(0);
+	});
+
+	it("empty selection (anchor === head) → script receives empty string → returns undefined → noop", async () => {
+		// Production path: selectionContext computes input = doc.slice(from, to).
+		// When anchor === head (no actual selection), from === to and input === "".
+		// _runScriptOnSelection passes input via `op.input ?? op.doc`; since ""
+		// is not null/undefined, the script receives "" as its input.
+		// perplexityAutoScript returns undefined for empty input → runner emits no
+		// plan → applyPlan and replaceSelection are both never called.
+		const plugin = await makePlugin();
+
+		// An editor whose anchor and head resolve to the same offset (no selection).
+		// We set getSelection to "" and somethingSelected to false to reflect no
+		// active selection; listSelections returns anchor===head at offset 0.
+		const doc = "# My Note\n\nSome text here.";
+		const lines = doc.split("\n");
+		const emptySelectionEditor = {
+			getValue: () => doc,
+			getCursor: () => ({ line: 0, ch: 0 }),
+			posToOffset: (pos: { line: number; ch: number }): number => {
+				let off = 0;
+				for (let i = 0; i < pos.line; i++) off += (lines[i]?.length ?? 0) + 1;
+				return off + pos.ch;
+			},
+			listSelections: () => [
+				{ anchor: { line: 0, ch: 0 }, head: { line: 0, ch: 0 } },
+			],
+			replaceSelection: vi.fn(),
+			getSelection: () => "",
+			replaceRange: () => undefined,
+			setCursor: () => undefined, setSelection: () => undefined, setSelections: () => undefined,
+			setValue: () => undefined,
+			getLine: (n: number) => lines[n] ?? "",
+			lineCount: () => lines.length,
+			lastLine: () => lines.length - 1,
+			somethingSelected: () => false,
+			getRange: () => "",
+			refresh: () => undefined, focus: () => undefined, blur: () => undefined,
+			hasFocus: () => false, getScrollInfo: () => ({ top: 0, left: 0 }),
+			scrollTo: () => undefined, scrollIntoView: () => undefined,
+			undo: () => undefined, redo: () => undefined, exec: () => undefined,
+			transaction: () => undefined, wordAt: () => null,
+			offsetToPos: (offset: number) => {
+				let rem = offset;
+				for (let i = 0; i < lines.length; i++) {
+					const len = (lines[i]?.length ?? 0) + 1;
+					if (rem < len) return { line: i, ch: rem };
+					rem -= len;
+				}
+				return { line: lines.length - 1, ch: lines[lines.length - 1]?.length ?? 0 };
+			},
+			processLines: () => undefined,
+			getDoc: function () { return this as unknown as typeof this; },
+			setLine: () => undefined,
+		} as unknown as import("obsidian").Editor & { replaceSelection: ReturnType<typeof vi.fn> };
+
+		const applyPlanSpy = vi.fn();
+		plugin._commandInjection = { applyPlan: applyPlanSpy };
+
+		const cmd = findCommand(plugin, "mason.script.perplexity-auto");
+		await cmd.editorCallback(emptySelectionEditor);
+
+		expect(applyPlanSpy, "applyPlan must not be called when selection is empty").not.toHaveBeenCalled();
+		expect(
+			emptySelectionEditor.replaceSelection,
+			"replaceSelection must not be called when selection is empty (selection raw-fallback is a no-op)",
+		).not.toHaveBeenCalled();
 	});
 });
 
@@ -648,19 +719,14 @@ describe("I5 — Drift hard-blocks", () => {
 		expect(result.status).not.toBe("needs-consent");
 	});
 
-	it("ScriptRunner with policy 'disabled' (how drift is surfaced) calls neither applyPlan nor rawFallback", async () => {
-		// When evaluateTrust returns drift-blocked, the integration layer maps this
-		// to a blocked runner outcome (policy "disabled"). The runner must not call
-		// applyPlan or rawFallback — the drift is not a failure, it is a hard-block.
-		const effects = makeEffects();
-		const runner = new ScriptRunner(effects, { policy: "disabled" });
-
-		const outcome = await runner.run((): EditPlan => [{ from: 0, to: 0, insert: "X" }], makeCtx("# Note\n\n", "input"));
-
-		expect(outcome.kind).toBe("blocked");
-		expect(effects.appliedPlans).toHaveLength(0);
-		expect(effects.fallbackCount).toBe(0);
-	});
+	// Note: the store-level assertions above (evaluateTrust → "drift-blocked") are the
+	// canonical I5 coverage. The ScriptRunner unit contract for policy:"disabled" ⇒ kind:"blocked"
+	// (neither applyPlan nor rawFallback called) is asserted exhaustively in I4 above.
+	// The real drift-blocked surfacing path is: evaluateTrust returns "drift-blocked" →
+	// makeAskCallback (disclosure.ts) shows the re-consent modal — NOT policy:"disabled".
+	// First-party scripts run with policy:"enabled" (SEC-006). policy:"disabled" is the
+	// explicit kill-switch (enabled flag === false). Drift surfacing and policy:"disabled"
+	// are separate mechanisms; their integration is tested in store.test.ts / disclosure.test.ts.
 });
 
 // ---------------------------------------------------------------------------
@@ -828,42 +894,42 @@ describe("I1 + I2 combined — alpha footnotes AND orphaned resources survive th
 		"",
 	].join("\n");
 
-	it("alpha marker [^background] is preserved in body after full sakura run", async () => {
+	it("alpha marker [^background] is preserved in body after full sakura run", () => {
 		const ctx = makeCtx(NOTE_WITH_ALPHA_AND_ORPHAN, appInput);
 		const plan = perplexityAppScript(ctx) as EditPlan;
 		const result = applyPlan(NOTE_WITH_ALPHA_AND_ORPHAN, plan ?? []);
 		expect(result).toContain("[^background]");
 	});
 
-	it("alpha definition [^background]: is preserved in Resources after full sakura run", async () => {
+	it("alpha definition [^background]: is preserved in Resources after full sakura run", () => {
 		const ctx = makeCtx(NOTE_WITH_ALPHA_AND_ORPHAN, appInput);
 		const plan = perplexityAppScript(ctx) as EditPlan;
 		const result = applyPlan(NOTE_WITH_ALPHA_AND_ORPHAN, plan ?? []);
 		expect(result).toContain("[^background]: Background reading");
 	});
 
-	it("alpha marker [^lit] is preserved in body after full sakura run", async () => {
+	it("alpha marker [^lit] is preserved in body after full sakura run", () => {
 		const ctx = makeCtx(NOTE_WITH_ALPHA_AND_ORPHAN, appInput);
 		const plan = perplexityAppScript(ctx) as EditPlan;
 		const result = applyPlan(NOTE_WITH_ALPHA_AND_ORPHAN, plan ?? []);
 		expect(result).toContain("[^lit]");
 	});
 
-	it("orphaned definition [^orphan-99]: is preserved after full sakura run", async () => {
+	it("orphaned definition [^orphan-99]: is preserved after full sakura run", () => {
 		const ctx = makeCtx(NOTE_WITH_ALPHA_AND_ORPHAN, appInput);
 		const plan = perplexityAppScript(ctx) as EditPlan;
 		const result = applyPlan(NOTE_WITH_ALPHA_AND_ORPHAN, plan ?? []);
 		expect(result).toContain("[^orphan-99]: Orphaned entry with no body reference");
 	});
 
-	it("orphaned plain text line is preserved after full sakura run", async () => {
+	it("orphaned plain text line is preserved after full sakura run", () => {
 		const ctx = makeCtx(NOTE_WITH_ALPHA_AND_ORPHAN, appInput);
 		const plan = perplexityAppScript(ctx) as EditPlan;
 		const result = applyPlan(NOTE_WITH_ALPHA_AND_ORPHAN, plan ?? []);
 		expect(result).toContain("Random orphaned text line");
 	});
 
-	it("new numeric footnotes from sakura paste are added without conflicting with alpha markers", async () => {
+	it("new numeric footnotes from sakura paste are added without conflicting with alpha markers", () => {
 		const ctx = makeCtx(NOTE_WITH_ALPHA_AND_ORPHAN, appInput);
 		const plan = perplexityAppScript(ctx) as EditPlan;
 		const result = applyPlan(NOTE_WITH_ALPHA_AND_ORPHAN, plan ?? []);
