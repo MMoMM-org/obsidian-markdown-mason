@@ -82,6 +82,10 @@ function splitIntoAnswerBlocks(lines: string[]): AnswerBlock[] {
 			continue;
 		}
 
+		if (inSources && line.startsWith("## ")) {
+			inSources = false;
+		}
+
 		if (inSources) {
 			if (SOURCE_LINE_RE.test(line)) {
 				current.sourceLines.push(line);
@@ -132,7 +136,7 @@ function renumberProseMarkers(line: string, offset: number): string {
 	});
 }
 
-function collectInlineMarkersFromProseLines(proseLines: string[], offset: number): InlineMarker[] {
+function collectInlineMarkers(proseLines: string[], offset: number): InlineMarker[] {
 	const markers: InlineMarker[] = [];
 	for (const line of proseLines) {
 		INLINE_MARKER_RE.lastIndex = 0;
@@ -158,7 +162,7 @@ function parse(input: string): ParseResult {
 	let running = 0;
 	for (const block of blocks) {
 		offsets.push(running);
-		running += block.sourceLines.filter((l) => SOURCE_LINE_RE.test(l)).length;
+		running += block.sourceLines.length;
 	}
 
 	const sources = collectSources(blocks);
@@ -166,7 +170,7 @@ function parse(input: string): ParseResult {
 	// Collect inline markers from each block's prose using the block's offset.
 	const inline: InlineMarker[] = [];
 	for (let i = 0; i < blocks.length; i++) {
-		const blockMarkers = collectInlineMarkersFromProseLines(blocks[i].proseLines, offsets[i]);
+		const blockMarkers = collectInlineMarkers(blocks[i].proseLines, offsets[i]);
 		inline.push(...blockMarkers);
 	}
 

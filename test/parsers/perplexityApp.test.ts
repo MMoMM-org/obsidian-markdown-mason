@@ -238,4 +238,18 @@ describe("perplexityApp.parse — body", () => {
 		const result = perplexityApp.parse(appFixture);
 		expect(result.body).toContain("[1][2][3][4][5][6]");
 	});
+
+	it("body retains the second ## Question heading (inter-block content not dropped)", () => {
+		// The second ## Question heading sits between block 1's Sources and block 2's ## Answer.
+		// Without the inSources-reset fix it would be silently dropped.
+		const result = perplexityApp.parse(appFixture);
+		expect((result.body.match(/^## Question$/gm) ?? []).length).toBe(2);
+	});
+
+	it("body retains the Sapporo question text from between Sources1 and Answer2", () => {
+		// "When will it be in Sapporo?" follows the second ## Question heading.
+		// Without the fix, inSources stays true through that line and drops it.
+		const result = perplexityApp.parse(appFixture);
+		expect(result.body).toContain("When will it be in Sapporo?");
+	});
 });
