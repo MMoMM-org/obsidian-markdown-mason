@@ -49,6 +49,7 @@ type EventHandler = (evt: { key?: string; type?: string }) => void;
 export class MockHTMLElement {
 	readonly tagName: string;
 	_text: string = "";
+	_focused: boolean = false;
 	private _attrs: Map<string, string> = new Map();
 	private _classes: string[] = [];
 	private _children: MockHTMLElement[] = [];
@@ -116,6 +117,11 @@ export class MockHTMLElement {
 		this._listeners.set(type, list.filter(h => h !== handler));
 	}
 
+	/** DOM API: focus this element. Sets _focused = true for test assertions. */
+	focus(): void {
+		this._focused = true;
+	}
+
 	// -------------------------------------------------------------------------
 	// Test helpers
 	// -------------------------------------------------------------------------
@@ -170,6 +176,20 @@ export class MockHTMLElement {
 	/** Simulate a click on this element (dispatches "click" event). */
 	_click(): void {
 		this._dispatch({ type: "click" });
+	}
+
+	/** Find the first descendant (or self) that has _focused === true. */
+	_findFocusedElement(): MockHTMLElement | undefined {
+		if (this._focused) {
+			return this;
+		}
+		for (const child of this._children) {
+			const found = child._findFocusedElement();
+			if (found) {
+				return found;
+			}
+		}
+		return undefined;
 	}
 }
 

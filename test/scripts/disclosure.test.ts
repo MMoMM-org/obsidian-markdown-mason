@@ -495,6 +495,9 @@ describe("makeAskCallback — changed fingerprint → re-prompts", () => {
 
 		const decision = await callbackPromise;
 		expect(decision).toBe("enable-once");
+		// M2: enable-once must also record consent so same-fingerprint re-runs
+		// take the lighter "ok" path.
+		expect(store.recordConsent).toHaveBeenCalledWith("script-version-bump", "new-checksum", 5);
 
 		ScriptDisclosureModal.prototype.present = origPresent;
 	});
@@ -524,5 +527,63 @@ describe("ScriptDisclosureModal — Disable is first button (safe default)", () 
 
 		expect(disableIdx).toBeLessThan(enableOnceIdx);
 		expect(disableIdx).toBeLessThan(enableIdx);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// M1 — Disable button is auto-focused (safe default: reflexive Enter/Space cancels)
+// ---------------------------------------------------------------------------
+
+describe("ScriptDisclosureModal — Disable button is auto-focused", () => {
+	it("focuses the Disable button after present() is called", () => {
+		const app = new App();
+		const modal = new ScriptDisclosureModal(app, {
+			vaultRelativePath: "scripts/focus-test.cjs",
+			fileSizeBytes: 256,
+		});
+
+		modal.present();
+
+		const el = mockEl(modal);
+		const focused = el._findFocusedElement();
+
+		expect(focused).toBeDefined();
+		expect(focused!._text).toBe("Disable");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// M3 — makeAskCallback: "disabled" kill-switch → resolve "disable" immediately,
+//       no modal shown, no consent recorded
+// ---------------------------------------------------------------------------
+
+describe("makeAskCallback — disabled kill-switch", () => {
+	it("returns 'disable' without showing modal or recording consent when trust is disabled", async () => {
+		const app = new App();
+		const store = makeStore("disabled");
+
+		let modalOpened = false;
+		const origPresent = ScriptDisclosureModal.prototype.present;
+		ScriptDisclosureModal.prototype.present = function (this: ScriptDisclosureModal) {
+			modalOpened = true;
+			return origPresent.call(this);
+		};
+
+		const callback = makeAskCallback(
+			app,
+			store as unknown as ScriptStore,
+			"script-kill-switch",
+			{ vaultRelativePath: "scripts/disabled.cjs", fileSizeBytes: 512 },
+			"checksum-disabled",
+			1,
+		);
+
+		const decision = await callback();
+
+		expect(decision).toBe("disable");
+		expect(modalOpened).toBe(false);
+		expect(store.recordConsent).not.toHaveBeenCalled();
+
+		ScriptDisclosureModal.prototype.present = origPresent;
 	});
 });

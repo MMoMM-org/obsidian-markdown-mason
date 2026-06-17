@@ -119,7 +119,8 @@ export class ScriptDisclosureModal extends Modal {
 		const buttons = contentEl.createDiv({ cls: "mason-script-buttons" });
 		buttons.setAttribute("aria-describedby", disclosureId);
 
-		this._makeButton(buttons, "Disable", "mod-cta", "disable");
+		const disableBtn = this._makeButton(buttons, "Disable", "mod-cta", "disable");
+		disableBtn.focus();
 		this._makeButton(buttons, "Enable once", "", "enable-once");
 		this._makeButton(buttons, "Enable", "", "enable-session");
 	}
@@ -139,7 +140,7 @@ export class ScriptDisclosureModal extends Modal {
 		label: string,
 		cls: string,
 		decision: AskDecision,
-	): void {
+	): HTMLElement {
 		const btn = parent.createEl("button", { text: label });
 		if (cls) {
 			btn.addClass(cls);
@@ -149,6 +150,7 @@ export class ScriptDisclosureModal extends Modal {
 			this._resolveOnce(decision);
 			this.close();
 		});
+		return btn;
 	}
 
 	/** Resolve the promise exactly once; subsequent calls are no-ops. */
