@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Registry, mason.* API, Commands & Editor Adapters"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 3
 ---
@@ -27,7 +27,7 @@ phase: 3
 
 Makes the operations usable inside Obsidian as commands, and exposes the versioned `mason.*` API.
 
-- [ ] **T3.1 Operation registry + versioned mason.* API** `[activity: backend-api]`
+- [x] **T3.1 Operation registry + versioned mason.* API** `[activity: backend-api]`
   1. Prime: `[ref: SDD/Internal API]` `[ref: PRD/Feature 11]`
   2. Test: registering an operation exposes it under `mason.<ns>.<op>` AND yields a command descriptor; `requiredApiVersion` gate accepts compatible, rejects incompatible with a "requires API vX" signal; no duplicated logic between command and API paths.
   3. Implement: `src/core/registry.ts` — register H/normalize/C/identity/M; build `MasonApi`; version compare.
