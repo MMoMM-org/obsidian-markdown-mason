@@ -1,0 +1,113 @@
+// No obsidian import — this module is pure domain; unit-testable without Obsidian.
+
+import { describe, expect, it } from "vitest";
+import { perplexityWeb } from "../../src/parsers/perplexityWeb";
+import { loadFixture } from "../fixtures";
+
+// ---------------------------------------------------------------------------
+// Contract documentation:
+//
+// snippet:        The full original `[text](url)` substring (the inline link as
+//                 it appears in the source). This lets downstream stages
+//                 locate the link without reparsing.
+//
+// inline.marker:  Same as snippet — the full `[text](url)` substring.
+//                 The conversion stage searches body for this string and
+//                 replaces it with the footnote reference.
+//
+// body:           The prose with inline links kept verbatim (unchanged).
+//                 The conversion stage later replaces each marker in-place.
+// ---------------------------------------------------------------------------
+
+describe("perplexityWeb.canParse", () => {
+	it("returns true for the web fixture", () => {
+		const input = loadFixture("web");
+		expect(perplexityWeb.canParse(input)).toBe(true);
+	});
+
+	it("returns false for the app fixture (has a Sources block)", () => {
+		const input = loadFixture("app");
+		expect(perplexityWeb.canParse(input)).toBe(false);
+	});
+
+	it("returns false for input that contains a [^n_n] footnote definition", () => {
+		const input = "[^1_1]: https://example.com Some footnote text here";
+		expect(perplexityWeb.canParse(input)).toBe(false);
+	});
+
+	it("returns false for input with a Citations: block", () => {
+		const input = "Some prose.\n\nCitations:\n- https://example.com";
+		expect(perplexityWeb.canParse(input)).toBe(false);
+	});
+
+	it("returns false for plain text with no inline links", () => {
+		const input = "This is plain prose with no links at all.";
+		expect(perplexityWeb.canParse(input)).toBe(false);
+	});
+});
+
+describe("perplexityWeb.parse — web fixture", () => {
+	const input = loadFixture("web");
+	const result = perplexityWeb.parse(input);
+
+	it("produces 11 sources (one per inline link in document order)", () => {
+		expect(result.sources).toHaveLength(11);
+	});
+
+	it("assigns sequential incomingId starting at 1", () => {
+		const ids = result.sources.map((s) => s.incomingId);
+		expect(ids).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+	});
+
+	it("first source — title is link text, url is href", () => {
+		expect(result.sources[0]).toMatchObject({
+			incomingId: 1,
+			title: "thestar.com",
+			url: "https://www.thestar.com.my/aseanplus/aseanplus-news/2025/12/18/japan-releases-first-sakura-forecast-for-2026-tokyo-to-see-blooms-from-mid-march",
+		});
+	});
+
+	it("second source — title and url", () => {
+		expect(result.sources[1]).toMatchObject({
+			incomingId: 2,
+			title: "n-kishou",
+			url: "https://n-kishou.com/corp/news-contents/sakura/?lang=en",
+		});
+	});
+
+	it("snippet equals the full original [text](url) substring for each source", () => {
+		expect(result.sources[0].snippet).toBe(
+			"[thestar.com](https://www.thestar.com.my/aseanplus/aseanplus-news/2025/12/18/japan-releases-first-sakura-forecast-for-2026-tokyo-to-see-blooms-from-mid-march)",
+		);
+		expect(result.sources[1].snippet).toBe(
+			"[n-kishou](https://n-kishou.com/corp/news-contents/sakura/?lang=en)",
+		);
+	});
+
+	it("produces 11 inline markers (one per link)", () => {
+		expect(result.inline).toHaveLength(11);
+	});
+
+	it("inline markers have sequential n matching sources", () => {
+		const ns = result.inline.map((m) => m.n);
+		expect(ns).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+	});
+
+	it("inline.marker equals the full [text](url) substring (same as snippet)", () => {
+		expect(result.inline[0].marker).toBe(
+			"[thestar.com](https://www.thestar.com.my/aseanplus/aseanplus-news/2025/12/18/japan-releases-first-sakura-forecast-for-2026-tokyo-to-see-blooms-from-mid-march)",
+		);
+		expect(result.inline[1].marker).toBe(
+			"[n-kishou](https://n-kishou.com/corp/news-contents/sakura/?lang=en)",
+		);
+	});
+
+	it("body contains the original prose verbatim (links kept as-is)", () => {
+		// body must contain the original first link unchanged
+		expect(result.body).toContain(
+			"[thestar.com](https://www.thestar.com.my/aseanplus/aseanplus-news/2025/12/18/japan-releases-first-sakura-forecast-for-2026-tokyo-to-see-blooms-from-mid-march)",
+		);
+		// body must be identical to the trimmed input
+		expect(result.body).toBe(input);
+	});
+});
