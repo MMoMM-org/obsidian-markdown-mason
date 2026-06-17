@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import type { InlineMarker } from "../../src/core/types";
 import { loadFixture } from "../fixtures";
 import { perplexityApp } from "../../src/parsers/perplexityApp";
 
@@ -29,6 +30,12 @@ describe("perplexityApp.canParse", () => {
 	it("returns true for a minimal valid sources block", () => {
 		const minimal = "## Answer\n\nSome answer.[1]\n\nSources\n[1] Some title https://example.com/page\n";
 		expect(perplexityApp.canParse(minimal)).toBe(true);
+	});
+
+	it("returns false when Sources header is present but no valid bracketed source entry lines follow", () => {
+		const noEntries =
+			"## Answer\n\nSome text.\n\nSources\nJust a paragraph, no bracketed entries.\n";
+		expect(perplexityApp.canParse(noEntries)).toBe(false);
 	});
 });
 
@@ -125,20 +132,43 @@ describe("perplexityApp.parse — inline markers", () => {
 		const result = perplexityApp.parse(appFixture);
 		// First prose line: "...blooming around March 19–20....[1][2][3][4][5][6]"
 		// So first 6 inline markers are [1][2][3][4][5][6]
-		const first6 = result.inline.slice(0, 6).map((m) => m.n);
+		const first6 = result.inline.slice(0, 6).map((m: InlineMarker) => m.n);
 		expect(first6).toEqual([1, 2, 3, 4, 5, 6]);
 	});
 
-	it("inline markers from block 2 prose continue in document order after block 1", () => {
+	it("total inline marker count equals all [n] occurrences in fixture prose (54)", () => {
+		// Empirically: block 1 contributes 28 markers, block 2 contributes 26 markers.
+		// Source entry lines and bare Sources headers are excluded.
 		const result = perplexityApp.parse(appFixture);
-		// Block 2 first prose line ends with [1][2][3][4][5][6][7][8]
-		// We need to find the first inline marker from block 2 (n=1 again, per-block numbering)
-		// Block 2 should appear after all block 1 inline markers
-		// Block 1 has many markers; block 2 begins with [1]
-		const block2Start = result.inline.findIndex(
-			(m, i) => i > 0 && m.n === 1 && result.inline[i - 1].n !== 1,
-		);
-		expect(block2Start).toBeGreaterThan(0);
+		expect(result.inline).toHaveLength(54);
+	});
+
+	it("block 1 contributes exactly 28 inline markers before block 2 begins", () => {
+		// Block 1 prose markers are at indices 0..27; block 2 starts at index 28.
+		// Confirmed empirically by counting [n] tokens on non-source, non-header lines
+		// within the block-1 answer section (lines before the second ## Answer heading).
+		const result = perplexityApp.parse(appFixture);
+		// The 28th marker (index 27) is the last block-1 marker: [3] from the planning tip line.
+		expect(result.inline[27]).toEqual({ marker: "[3]", n: 3 });
+	});
+
+	it("block 2 inline markers begin at index 28 with a contiguous run [1]–[8]", () => {
+		// Block 2 first prose line: "...expected roughly from late April....[1][2][3][4][5][6][7][8]"
+		// These are the first 8 markers of block 2, starting at inline index 28.
+		const result = perplexityApp.parse(appFixture);
+		const block2First8 = result.inline
+			.slice(28, 36)
+			.map((m: InlineMarker) => ({ marker: m.marker, n: m.n }));
+		expect(block2First8).toEqual([
+			{ marker: "[1]", n: 1 },
+			{ marker: "[2]", n: 2 },
+			{ marker: "[3]", n: 3 },
+			{ marker: "[4]", n: 4 },
+			{ marker: "[5]", n: 5 },
+			{ marker: "[6]", n: 6 },
+			{ marker: "[7]", n: 7 },
+			{ marker: "[8]", n: 8 },
+		]);
 	});
 
 	it("inline markers contain only numeric n values (no alpha markers)", () => {

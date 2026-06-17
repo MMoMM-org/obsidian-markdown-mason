@@ -1,6 +1,6 @@
 // No obsidian import — this module is pure domain; unit-testable without Obsidian.
 
-import type { FootnoteRef, InlineMarker } from "../core/types";
+import type { FootnoteRef, InlineMarker, ParseResult } from "../core/types";
 import type { CitationParser } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -66,7 +66,7 @@ function splitIntoAnswerBlocks(lines: string[]): AnswerBlock[] {
 
 		if (!inAnswer) continue;
 
-		if (/^(Sources|Citations:|Quellen)\s*$/.test(line)) {
+		if (SOURCES_MARKER_RE.test(line)) {
 			inSources = true;
 			current.proseLines.push(line);
 			continue;
@@ -115,7 +115,7 @@ function collectInlineMarkers(lines: string[]): InlineMarker[] {
 		// Skip source entry lines (start with "[n]" at column 0)
 		if (SOURCE_LINE_RE.test(line)) continue;
 		// Skip bare Sources/Citations/Quellen marker lines
-		if (/^(Sources|Citations:|Quellen)\s*$/.test(line)) continue;
+		if (SOURCES_MARKER_RE.test(line)) continue;
 		let match: RegExpExecArray | null;
 		INLINE_MARKER_RE.lastIndex = 0;
 		while ((match = INLINE_MARKER_RE.exec(line)) !== null) {
@@ -129,7 +129,7 @@ function collectInlineMarkers(lines: string[]): InlineMarker[] {
 // parse
 // ---------------------------------------------------------------------------
 
-function parse(input: string): import("../core/types").ParseResult {
+function parse(input: string): ParseResult {
 	const lines = input.split("\n");
 	const blocks = splitIntoAnswerBlocks(lines);
 	const sources = collectSources(blocks);
