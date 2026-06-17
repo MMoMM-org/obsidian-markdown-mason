@@ -16,14 +16,25 @@ export function checkManifest(manifest) {
 		failures.push(`id must not contain 'obsidian' (got: "${manifest.id}")`);
 	}
 
+	// author must NOT contain an email address — the submission bot rejects it
+	if (typeof manifest.author === 'string' && /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(manifest.author)) {
+		failures.push(`author must not contain an email address (got: "${manifest.author}"); use authorUrl for contact`);
+	}
+
 	if (typeof manifest.description !== 'string') {
 		failures.push('description is missing or not a string');
 	} else {
+		if (manifest.description.length > 250) {
+			failures.push(`description must be 250 characters or fewer (got: ${manifest.description.length})`);
+		}
 		if (!manifest.description.endsWith('.')) {
 			failures.push(`description must end with '.' (got: "${manifest.description}")`);
 		}
 		if (/\bobsidian\b/i.test(manifest.description)) {
 			failures.push(`description must not contain the word 'Obsidian' (got: "${manifest.description}")`);
+		}
+		if (/^this is a plugin/i.test(manifest.description.trim())) {
+			failures.push(`description must not start with "This is a plugin" (got: "${manifest.description}")`);
 		}
 	}
 

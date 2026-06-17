@@ -183,7 +183,9 @@ describe("compliance — manifest.json required fields and format", () => {
 	 *
 	 * Rules (community plugin directory requirements):
 	 *   - id: matches /^[a-z0-9-]+$/ and does NOT contain "obsidian"
-	 *   - description: ends with "." and does NOT contain "Obsidian"
+	 *   - author: must NOT contain an email address (bot rejects it)
+	 *   - description: <= 250 chars, ends with ".", does NOT contain "Obsidian",
+	 *                  does NOT start with "This is a plugin"
 	 *   - required keys: id, name, version, minAppVersion, description, author, isDesktopOnly
 	 *   - isDesktopOnly === true (DESKTOP plugin, not mobile)
 	 */
@@ -208,6 +210,13 @@ describe("compliance — manifest.json required fields and format", () => {
 		expect((manifest.id as string).toLowerCase()).not.toContain("obsidian");
 	});
 
+	it("author does not contain an email address", () => {
+		// The submission bot rejects any author value that looks like an email.
+		// Contact info belongs in authorUrl.
+		expect(typeof manifest.author).toBe("string");
+		expect(manifest.author as string).not.toMatch(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+	});
+
 	it("has all required keys: id, name, version, minAppVersion, description, author, isDesktopOnly", () => {
 		const required = ["id", "name", "version", "minAppVersion", "description", "author", "isDesktopOnly"];
 		const missing = required.filter((k) => !(k in manifest));
@@ -218,6 +227,11 @@ describe("compliance — manifest.json required fields and format", () => {
 		expect(manifest.isDesktopOnly).toBe(true);
 	});
 
+	it("description is 250 characters or fewer", () => {
+		expect(typeof manifest.description).toBe("string");
+		expect((manifest.description as string).length).toBeLessThanOrEqual(250);
+	});
+
 	it("description ends with '.'", () => {
 		expect(typeof manifest.description).toBe("string");
 		expect((manifest.description as string).endsWith(".")).toBe(true);
@@ -226,6 +240,49 @@ describe("compliance — manifest.json required fields and format", () => {
 	it("description does not contain the word 'Obsidian'", () => {
 		expect(typeof manifest.description).toBe("string");
 		expect((manifest.description as string)).not.toMatch(/\bobsidian\b/i);
+	});
+
+	it("description does not start with 'This is a plugin'", () => {
+		expect(typeof manifest.description).toBe("string");
+		expect((manifest.description as string).trim()).not.toMatch(/^this is a plugin/i);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Suite 4b — versions.json ↔ manifest.json consistency
+// ---------------------------------------------------------------------------
+
+describe("compliance — versions.json ↔ manifest.json consistency", () => {
+	/**
+	 * The Obsidian plugin directory requires versions.json to map every released
+	 * version to the minimum Obsidian app version that supports it. The entry for
+	 * manifest.version MUST equal manifest.minAppVersion so that the directory
+	 * correctly gates installs.
+	 *
+	 * Rules:
+	 *   - versions.json must contain an entry for manifest.version
+	 *   - that entry must equal manifest.minAppVersion
+	 */
+	const manifestPath = path.join(repoRoot, "manifest.json");
+	const versionsPath = path.join(repoRoot, "versions.json");
+	const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+	const versions = JSON.parse(fs.readFileSync(versionsPath, "utf8")) as Record<string, unknown>;
+
+	it("versions.json contains an entry for manifest.version", () => {
+		const version = manifest.version as string;
+		expect(
+			version in versions,
+			`versions.json has no entry for manifest version "${version}"`,
+		).toBe(true);
+	});
+
+	it("versions.json[manifest.version] equals manifest.minAppVersion", () => {
+		const version = manifest.version as string;
+		const minAppVersion = manifest.minAppVersion as string;
+		expect(
+			versions[version],
+			`versions.json["${version}"] should be "${minAppVersion}" (manifest.minAppVersion) but got "${versions[version]}"`,
+		).toBe(minAppVersion);
 	});
 });
 

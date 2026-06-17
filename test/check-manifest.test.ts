@@ -40,6 +40,28 @@ describe("checkManifest", () => {
 		expect(failures.some((f) => f.toLowerCase().includes("obsidian"))).toBe(true);
 	});
 
+	it("fails when author contains an email address", () => {
+		const failures = checkManifest({ ...compliantManifest(), author: "Jane Doe <jane@example.com>" });
+		expect(failures.length).toBeGreaterThanOrEqual(1);
+		expect(failures.some((f) => f.toLowerCase().includes("email"))).toBe(true);
+	});
+
+	it("fails when description exceeds 250 characters", () => {
+		const long = "A".repeat(251) + ".";
+		const failures = checkManifest({ ...compliantManifest(), description: long });
+		expect(failures.length).toBeGreaterThanOrEqual(1);
+		expect(failures.some((f) => f.includes("250"))).toBe(true);
+	});
+
+	it("fails when description starts with 'This is a plugin'", () => {
+		const failures = checkManifest({
+			...compliantManifest(),
+			description: "This is a plugin that does stuff.",
+		});
+		expect(failures.length).toBeGreaterThanOrEqual(1);
+		expect(failures.some((f) => f.toLowerCase().includes("this is a plugin"))).toBe(true);
+	});
+
 	it("returns failures for missing id and missing description without throwing", () => {
 		const failures = checkManifest({ isDesktopOnly: true });
 		expect(failures.some((f) => f.includes("id"))).toBe(true);
