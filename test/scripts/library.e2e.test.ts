@@ -98,9 +98,10 @@ function assertFootnoteMarkerForm(bodySection: string): void {
 	// Simplest: body should NOT contain ][n][ i.e. citation clusters of bare form
 	// Check that [^n] form is present
 	expect(bodySection).toMatch(/\[\^\d+\]/);
-	// Check that bare [n] markers that look like citations are gone from body
-	// (A citation marker appears right after prose without a space, like "year.[1]")
-	expect(bodySection).not.toMatch(/\.\[\d+\]/);
+	// Check that bare [n] markers that look like citations are gone from body.
+	// Use a negative lookahead to exclude markdown links [n](...) while catching
+	// any remaining unconverted citation clusters like [1][2][3].
+	expect(bodySection).not.toMatch(/\[\d+\](?!\()/);
 }
 
 /** Parse out the Resources section content from the output. */
