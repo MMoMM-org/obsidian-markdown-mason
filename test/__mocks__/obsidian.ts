@@ -280,8 +280,42 @@ export interface CommandSpec {
 	id: string;
 	name: string;
 	hotkeys?: unknown;
-	editorCallback?: (editor: unknown) => void;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	editorCallback?: (editor: unknown, ...rest: any[]) => void | Promise<void>;
 	callback?: () => void;
+}
+
+// ---------------------------------------------------------------------------
+// Vault + DataAdapter — minimal in-memory stubs (T5.5)
+//
+// App.vault exposes adapter with read/write/exists/mkdir over a Map.
+// Tests that need vault I/O seed files via app.vault.adapter._files.
+// ---------------------------------------------------------------------------
+
+export class MockDataAdapter {
+	readonly _files: Map<string, string> = new Map();
+
+	async read(path: string): Promise<string> {
+		const content = this._files.get(path);
+		if (content === undefined) throw new Error(`MockDataAdapter: file not found: ${path}`);
+		return content;
+	}
+
+	async write(path: string, data: string): Promise<void> {
+		this._files.set(path, data);
+	}
+
+	async exists(path: string): Promise<boolean> {
+		return this._files.has(path);
+	}
+
+	async mkdir(_path: string): Promise<void> {
+		// no-op in the simple stub; tests that check mkdir use their own VaultAdapterPort
+	}
+}
+
+export class Vault {
+	readonly adapter: MockDataAdapter = new MockDataAdapter();
 }
 
 // ---------------------------------------------------------------------------
@@ -290,8 +324,10 @@ export interface CommandSpec {
 
 export class App {
 	workspace: Workspace;
+	vault: Vault;
 	constructor() {
 		this.workspace = new Workspace();
+		this.vault = new Vault();
 	}
 }
 

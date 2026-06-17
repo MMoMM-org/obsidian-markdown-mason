@@ -143,10 +143,9 @@ const EXPECTED_COMMAND_IDS = [
 	"footnotes.fromCitations",
 	"footnotes.identity",
 	"footnotes.move",
-	// Preset command ids
+	// Preset command ids (preset.pasteAndFormat stub removed in Phase 5; real command is mason.pasteAndFormat)
 	"preset.tidyFootnotes",
 	"preset.formatSelection",
-	"preset.pasteAndFormat",
 ];
 
 // ---------------------------------------------------------------------------
@@ -619,80 +618,60 @@ describe("T3.4(f) — cascade REPLACES selection; no document doubling", () => {
 });
 
 // ---------------------------------------------------------------------------
-// (g) Paste and format — guarded as Phase 5 not-yet-available
+// (g) Paste and format — stub removed, real command present
 //
-// "Mason: Paste and format" must NOT run any live operations in Phase 3.
-// It must show a "not available yet" Notice and leave the doc unchanged.
+// The Phase-3 stub "preset.pasteAndFormat" (which showed "not available yet")
+// was removed in Phase 5.  The real command "mason.pasteAndFormat" (registered
+// by main.ts _registerPasteCommand) is now the ONLY "Paste and format" command.
 // ---------------------------------------------------------------------------
 
-describe("T3.4(g) — Paste and format is guarded (Phase 5 seam)", () => {
+describe("T3.4(g) — preset.pasteAndFormat stub removed; real command present", () => {
 	beforeEach(() => clearNoticeLog());
 
-	it("preset.pasteAndFormat shows not-available Notice and leaves doc unchanged", async () => {
-		const doc = "# Title\n\n## Section\n\nContent.\n";
-		const editor = makeCmEditor(doc, {
-			cursor: { line: 1, ch: 0 },
-		});
-		const docBefore = editor.getValue();
-
+	it("preset.pasteAndFormat stub is NOT registered (removed in Phase 5)", async () => {
 		const plugin = makePlugin();
 		await plugin.onload();
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		(plugin.app as any).workspace._fireLayoutReady();
 
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const commands = (plugin as any)._commands as Array<{
-			id: string;
-			editorCallback(editor: Editor): void;
-		}>;
-
-		const pasteCmd = commands.find((c) => c.id === "preset.pasteAndFormat");
-		expect(pasteCmd, "preset.pasteAndFormat must be registered").toBeDefined();
-
-		pasteCmd!.editorCallback(editor as unknown as Editor);
-
-		// Doc must NOT have been mutated
+		const commands = (plugin as any)._commands as Array<{ id: string }>;
+		const stubCmd = commands.find((c) => c.id === "preset.pasteAndFormat");
 		expect(
-			editor.getValue(),
-			"pasteAndFormat must not modify the document in Phase 3",
-		).toBe(docBefore);
-
-		// Must show a Notice indicating the feature is not available
-		const notices = noticeLog();
-		expect(notices.length, "expected at least one Notice").toBeGreaterThan(0);
-		const hasNotAvailableNotice = notices.some(
-			(m: string) => /available/i.test(m) || /not yet/i.test(m) || /phase/i.test(m),
-		);
-		expect(
-			hasNotAvailableNotice,
-			`expected a "not available" Notice; got: ${JSON.stringify(notices)}`,
-		).toBe(true);
+			stubCmd,
+			"preset.pasteAndFormat stub must NOT be registered (removed in Phase 5)",
+		).toBeUndefined();
 	});
 
-	it("preset.pasteAndFormat does not show a count Notice (no operations ran)", async () => {
-		const doc = "# Title\n\n## Section\n\nContent.\n";
-		const editor = makeCmEditor(doc);
-
+	it("mason.pasteAndFormat real command IS registered (registered by main.ts)", async () => {
 		const plugin = makePlugin();
 		await plugin.onload();
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		(plugin.app as any).workspace._fireLayoutReady();
 
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const commands = (plugin as any)._commands as Array<{
-			id: string;
-			editorCallback(editor: Editor): void;
-		}>;
-
-		const pasteCmd = commands.find((c) => c.id === "preset.pasteAndFormat");
-		pasteCmd!.editorCallback(editor as unknown as Editor);
-
-		// Must NOT show a count Notice ("Mason: N change(s)") — no steps ran
-		const countNotices = noticeLog().filter((m: string) => /^Mason: \d+ change/.test(m));
+		const commands = (plugin as any)._commands as Array<{ id: string; name: string }>;
+		const realCmd = commands.find((c) => c.id === "mason.pasteAndFormat");
 		expect(
-			countNotices.length,
-			"pasteAndFormat must not show a count Notice",
-		).toBe(0);
+			realCmd,
+			"mason.pasteAndFormat real command must be registered",
+		).toBeDefined();
+		expect(realCmd!.name).toBe("Mason: Paste and format");
+	});
+
+	it("exactly ONE command has name 'Mason: Paste and format' — no duplicates", async () => {
+		const plugin = makePlugin();
+		await plugin.onload();
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		(plugin.app as any).workspace._fireLayoutReady();
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const commands = (plugin as any)._commands as Array<{ name: string }>;
+		const pasteCommands = commands.filter((c) => c.name === "Mason: Paste and format");
+		expect(
+			pasteCommands.length,
+			`expected exactly 1 "Mason: Paste and format" command; found ${pasteCommands.length}`,
+		).toBe(1);
 	});
 });
 

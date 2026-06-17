@@ -332,26 +332,6 @@ export function registerCommands(
 		},
 	});
 
-	// "Mason: Paste and format" — Phase 5 seam.
-	// This preset requires clipboard content (Phase 5 paste interception).
-	// It must NOT run live operations in Phase 3 — cascade with ctx.input=doc
-	// would insert a transformed copy of the whole document at cursor (doubling).
-	// Guard: show a descriptive Notice and return without running any steps.
-	// TODO(Phase 5): intercept paste event, read clipboard, build pasteCtx with
-	// clipboard content as ctx.input, then run the full format pipeline:
-	//   cascade → normalize → fromCitations → identity → move
-	// Empty clipboard → Notice "Nothing is on the clipboard"; return.
-	plugin.addCommand({
-		id: "preset.pasteAndFormat",
-		name: "Mason: Paste and format",
-		editorCallback(editor: Editor): void {
-			// Phase 5 seam — clipboard paste not yet available.
-			// editor unused until Phase 5 wires clipboard paste.
-			void editor;
-			new Notice("Paste and format isn't available yet.");
-		},
-	});
-
 	// -------------------------------------------------------------------------
 	// Single-operation commands (one per registry entry that has editorCallback form)
 	// util.normalizeUrl is excluded — no ctx-based EditPlan form (SDD design note 5).
@@ -396,7 +376,7 @@ export function registerCommands(
 	}
 
 	if (plugin.settings.debugLogging) {
-		const count = entries.length - SKIP_IDS.size + 3;
+		const count = entries.length - SKIP_IDS.size + 2;
 		console.debug(`[MarkdownMason] registered ${count} commands`);
 	}
 }
