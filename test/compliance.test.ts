@@ -89,11 +89,10 @@ describe("compliance — no console.log in src/", () => {
 	 * Pattern matches actual calls, not comments (requires "console.log(").
 	 */
 	it("contains zero console.log( calls in src/", () => {
-		// Match `console.log(` — actual call sites only, not identifiers or comments.
-		// A comment saying "console.log" would need to match `console\.log\s*\(` but
-		// comments containing the pattern are expected to be very rare; if a false
-		// positive appears, document it here.
-		const matches = scanSrc(/\bconsole\.log\s*\(/);
+		// Match `console.log(` — actual call sites only.
+		// Skip lines whose trimmed content starts with `//` (single-line comments).
+		// Block comments (/* */) are not handled because none exist for this pattern.
+		const matches = scanSrc(/^(?!\s*\/\/).*\bconsole\.log\s*\(/);
 		expect(matches, `Found console.log calls:\n${formatMatches(matches)}`).toHaveLength(0);
 	});
 });
@@ -115,17 +114,20 @@ describe("compliance — no global fetch in src/", () => {
 	it("contains zero bare fetch( calls in src/", () => {
 		// Match standalone `fetch(` — not preceded by a dot (method call) or word char.
 		// This catches: fetch(url), await fetch(url) — but not requestUrl() or .fetch().
-		const matches = scanSrc(/(?<![.\w])fetch\s*\(/);
+		// Skip lines whose trimmed content starts with `//` (single-line comments).
+		const matches = scanSrc(/^(?!\s*\/\/).*(?<![.\w])fetch\s*\(/);
 		expect(matches, `Found bare fetch( calls:\n${formatMatches(matches)}`).toHaveLength(0);
 	});
 
 	it("contains zero window.fetch( calls in src/", () => {
-		const matches = scanSrc(/\bwindow\.fetch\s*\(/);
+		// Skip lines whose trimmed content starts with `//` (single-line comments).
+		const matches = scanSrc(/^(?!\s*\/\/).*\bwindow\.fetch\s*\(/);
 		expect(matches, `Found window.fetch calls:\n${formatMatches(matches)}`).toHaveLength(0);
 	});
 
 	it("contains zero globalThis.fetch( calls in src/", () => {
-		const matches = scanSrc(/\bglobalThis\.fetch\s*\(/);
+		// Skip lines whose trimmed content starts with `//` (single-line comments).
+		const matches = scanSrc(/^(?!\s*\/\/).*\bglobalThis\.fetch\s*\(/);
 		expect(matches, `Found globalThis.fetch calls:\n${formatMatches(matches)}`).toHaveLength(0);
 	});
 });
@@ -146,15 +148,17 @@ describe("compliance — no dangerous HTML injection APIs in src/", () => {
 	 * occurrence of these strings in source, and it does not match the patterns.
 	 */
 	it("contains zero .innerHTML = assignments in src/", () => {
-		// Matches `.innerHTML` followed by optional whitespace and `=`
-		// (assignment). Does NOT match read access (rare and benign), but
-		// assignments are the XSS vector so we gate on those.
-		const matches = scanSrc(/\.innerHTML\s*=/);
+		// Matches `.innerHTML` followed by optional whitespace and `=` or `+=`
+		// (both are write/XSS vectors). The `(?!=)` negative lookahead excludes
+		// `==` and `===` comparisons. Read access (no `=` follows) is benign and
+		// not matched.
+		const matches = scanSrc(/\.innerHTML\s*\+?=(?!=)/);
 		expect(matches, `Found .innerHTML= assignments:\n${formatMatches(matches)}`).toHaveLength(0);
 	});
 
 	it("contains zero .outerHTML = assignments in src/", () => {
-		const matches = scanSrc(/\.outerHTML\s*=/);
+		// Matches `=` or `+=` writes; excludes `==`/`===` comparisons.
+		const matches = scanSrc(/\.outerHTML\s*\+?=(?!=)/);
 		expect(matches, `Found .outerHTML= assignments:\n${formatMatches(matches)}`).toHaveLength(0);
 	});
 
