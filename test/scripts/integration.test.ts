@@ -666,8 +666,8 @@ describe("D — selection script commands: bound script runs on selection, apply
 
 		const applyPlanSpy = vi.fn();
 
-		// Inject applyPlan spy via the shared _pasteInjection test seam.
-		// Selection commands pass this._pasteInjection to _runScriptOnSelection.
+		// Inject applyPlan spy via the shared _commandInjection test seam.
+		// Selection commands pass this._commandInjection to _runScriptOnSelection.
 		plugin._commandInjection = {
 			applyPlan: applyPlanSpy,
 		};

@@ -213,7 +213,7 @@ export class MarkdownMasonPlugin extends Plugin {
 // ---------------------------------------------------------------------------
 // runPasteCommand — extracted for single-responsibility
 //
-// Accepts an optional PasteInjection (set on the plugin instance in tests).
+// Accepts an optional CommandInjection (set on the plugin instance in tests).
 // ---------------------------------------------------------------------------
 
 async function runPasteCommand(
