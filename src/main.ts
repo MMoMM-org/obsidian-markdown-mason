@@ -20,30 +20,33 @@ import { perplexityWebDownloadScript } from "./scripts/library/perplexityWebDown
 export { DEFAULT_SETTINGS, type MasonSettings };
 
 // ---------------------------------------------------------------------------
-// PasteInjection — test seam for the paste command
+// CommandInjection — test seam for paste AND selection commands
 //
-// The paste command's editorCallback must honour Obsidian's fixed signature
-// `(editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => any`. Injecting
-// test doubles via a second argument would violate that type contract.
+// Both the paste command and _runScriptOnSelection's editorCallback must honour
+// Obsidian's fixed signature `(editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => any`.
+// Injecting test doubles via a second argument would violate that type contract.
 //
-// Instead the plugin exposes `_pasteInjection?: PasteInjection`, a test-only
+// Instead the plugin exposes `_commandInjection?: CommandInjection`, a test-only
 // property that tests set BEFORE triggering the command. Production code leaves
 // it undefined (all defaults apply). The property is intentionally prefixed
 // with `_` to signal "test seam, not public API".
 //
 // Fields:
-//   clipboardReader — replaces navigator.clipboard.readText()
-//   applyPlan       — replaces the CM6 applyEditPlan side-effect
-//   failScript      — when true forces the runner to simulate a script failure
+//   clipboardReader  — replaces navigator.clipboard.readText() (paste only)
+//   applyPlan        — replaces the CM6 applyEditPlan side-effect (paste + selection)
+//   failScript       — when true, forces the paste script to throw (paste rawFallback tests)
+//   scriptOverride   — when set, replaces the script for selection commands (selection throw-path tests)
 // ---------------------------------------------------------------------------
 
-export interface PasteInjection {
+export interface CommandInjection {
 	/** Replaces navigator.clipboard.readText() in tests. */
 	clipboardReader?: () => Promise<string>;
 	/** Replaces the real applyEditPlan side-effect in tests. */
 	applyPlan?: (plan: EditPlan) => void;
-	/** When true, forces the paste script to throw (for rawFallback tests). */
+	/** When true, forces the paste script to throw (for paste rawFallback tests). */
 	failScript?: boolean;
+	/** When set, replaces the script function for selection commands (for selection throw-path tests). */
+	scriptOverride?: ScriptFunction;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,11 +57,11 @@ export class MarkdownMasonPlugin extends Plugin {
 	declare settings: MasonSettings;
 
 	/**
-	 * Test seam for the paste command.
-	 * Set this property before triggering the paste command in tests.
+	 * Test seam for paste AND selection commands.
+	 * Set this property before triggering a command in tests.
 	 * Undefined in production — all defaults apply.
 	 */
-	_pasteInjection?: PasteInjection;
+	_commandInjection?: CommandInjection;
 
 	override async onload(): Promise<void> {
 		await this.loadSettings();
@@ -119,7 +122,7 @@ export class MarkdownMasonPlugin extends Plugin {
 			// is valid and lets tests await the async work without fire-and-forget.
 			// Arrow function captures `this` lexically — no alias needed.
 			editorCallback: (editor: Editor): Promise<void> => {
-				return runPasteCommand(editor, this.settings, this._pasteInjection);
+				return runPasteCommand(editor, this.settings, this._commandInjection);
 			},
 		});
 	}
@@ -150,13 +153,13 @@ export class MarkdownMasonPlugin extends Plugin {
 		];
 
 		for (const { id, name, script } of scripts) {
-			const capturedScript = script;
 			this.addCommand({
 				id,
 				name,
-				// _pasteInjection is the shared test seam for both paste and selection.
+				// _commandInjection is the shared test seam for both paste and selection commands.
+				// scriptOverride (for selection throw-path tests) and applyPlan are read here.
 				editorCallback: (editor: Editor): Promise<void> => {
-					return this._runScriptOnSelection(editor, capturedScript, this._pasteInjection);
+					return this._runScriptOnSelection(editor, script, this._commandInjection);
 				},
 			});
 		}
@@ -170,13 +173,15 @@ export class MarkdownMasonPlugin extends Plugin {
 	 * The selected text already exists in the document — unlike paste,
 	 * there is nothing to "re-insert" on failure.
 	 *
-	 * The `injection` parameter is the shared test seam (_pasteInjection).
-	 * Tests set plugin._pasteInjection.applyPlan to spy on applyEditPlan.
+	 * The `injection` parameter is the shared test seam (_commandInjection).
+	 * Tests set plugin._commandInjection.applyPlan to spy on applyEditPlan.
+	 * Tests set plugin._commandInjection.scriptOverride to force a specific script
+	 * (e.g. a throwing script) for selection throw-path coverage.
 	 */
 	private async _runScriptOnSelection(
 		editor: Editor,
 		script: ScriptFunction,
-		injection?: PasteInjection,
+		injection?: CommandInjection,
 	): Promise<void> {
 		const op = selectionContext(editor, this.settings);
 		const { api: mason } = buildRegistry();
@@ -199,8 +204,9 @@ export class MarkdownMasonPlugin extends Plugin {
 			notify: (msg: string): void => { new Notice(msg); },
 		};
 
+		const activeScript = injection?.scriptOverride ?? script;
 		const runner = new ScriptRunner(effects, { policy: "enabled" });
-		await runner.run(script, ctx);
+		await runner.run(activeScript, ctx);
 	}
 }
 
@@ -213,7 +219,7 @@ export class MarkdownMasonPlugin extends Plugin {
 async function runPasteCommand(
 	editor: Editor,
 	settings: MasonSettings,
-	injection: PasteInjection | undefined,
+	injection: CommandInjection | undefined,
 ): Promise<void> {
 	// 1. Read clipboard text (or use injected reader in tests)
 	const readClipboard = injection?.clipboardReader ?? defaultClipboardReader;

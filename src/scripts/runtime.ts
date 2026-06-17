@@ -65,9 +65,19 @@ export interface ImportScriptArgs {
  *   5. Record manifest entry: store.setManifestEntry(id, { source: vaultPath, checksum, version })
  *
  * Throws if the source file cannot be read (vaultAdapter.read rejects).
+ * Throws if vaultPath or destPath contains a ".." segment (path traversal rejected).
+ *
+ * Callers must construct destPath from a sanitized id (no ".." segments allowed).
  */
 export async function importScript(args: ImportScriptArgs): Promise<void> {
 	const { id, vaultPath, destPath, version, store, vaultAdapter } = args;
+
+	// Guard: reject path traversal in vaultPath or destPath
+	for (const p of [vaultPath, destPath]) {
+		if (p.split("/").some((seg) => seg === "..")) {
+			throw new Error(`importScript: path traversal rejected: ${p}`);
+		}
+	}
 
 	// 1. Read source text from vault
 	const text = await vaultAdapter.read(vaultPath);

@@ -12,7 +12,7 @@
 // Testability decisions:
 //   - importScript is exported from src/scripts/runtime.ts and accepts injected
 //     store + vaultAdapter ports → testable without touching Plugin instance.
-//   - The paste command reads plugin._pasteInjection before running; tests set
+//   - The paste command reads plugin._commandInjection before running; tests set
 //     this property to substitute clipboardReader, applyPlan, and failScript.
 //   - rawFallback calls editor.replaceSelection(rawText); tests spy on _replaced.
 
@@ -229,6 +229,37 @@ describe("T5.5B importScript — vault import flow", () => {
 		const manifest = await store.getManifest();
 		expect(manifest["script-one"]!.checksum).not.toBe(manifest["script-two"]!.checksum);
 	});
+
+	it("rejects a destPath containing a '..' traversal segment", async () => {
+		const vaultPath = "scripts/safe.cjs";
+		vaultAdapter._files.set(vaultPath, "// safe");
+
+		const traversalDestPath = ".obsidian/plugins/markdown-mason/scripts/../../../evil.cjs";
+
+		await expect(
+			importScript({
+				id: "evil",
+				vaultPath,
+				destPath: traversalDestPath,
+				version: 1,
+				store,
+				vaultAdapter,
+			}),
+		).rejects.toThrow("importScript: path traversal rejected:");
+	});
+
+	it("rejects a vaultPath containing a '..' traversal segment", async () => {
+		await expect(
+			importScript({
+				id: "evil",
+				vaultPath: "../../../etc/passwd",
+				destPath: ".obsidian/plugins/markdown-mason/scripts/safe.cjs",
+				version: 1,
+				store,
+				vaultAdapter,
+			}),
+		).rejects.toThrow("importScript: path traversal rejected:");
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -240,7 +271,7 @@ describe("T5.5B importScript — vault import flow", () => {
 //   - On failure (script throws): rawFallback is called, applyPlan is NOT called
 //   - On empty clipboard: shows Notice, does nothing
 //
-// The paste command reads plugin._pasteInjection at call time, allowing tests
+// The paste command reads plugin._commandInjection at call time, allowing tests
 // to substitute clipboardReader, applyPlan, and failScript without altering
 // the Obsidian editorCallback signature.
 // ---------------------------------------------------------------------------
@@ -380,8 +411,8 @@ describe("T5.5C — paste command success path", () => {
 
 		const applyPlanSpy = vi.fn();
 
-		// Inject test doubles via plugin._pasteInjection
-		plugin._pasteInjection = {
+		// Inject test doubles via plugin._commandInjection
+		plugin._commandInjection = {
 			clipboardReader: async () => "Some clipboard text to paste.\n",
 			applyPlan: applyPlanSpy,
 			// failScript not set → perplexityAutoScript runs normally
@@ -416,7 +447,7 @@ describe("T5.5C — paste command raw fallback on script failure", () => {
 		const rawClipboardText = "Raw paste text that causes script failure.\n";
 		const applyPlanSpy = vi.fn();
 
-		plugin._pasteInjection = {
+		plugin._commandInjection = {
 			clipboardReader: async () => rawClipboardText,
 			applyPlan: applyPlanSpy,
 			failScript: true, // force the runner script to throw
@@ -450,7 +481,7 @@ describe("T5.5C — paste command raw fallback on script failure", () => {
 		const plugin = await makePluginAndFireLayout();
 		const editor = makePasteEditorStub("# Note\n\n");
 
-		plugin._pasteInjection = {
+		plugin._commandInjection = {
 			clipboardReader: async () => "some text",
 			applyPlan: vi.fn(),
 			failScript: true,
@@ -476,7 +507,7 @@ describe("T5.5C — paste command with empty clipboard", () => {
 		const editor = makePasteEditorStub("# Note\n\n");
 		const applyPlanSpy = vi.fn();
 
-		plugin._pasteInjection = {
+		plugin._commandInjection = {
 			clipboardReader: async () => "",
 			applyPlan: applyPlanSpy,
 		};
@@ -637,7 +668,7 @@ describe("D — selection script commands: bound script runs on selection, apply
 
 		// Inject applyPlan spy via the shared _pasteInjection test seam.
 		// Selection commands pass this._pasteInjection to _runScriptOnSelection.
-		plugin._pasteInjection = {
+		plugin._commandInjection = {
 			applyPlan: applyPlanSpy,
 		};
 
@@ -666,28 +697,27 @@ describe("D — selection script commands: bound script runs on selection, apply
 		).toHaveLength(0);
 	});
 
-	it("selection command raw fallback is a no-op on script failure — selection left intact", async () => {
-		// On failure, the selection command's rawFallback does nothing.
-		// Unlike paste, there is no clipboard text to re-insert.
+	it("selection command is a noop when script returns undefined — replaceSelection and applyPlan not called", async () => {
+		// Script returns undefined for unrecognized input (noop path, not a throw).
+		// rawFallback is never triggered; applyPlan is not called.
 		const plugin = await makePluginAndFireLayout();
 		const doc = "# My Note\n\nSelected text.";
 		const editor = makeSelectionEditorStub(doc);
 
 		const applyPlanSpy = vi.fn();
 
-		plugin._pasteInjection = {
+		plugin._commandInjection = {
 			applyPlan: applyPlanSpy,
-			// failScript not set — perplexityAutoScript runs but returns noop for this input
+			// scriptOverride not set — perplexityAutoScript runs and returns noop for this input
 		};
 
 		const cmd = findCommand(plugin, "mason.script.perplexity-auto");
 		await cmd.editorCallback(editor);
 
-		// This input doesn't match Perplexity format → noop (applyPlan not called)
-		// applyPlan not called, rawFallback is a no-op (replaceSelection never called)
+		// Script returned undefined → noop: replaceSelection not called
 		expect(
 			editor._replaced,
-			"rawFallback must be a no-op for selection commands (selection stays intact)",
+			"replaceSelection must not be called when script returns noop",
 		).toHaveLength(0);
 
 		// applyPlan not called (noop path)
@@ -695,5 +725,39 @@ describe("D — selection script commands: bound script runs on selection, apply
 			applyPlanSpy,
 			"applyPlan must not be called when script returns noop",
 		).not.toHaveBeenCalled();
+	});
+
+	it("selection command throw path: rawFallback is no-op, applyPlan not called, Notice shown", async () => {
+		// When the script throws, the runner triggers rawFallback (a no-op for selection)
+		// and must NOT call applyPlan (atomicity). A Notice must be shown.
+		const plugin = await makePluginAndFireLayout();
+		const doc = "# My Note\n\nSelected text.";
+		const editor = makeSelectionEditorStub(doc);
+
+		const applyPlanSpy = vi.fn();
+
+		plugin._commandInjection = {
+			applyPlan: applyPlanSpy,
+			scriptOverride: () => { throw new Error("forced selection failure"); },
+		};
+
+		const cmd = findCommand(plugin, "mason.script.perplexity-auto");
+		await cmd.editorCallback(editor);
+
+		// rawFallback for selection is a no-op — replaceSelection must NOT be called
+		expect(
+			editor._replaced,
+			"rawFallback must be a no-op for selection commands (doc unchanged)",
+		).toHaveLength(0);
+
+		// applyPlan must NOT be called (atomicity: applyPlan XOR rawFallback)
+		expect(
+			applyPlanSpy,
+			"applyPlan must NOT be called when script throws (atomicity)",
+		).not.toHaveBeenCalled();
+
+		// A Notice must be shown to inform the user of the failure
+		const notices = noticeLog();
+		expect(notices.length, "expected at least one Notice on selection script failure").toBeGreaterThan(0);
 	});
 });
