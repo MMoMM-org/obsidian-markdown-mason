@@ -406,4 +406,211 @@ export class Plugin {
 	get _persistedData(): unknown {
 		return this._savedData;
 	}
+
+	/**
+	 * Stub for addSettingTab — records the tab for test inspection.
+	 * In production Obsidian registers and renders the tab; here we just capture it.
+	 */
+	addSettingTab(_tab: unknown): void {
+		// no-op in tests
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Mock text/toggle/button control builders — T6.1
+//
+// Each addText / addToggle / addButton call on a Setting passes one of these
+// mock control objects to the consumer callback, then records it on the setting
+// for test introspection.
+//
+// Controls are ACTIVE: setValue fires all registered onChange callbacks so that
+// tests can simulate user interaction and observe side-effects (e.g. saveSettings).
+// ---------------------------------------------------------------------------
+
+class MockTextControl {
+	_value: string = "";
+	private _onChangeCbs: Array<(v: string) => void> = [];
+
+	setValue(v: string): this {
+		this._value = v;
+		for (const cb of this._onChangeCbs) {
+			cb(v);
+		}
+		return this;
+	}
+
+	getValue(): string {
+		return this._value;
+	}
+
+	onChange(cb: (v: string) => void): this {
+		this._onChangeCbs.push(cb);
+		return this;
+	}
+
+	setPlaceholder(_placeholder: string): this {
+		return this;
+	}
+}
+
+class MockToggleControl {
+	_value: boolean = false;
+	private _onChangeCbs: Array<(v: boolean) => void> = [];
+
+	setValue(v: boolean): this {
+		this._value = v;
+		for (const cb of this._onChangeCbs) {
+			cb(v);
+		}
+		return this;
+	}
+
+	getValue(): boolean {
+		return this._value;
+	}
+
+	onChange(cb: (v: boolean) => void): this {
+		this._onChangeCbs.push(cb);
+		return this;
+	}
+}
+
+class MockButtonControl {
+	_text: string = "";
+	private _clickCbs: Array<() => void | Promise<void>> = [];
+
+	setButtonText(text: string): this {
+		this._text = text;
+		return this;
+	}
+
+	onClick(cb: () => void | Promise<void>): this {
+		this._clickCbs.push(cb);
+		return this;
+	}
+
+	async _simulateClick(): Promise<void> {
+		for (const cb of this._clickCbs) {
+			await cb();
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// CapturedSetting — the record stored per new Setting(containerEl)
+// ---------------------------------------------------------------------------
+
+interface CapturedSettingRecord {
+	name: string;
+	desc: string;
+	isHeading: boolean;
+	textControls: MockTextControl[];
+	toggleControls: MockToggleControl[];
+	buttonControls: MockButtonControl[];
+}
+
+// Module-level capture list — cleared between tests via clearCapturedSettings().
+const _capturedSettings: CapturedSettingRecord[] = [];
+
+/** Test helper: returns a snapshot of all Setting instances built so far. */
+export function capturedSettings(): CapturedSettingRecord[] {
+	return [..._capturedSettings];
+}
+
+/** Test helper: clears the captured settings list. Call in beforeEach or before renderTab(). */
+export function clearCapturedSettings(): void {
+	_capturedSettings.length = 0;
+}
+
+// ---------------------------------------------------------------------------
+// Setting — chainable builder; records itself in _capturedSettings on construction
+//
+// Supports the Obsidian Setting API surface used by MasonSettingTab:
+//   setName(s)    — set the setting label
+//   setDesc(s)    — set the description
+//   setHeading()  — mark as a section heading
+//   addText(cb)   — add a text input; cb receives MockTextControl
+//   addToggle(cb) — add a toggle; cb receives MockToggleControl
+//   addButton(cb) — add a button; cb receives MockButtonControl
+// ---------------------------------------------------------------------------
+
+export class Setting {
+	private readonly _record: CapturedSettingRecord;
+
+	/** containerEl is accepted to match the Obsidian API signature; not used in the mock. */
+	constructor(_containerEl: unknown) {
+		this._record = {
+			name: "",
+			desc: "",
+			isHeading: false,
+			textControls: [],
+			toggleControls: [],
+			buttonControls: [],
+		};
+		_capturedSettings.push(this._record);
+	}
+
+	setName(name: string): this {
+		this._record.name = name;
+		return this;
+	}
+
+	setDesc(desc: string): this {
+		this._record.desc = desc;
+		return this;
+	}
+
+	setHeading(): this {
+		this._record.isHeading = true;
+		return this;
+	}
+
+	addText(cb: (text: MockTextControl) => void): this {
+		const ctrl = new MockTextControl();
+		this._record.textControls.push(ctrl);
+		cb(ctrl);
+		return this;
+	}
+
+	addToggle(cb: (toggle: MockToggleControl) => void): this {
+		const ctrl = new MockToggleControl();
+		this._record.toggleControls.push(ctrl);
+		cb(ctrl);
+		return this;
+	}
+
+	addButton(cb: (button: MockButtonControl) => void): this {
+		const ctrl = new MockButtonControl();
+		this._record.buttonControls.push(ctrl);
+		cb(ctrl);
+		return this;
+	}
+}
+
+// ---------------------------------------------------------------------------
+// PluginSettingTab — T6.1
+//
+// Base class for settings tabs. In production Obsidian provides this;
+// here we expose a minimal stub with containerEl and lifecycle methods.
+// MasonSettingTab extends this class.
+// ---------------------------------------------------------------------------
+
+export class PluginSettingTab {
+	app: App;
+	containerEl: MockHTMLElement;
+
+	constructor(app: App, _plugin: unknown) {
+		this.app = app;
+		this.containerEl = new MockHTMLElement("div");
+	}
+
+	/** Override to render settings. */
+	display(): void | Promise<void> {
+		// no-op base implementation
+	}
+
+	/** Override to clean up. */
+	hide(): void {
+		// no-op base implementation
+	}
 }

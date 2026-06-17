@@ -9,11 +9,26 @@ export interface MasonSettings {
 	debugLogging: boolean;
 	/** Folder name used as a Resources section when building heading cascades. */
 	resourcesName: string;
+	/**
+	 * When true (default), only numeric footnote references are processed;
+	 * alpha markers such as [^A] are excluded.
+	 *
+	 * Optional to preserve backward compatibility with persisted data and existing
+	 * test fixtures that do not include this field. Treated as `true` when absent.
+	 *
+	 * KNOWN LIMITATION (v0.1): this setting persists and threads into
+	 * OperationContext.settings, but numericOnly=false is not yet honoured
+	 * by the core footnote logic. The core already behaves as if numericOnly
+	 * is always true (ExistingRef is defined as numeric-only; see types.ts).
+	 * Wiring numericOnly=false to allow alpha markers is a planned follow-up.
+	 */
+	numericOnly?: boolean;
 }
 
 export const DEFAULT_SETTINGS: MasonSettings = {
 	debugLogging: false,
 	resourcesName: "Resources",
+	numericOnly: true,
 };
 
 // ---------------------------------------------------------------------------

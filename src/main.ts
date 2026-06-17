@@ -15,6 +15,8 @@ import { perplexityAutoScript } from "./scripts/library/perplexityAuto";
 import { perplexityAppScript } from "./scripts/library/perplexityApp";
 import { perplexityWebScript } from "./scripts/library/perplexityWeb";
 import { perplexityWebDownloadScript } from "./scripts/library/perplexityWebDownload";
+import { ScriptStore } from "./scripts/store";
+import { MasonSettingTab } from "./ui/settingsTab";
 
 // Re-export so consumers that import from "src/main" still resolve.
 export { DEFAULT_SETTINGS, type MasonSettings };
@@ -57,6 +59,12 @@ export class MarkdownMasonPlugin extends Plugin {
 	declare settings: MasonSettings;
 
 	/**
+	 * Script store — manages the script manifest (data.json) and per-device
+	 * state (device.json). Initialised in onload() after loadSettings().
+	 */
+	declare store: ScriptStore;
+
+	/**
 	 * Test seam for paste AND selection commands.
 	 * Set this property before triggering a command in tests.
 	 * Undefined in production — all defaults apply.
@@ -65,8 +73,24 @@ export class MarkdownMasonPlugin extends Plugin {
 
 	override async onload(): Promise<void> {
 		await this.loadSettings();
+		this._initStore();
+		this.addSettingTab(new MasonSettingTab(this.app, this));
 		this.app.workspace.onLayoutReady(() => this.onLayoutReady());
 		console.debug("[MarkdownMason] loaded");
+	}
+
+	/**
+	 * Initialise the ScriptStore with plugin data + vault adapter ports.
+	 * Called once during onload, after settings are loaded.
+	 */
+	private _initStore(): void {
+		const pluginDataPort = {
+			load: (): Promise<unknown> => this.loadData(),
+			save: (data: unknown): Promise<void> => this.saveData(data),
+		};
+		const vaultAdapterPort = this.app.vault.adapter;
+		const devicePath = ".obsidian/plugins/markdown-mason/device.json";
+		this.store = new ScriptStore(pluginDataPort, vaultAdapterPort, devicePath);
 	}
 
 	/**
