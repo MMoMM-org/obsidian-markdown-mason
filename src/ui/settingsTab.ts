@@ -116,7 +116,7 @@ export class MasonSettingTab extends PluginSettingTab {
 			// No scripts installed — show an informational row.
 			new Setting(containerEl)
 				.setName("No scripts installed")
-				.setDesc("Import a .cjs script from your vault using the button below.");
+				.setDesc("No scripts installed yet.");
 			return;
 		}
 

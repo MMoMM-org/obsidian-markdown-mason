@@ -273,12 +273,35 @@ describe("MasonSettingTab — Scripts section", () => {
 		const scriptSection = allSettings.slice(scriptsHeadingIdx + 1, advancedHeadingIdx);
 		const toggleRows = scriptSection.filter((s) => s.toggleControls.length > 0);
 
-		const firstToggle = toggleRows[0].toggleControls[0];
-		// Simulate user toggling; the implementation's onChange calls store.setEnabled.
-		firstToggle.setValue(!firstToggle.getValue());
+		// The first script row in the manifest is "perplexity-auto", which is enabled (true).
+		// Toggling it should call setEnabled("perplexity-auto", false).
+		const firstRow = toggleRows[0];
+		const firstToggle = firstRow.toggleControls[0];
+		const previousValue = firstToggle.getValue();
+		firstToggle.setValue(!previousValue);
 
-		// store.setEnabled must have been called by the tab's own onChange handler
-		expect(plugin.store.setEnabled).toHaveBeenCalled();
+		// store.setEnabled must have been called with the exact script id and toggled value.
+		expect(plugin.store.setEnabled).toHaveBeenCalledWith("perplexity-auto", !previousValue);
+	});
+
+	it("renders empty-state row when manifest has no scripts", async () => {
+		const plugin = makePlugin();
+		// Replace the store with one that returns an empty manifest.
+		plugin.store.getManifest.mockResolvedValue({});
+
+		const allSettings = await renderTab(plugin);
+
+		const scriptsHeadingIdx = allSettings.findIndex((s) => s.isHeading && s.name === "Scripts");
+		const advancedHeadingIdx = allSettings.findIndex((s) => s.isHeading && s.name === "Advanced");
+		const scriptSection = allSettings.slice(scriptsHeadingIdx + 1, advancedHeadingIdx);
+
+		// Exactly one row should appear: the "No scripts installed" informational row.
+		expect(scriptSection).toHaveLength(1);
+		expect(scriptSection[0].name).toBe("No scripts installed");
+
+		// No toggles or buttons should be rendered in the empty state.
+		expect(scriptSection[0].toggleControls).toHaveLength(0);
+		expect(scriptSection[0].buttonControls).toHaveLength(0);
 	});
 
 	it("each script row has an import control (button)", async () => {
