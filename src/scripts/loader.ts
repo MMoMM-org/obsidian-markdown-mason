@@ -53,11 +53,6 @@ import * as path from "node:path";
 export interface ResolvedScript {
 	/** Canonical absolute path to the <id>.cjs file. */
 	absolutePath: string;
-	/**
-	 * Any additional files with the same base name (unexpected duplicates).
-	 * For a well-formed scripts dir this will be empty.
-	 */
-	duplicates: string[];
 	/** File size and mtime at resolve time; undefined if stat fails. */
 	fingerprint?: { size: number; mtimeMs: number };
 }
@@ -75,7 +70,7 @@ export interface RequireFn {
 }
 
 /** The value returned by loadScriptFresh — the script's exported callable. */
-export type ScriptModule = unknown;
+export type ScriptFn = (...args: unknown[]) => unknown;
 
 // ---------------------------------------------------------------------------
 // FsScriptLoader
@@ -146,7 +141,7 @@ export class FsScriptLoader {
 			return null;
 		}
 
-		const matches = entries.filter((e) => e === `${id}.cjs`).sort();
+		const matches = entries.filter((e) => e === `${id}.cjs`);
 		const jsOnly = entries.filter((e) => e === `${id}.js`);
 		if (jsOnly.length > 0 && matches.length === 0) {
 			console.warn(
@@ -155,9 +150,7 @@ export class FsScriptLoader {
 		}
 		if (matches.length === 0) return null;
 
-		const [first, ...rest] = matches;
-		const absolutePath = path.join(absoluteDir, first!);
-		const duplicates = rest.map((d) => path.join(absoluteDir, d));
+		const absolutePath = path.join(absoluteDir, matches[0]!);
 
 		// Fingerprint: soft-fail to undefined if stat throws.
 		let fingerprint: { size: number; mtimeMs: number } | undefined;
@@ -168,7 +161,6 @@ export class FsScriptLoader {
 
 		return {
 			absolutePath,
-			duplicates,
 			...(fingerprint !== undefined ? { fingerprint } : {}),
 		};
 	}
@@ -179,7 +171,7 @@ export class FsScriptLoader {
 // ---------------------------------------------------------------------------
 
 /** No-op fallback when a script exports no callable. */
-function noop(): void { /* intentional no-op */ }
+function noop(): unknown { return undefined; }
 
 /**
  * Require a script, evicting every module-cache entry under the script's
@@ -198,7 +190,7 @@ function noop(): void { /* intentional no-op */ }
  * @param requireFn    - The Node require function (or createRequire result).
  * @returns The script's function export, or a noop if no function is exported.
  */
-export function loadScriptFresh(absolutePath: string, requireFn: RequireFn): ScriptModule {
+export function loadScriptFresh(absolutePath: string, requireFn: RequireFn): ScriptFn {
 	// Resolve the canonical cache key that Node will use for this module.
 	const resolved = requireFn.resolve(absolutePath);
 
@@ -218,9 +210,9 @@ export function loadScriptFresh(absolutePath: string, requireFn: RequireFn): Scr
 	const mod = requireFn(absolutePath);
 
 	// Resolve function export: prefer direct function, then .default (ESM-to-CJS).
-	if (typeof mod === "function") return mod;
+	if (typeof mod === "function") return mod as ScriptFn;
 	if (typeof (mod as { default?: unknown })?.default === "function") {
-		return (mod as { default: unknown }).default;
+		return (mod as { default: ScriptFn }).default;
 	}
 
 	console.warn(`[mason] "${absolutePath}" exports no function — ignored`);

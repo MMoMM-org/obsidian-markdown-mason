@@ -87,18 +87,6 @@ describe("FsScriptLoader.resolve — happy path", () => {
 		expect(result!.fingerprint!.size).toBe(stat.size);
 		expect(result!.fingerprint!.mtimeMs).toBe(stat.mtimeMs);
 	});
-
-	it("returns empty duplicates array when only one match exists", () => {
-		const vaultBase = makeTempDir("mason-vault-");
-		const scriptsDir = path.join(vaultBase, "scripts");
-		fs.mkdirSync(scriptsDir);
-		fs.writeFileSync(path.join(scriptsDir, "solo.cjs"), "module.exports = () => {};");
-
-		const loader = new FsScriptLoader(vaultBase, () => scriptsDir);
-		const result = loader.resolve("solo");
-
-		expect(result!.duplicates).toEqual([]);
-	});
 });
 
 // ---------------------------------------------------------------------------
@@ -125,7 +113,8 @@ describe("FsScriptLoader.resolve — absent scripts dir", () => {
 		const loader = new FsScriptLoader(vaultBase, () => missingDir, debugSpy);
 		loader.resolve("any-id");
 
-		// debug may be called; warn must NOT be called for a mere absent dir
+		// debug MUST be called for absent dir trace; warn must NOT be called
+		expect(debugSpy).toHaveBeenCalled();
 		expect(warnSpy).not.toHaveBeenCalled();
 		warnSpy.mockRestore();
 	});
@@ -212,6 +201,40 @@ describe("FsScriptLoader.resolve — escape guard (path traversal)", () => {
 		const result = loader.resolve("inline");
 
 		expect(result).not.toBeNull();
+	});
+
+	it("returns null when scriptsDir is a symlink pointing outside the vault (symlink-chain escape)", () => {
+		// This test exercises the realpathSync resolution path — the primary security
+		// purpose of the escape guard.  A plain real directory outside the vault (as in
+		// the tests above) bypasses the symlink-specific branch; this test uses an actual
+		// symlink so the guard must dereference it to detect the escape.
+		const vaultBase = makeTempDir("mason-vault-");
+		const outsideDir = makeTempDir("mason-outside-");
+		const symlinkScripts = path.join(vaultBase, "scripts");
+
+		try {
+			fs.symlinkSync(outsideDir, symlinkScripts, "dir");
+		} catch (err: unknown) {
+			// EPERM on platforms that disallow unprivileged dir symlinks (unlikely on Linux).
+			const code = (err as NodeJS.ErrnoException).code;
+			if (code === "EPERM" || code === "ENOTSUP") {
+				console.warn(`[mason-test] symlink creation not permitted (${code}) — skipping symlink-escape test`);
+				return;
+			}
+			throw err;
+		}
+
+		// Place a script in the outside dir — if the guard fails, resolve() would return it.
+		fs.writeFileSync(path.join(outsideDir, "evil.cjs"), "module.exports = () => {};");
+
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+		const loader = new FsScriptLoader(vaultBase, () => symlinkScripts);
+		const result = loader.resolve("evil");
+
+		// realpathSync resolves the symlink → outsideDir, which is outside vaultBase.
+		expect(result).toBeNull();
+		expect(warnSpy).toHaveBeenCalled();
+		warnSpy.mockRestore();
 	});
 });
 
