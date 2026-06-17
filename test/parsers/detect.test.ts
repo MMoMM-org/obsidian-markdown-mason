@@ -112,6 +112,56 @@ describe("detect — precedence: web-download > web", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Precedence: app wins over web-download
+// ---------------------------------------------------------------------------
+
+describe("detect — precedence: app > web-download", () => {
+	it("routes to perplexityApp when BOTH a Sources block AND a [^a_b]: def line are present", () => {
+		// This fixture satisfies BOTH canParse guards:
+		//   - perplexityApp.canParse  : "Sources" marker + "[1] <title> <url>" entry line
+		//   - perplexityWebDownload.canParse: "[^1_1]: <url>" definition line
+		// Only the guard ORDER in detect.ts (app before web-download) makes app win.
+		const ambiguous = [
+			"## Answer",
+			"",
+			"Cherry blossoms peak in late March.[1][^1_1]",
+			"",
+			"Sources",
+			"[1] Japan Guide https://www.japan-guide.com/sakura/",
+			"",
+			"[^1_1]: https://www.japan-guide.com/sakura/",
+		].join("\n");
+
+		// Confirm this is a genuine precedence test — both parsers accept the input.
+		expect(perplexityWebDownload.canParse(ambiguous)).toBe(true);
+
+		expect(detect(ambiguous)).toBe(perplexityApp);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Marker-variant coverage — app routing via all accepted marker strings
+// ---------------------------------------------------------------------------
+
+describe("detect — app marker variants", () => {
+	it.each(["Sources", "Citations:", "Quellen"])(
+		"routes to perplexityApp when marker is %s",
+		(marker: string) => {
+			const input = [
+				"## Answer",
+				"",
+				"Some answer prose.[1]",
+				"",
+				marker,
+				"[1] Example Site https://example.com/",
+			].join("\n");
+
+			expect(detect(input)).toBe(perplexityApp);
+		},
+	);
+});
+
+// ---------------------------------------------------------------------------
 // Web — inline links only (no Sources block, no [^a_b]: defs)
 // ---------------------------------------------------------------------------
 
