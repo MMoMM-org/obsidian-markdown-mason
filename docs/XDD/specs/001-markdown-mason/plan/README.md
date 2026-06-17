@@ -87,7 +87,7 @@ Each phase is a separate file. Tasks follow red-green-refactor: **Prime** → **
 - [x] [Phase 3: Registry, mason.* API, Commands & Editor Adapters](phase-3.md)
 - [x] [Phase 4: Perplexity Parsers & Auto-Dispatcher](phase-4.md)
 - [x] [Phase 5: Script Runtime & Trust](phase-5.md)
-- [ ] [Phase 6: Settings UI & Compliance](phase-6.md)
+- [x] [Phase 6: Settings UI & Compliance](phase-6.md)
 - [ ] [Phase 7: Integration, E2E & Release Readiness](phase-7.md)
 
 ---
