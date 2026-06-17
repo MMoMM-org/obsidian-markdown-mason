@@ -3,6 +3,7 @@ import { checkManifest } from "../scripts/check-manifest.mjs";
 
 const compliantManifest = () => ({
 	id: "markdown-mason",
+	author: "Jane Doe",
 	description: "Fit pasted Markdown into the target note's structure.",
 	isDesktopOnly: true,
 });

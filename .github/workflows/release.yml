@@ -55,24 +55,31 @@ jobs:
 
       # Resolve the release tag: prefer the git tag that triggered the push
       # event; fall back to the workflow_dispatch input.
+      # INPUT_TAG is passed via env: to avoid interpolating an untrusted
+      # workflow_dispatch input directly into shell source (CI shell-injection).
+      # github.event_name is a GitHub-controlled enum — safe to inline.
       - name: Resolve release tag
         id: tag
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
             TAG="${GITHUB_REF#refs/tags/}"
           else
-            TAG="${{ github.event.inputs.tag }}"
+            TAG="${INPUT_TAG}"
           fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
       # Guard: the tag must exactly match manifest.json version.
+      # TAG is passed via env: because steps.tag.outputs.tag derives from the
+      # tainted workflow_dispatch input — never interpolate it directly in shell.
       - name: Verify tag matches manifest version
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
         run: |
           MANIFEST_VERSION=$(node -e "process.stdout.write(require('./manifest.json').version)")
-          TAG="${{ steps.tag.outputs.tag }}"
           if [ "$TAG" != "$MANIFEST_VERSION" ]; then
-            echo "ERROR: Release tag '${TAG}' does not match manifest.json version '${MANIFEST_VERSION}'."
-            echo "Update manifest.json (and versions.json) before tagging, or use the correct tag."
+            echo "::error::Tag ($TAG) does not match manifest.json version ($MANIFEST_VERSION)"
             exit 1
           fi
           echo "Tag '${TAG}' matches manifest version. Proceeding."

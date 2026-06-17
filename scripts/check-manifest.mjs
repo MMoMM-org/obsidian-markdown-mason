@@ -33,7 +33,7 @@ export function checkManifest(manifest) {
 		if (/\bobsidian\b/i.test(manifest.description)) {
 			failures.push(`description must not contain the word 'Obsidian' (got: "${manifest.description}")`);
 		}
-		if (/^this is a plugin/i.test(manifest.description.trim())) {
+		if (/^this is a plugin/i.test(manifest.description)) {
 			failures.push(`description must not start with "This is a plugin" (got: "${manifest.description}")`);
 		}
 	}

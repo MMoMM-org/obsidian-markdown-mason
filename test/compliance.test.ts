@@ -32,6 +32,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 const srcDir = path.join(repoRoot, "src");
 
+// Shared manifest read — used by Suite 4 and Suite 4b so the file is parsed once.
+const manifestPath = path.join(repoRoot, "manifest.json");
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+
 /** Recursively collect all .ts files under a directory. */
 function collectTsFiles(dir: string): string[] {
 	const results: string[] = [];
@@ -188,9 +192,9 @@ describe("compliance — manifest.json required fields and format", () => {
 	 *                  does NOT start with "This is a plugin"
 	 *   - required keys: id, name, version, minAppVersion, description, author, isDesktopOnly
 	 *   - isDesktopOnly === true (DESKTOP plugin, not mobile)
+	 *
+	 * manifest and manifestPath are hoisted to module scope (shared with Suite 4b).
 	 */
-	const manifestPath = path.join(repoRoot, "manifest.json");
-	const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
 
 	it("passes all checkManifest() rules", () => {
 		const failures = checkManifest(manifest);
@@ -262,10 +266,10 @@ describe("compliance — versions.json ↔ manifest.json consistency", () => {
 	 * Rules:
 	 *   - versions.json must contain an entry for manifest.version
 	 *   - that entry must equal manifest.minAppVersion
+	 *
+	 * manifest and manifestPath are hoisted to module scope (shared with Suite 4).
 	 */
-	const manifestPath = path.join(repoRoot, "manifest.json");
 	const versionsPath = path.join(repoRoot, "versions.json");
-	const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
 	const versions = JSON.parse(fs.readFileSync(versionsPath, "utf8")) as Record<string, unknown>;
 
 	it("versions.json contains an entry for manifest.version", () => {
