@@ -205,6 +205,11 @@ export class MarkdownMasonPlugin extends Plugin {
 		};
 
 		const activeScript = injection?.scriptOverride ?? script;
+		// SEC-006: policy "enabled" bypasses the per-checksum consent gate because these are
+		// FIRST-PARTY bundled library scripts compiled into the plugin bundle. Their sha256 is
+		// fixed at build time and there is no external file that an attacker can tamper with.
+		// The consent model (ScriptStore + disclosure modal) protects user-imported external
+		// .cjs files; it does not apply to code shipped inside the plugin itself.
 		const runner = new ScriptRunner(effects, { policy: "enabled" });
 		await runner.run(activeScript, ctx);
 	}
@@ -263,7 +268,11 @@ async function runPasteCommand(
 		notify: (msg: string): void => { new Notice(msg); },
 	};
 
-	// 6. Build runner — bundled library scripts are pre-approved (no consent gate)
+	// 6. Build runner — policy "enabled" bypasses the per-checksum consent gate because these are
+	//    FIRST-PARTY bundled library scripts compiled into the plugin bundle. Their sha256 is fixed
+	//    at build time and there is no external file that an attacker can tamper with. The consent
+	//    model (ScriptStore + disclosure modal) protects user-imported external .cjs files; it does
+	//    not apply to code shipped inside the plugin itself. (SEC-006)
 	const runner = new ScriptRunner(effects, { policy: "enabled" });
 
 	// 7. Choose script — failScript injection forces a throw for test coverage

@@ -19,7 +19,9 @@
 // The adapter bridges the runner's AskCallback contract with:
 //   1. ScriptStore.evaluateTrust() — lighter path: skip modal if already "ok"
 //   2. ScriptDisclosureModal — shown for needs-consent, drift-blocked, or unknown
-//   3. ScriptStore.recordConsent() — called on enable-session / enable-once
+//   3. ScriptStore.recordConsent() — called on enable-session ONLY
+//      Enable       = approve & remember (persists per checksum/version)
+//      Enable once  = run this time only, no persistence → next call re-prompts
 //
 // DRIFT-BLOCKED CHOICE (documented)
 // ────────────────────────────────
@@ -184,6 +186,10 @@ export class ScriptDisclosureModal extends Modal {
  *
  * All other statuses (needs-consent, drift-blocked, unknown) show the modal.
  * "disabled" (explicit kill-switch) returns "disable" without the modal.
+ *
+ * Consent persistence:
+ *   "enable-session" → recordConsent is called (persists approval for this checksum/version)
+ *   "enable-once"    → recordConsent is NOT called (run this time only; next call re-prompts)
  */
 export function makeAskCallback(
 	app: App,
@@ -210,7 +216,9 @@ export function makeAskCallback(
 		const modal = new ScriptDisclosureModal(app, info);
 		const decision = await modal.present();
 
-		if (decision === "enable-session" || decision === "enable-once") {
+		// Record consent only for enable-session (persists approval).
+		// enable-once is intentionally ephemeral: no consent stored → next invocation re-prompts.
+		if (decision === "enable-session") {
 			await store.recordConsent(scriptId, checksum, version);
 		}
 

@@ -485,9 +485,83 @@ describe("makeAskCallback — changed fingerprint → re-prompts", () => {
 
 		const decision = await callbackPromise;
 		expect(decision).toBe("enable-once");
-		// M2: enable-once must also record consent so same-fingerprint re-runs
-		// take the lighter "ok" path.
-		expect(store.recordConsent).toHaveBeenCalledWith("script-version-bump", "new-checksum", 5);
+		// SEC-001: enable-once must NOT record consent — it is ephemeral.
+		// The next invocation will re-prompt (does not take the "ok" lighter path).
+		expect(store.recordConsent).not.toHaveBeenCalled();
+
+		ScriptDisclosureModal.prototype.present = origPresent;
+	});
+});
+
+// ---------------------------------------------------------------------------
+// SEC-001 — enable-once is ephemeral: no consent stored, modal re-prompts next time
+// ---------------------------------------------------------------------------
+
+describe("makeAskCallback — SEC-001: enable-once does not persist consent", () => {
+	it("enable-once does NOT call recordConsent (so next invocation re-prompts)", async () => {
+		const app = new App();
+		const store = makeStore("needs-consent");
+
+		const callback = makeAskCallback(
+			app,
+			store as unknown as ScriptStore,
+			"script-enable-once",
+			{ vaultRelativePath: "scripts/once.cjs", fileSizeBytes: 256 },
+			"checksum-once",
+			1,
+		);
+
+		let capturedModal: ScriptDisclosureModal | null = null;
+		const origPresent = ScriptDisclosureModal.prototype.present;
+		ScriptDisclosureModal.prototype.present = function (this: ScriptDisclosureModal) {
+			capturedModal = this;
+			return origPresent.call(this);
+		};
+
+		const callbackPromise = callback();
+		await Promise.resolve();
+
+		expect(capturedModal).not.toBeNull();
+		clickButton(capturedModal!, "Enable once");
+
+		const decision = await callbackPromise;
+		expect(decision).toBe("enable-once");
+		// recordConsent must NOT have been called — enable-once is run-once, no storage
+		expect(store.recordConsent).not.toHaveBeenCalled();
+
+		ScriptDisclosureModal.prototype.present = origPresent;
+	});
+
+	it("enable-session DOES call recordConsent (persists for this checksum/version)", async () => {
+		const app = new App();
+		const store = makeStore("needs-consent");
+
+		const callback = makeAskCallback(
+			app,
+			store as unknown as ScriptStore,
+			"script-enable-session",
+			{ vaultRelativePath: "scripts/session.cjs", fileSizeBytes: 512 },
+			"checksum-session",
+			2,
+		);
+
+		let capturedModal: ScriptDisclosureModal | null = null;
+		const origPresent = ScriptDisclosureModal.prototype.present;
+		ScriptDisclosureModal.prototype.present = function (this: ScriptDisclosureModal) {
+			capturedModal = this;
+			return origPresent.call(this);
+		};
+
+		const callbackPromise = callback();
+		await Promise.resolve();
+
+		expect(capturedModal).not.toBeNull();
+		clickButton(capturedModal!, "Enable");
+
+		const decision = await callbackPromise;
+		expect(decision).toBe("enable-session");
+		// recordConsent MUST have been called for enable-session
+		expect(store.recordConsent).toHaveBeenCalledWith("script-enable-session", "checksum-session", 2);
 
 		ScriptDisclosureModal.prototype.present = origPresent;
 	});

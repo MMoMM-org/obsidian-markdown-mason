@@ -260,6 +260,54 @@ describe("T5.5B importScript — vault import flow", () => {
 			}),
 		).rejects.toThrow("importScript: path traversal rejected:");
 	});
+
+	// SEC-004: Windows-style backslash traversal in destPath
+	it("SEC-004: rejects a destPath with Windows backslash traversal (..\\..\\evil.cjs)", async () => {
+		const vaultPath = "scripts/safe.cjs";
+		vaultAdapter._files.set(vaultPath, "// safe");
+
+		await expect(
+			importScript({
+				id: "evil-win",
+				vaultPath,
+				destPath: "..\\..\\evil.cjs",
+				version: 1,
+				store,
+				vaultAdapter,
+			}),
+		).rejects.toThrow("importScript: path traversal rejected:");
+	});
+
+	// SEC-005: absolute destPath is rejected
+	it("SEC-005: rejects an absolute destPath (/etc/evil.cjs)", async () => {
+		const vaultPath = "scripts/safe.cjs";
+		vaultAdapter._files.set(vaultPath, "// safe");
+
+		await expect(
+			importScript({
+				id: "evil-abs-dest",
+				vaultPath,
+				destPath: "/etc/evil.cjs",
+				version: 1,
+				store,
+				vaultAdapter,
+			}),
+		).rejects.toThrow("importScript: absolute path rejected:");
+	});
+
+	// SEC-005: absolute vaultPath is rejected
+	it("SEC-005: rejects an absolute vaultPath (/etc/passwd)", async () => {
+		await expect(
+			importScript({
+				id: "evil-abs-vault",
+				vaultPath: "/etc/passwd",
+				destPath: ".obsidian/plugins/markdown-mason/scripts/safe.cjs",
+				version: 1,
+				store,
+				vaultAdapter,
+			}),
+		).rejects.toThrow("importScript: absolute path rejected:");
+	});
 });
 
 // ---------------------------------------------------------------------------

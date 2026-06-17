@@ -265,6 +265,74 @@ describe("ScriptStore — recordConsent", () => {
 });
 
 // ---------------------------------------------------------------------------
+// SEC-003 — symmetric version check: rollback also triggers needs-consent
+// ---------------------------------------------------------------------------
+
+describe("ScriptStore — evaluateTrust: SEC-003 rollback → needs-consent", () => {
+	it("rollback: consent.version 5, manifest.version 3, matching checksum → needs-consent (not ok)", async () => {
+		// A downgrade/rollback is equally suspect as an upgrade — fail-closed on both.
+		// Even though the checksum matches at the rollback version, we require exact version match.
+		const pluginData = makePluginDataPort({
+			scripts: {
+				"script-rollback": { source: "rollback.cjs", checksum: "same-checksum", version: 3 },
+			},
+		});
+		const vault = makeVaultAdapterPort();
+		vault._files.set(
+			DEVICE_PATH,
+			JSON.stringify({
+				enabled: { "script-rollback": true },
+				consent: { "script-rollback": { checksum: "same-checksum", version: 5 } },
+			}),
+		);
+		const store = makeStore(pluginData, vault);
+
+		const result = await store.evaluateTrust("script-rollback");
+		expect(result.status).toBe("needs-consent");
+	});
+
+	it("version bump (3 vs 4) → needs-consent (existing behaviour preserved)", async () => {
+		const pluginData = makePluginDataPort({
+			scripts: {
+				"script-bump": { source: "bump.cjs", checksum: "current-hash", version: 4 },
+			},
+		});
+		const vault = makeVaultAdapterPort();
+		vault._files.set(
+			DEVICE_PATH,
+			JSON.stringify({
+				enabled: { "script-bump": true },
+				consent: { "script-bump": { checksum: "old-hash", version: 3 } },
+			}),
+		);
+		const store = makeStore(pluginData, vault);
+
+		const result = await store.evaluateTrust("script-bump");
+		expect(result.status).toBe("needs-consent");
+	});
+
+	it("drift (same version, different checksum) → drift-blocked (existing behaviour preserved)", async () => {
+		const pluginData = makePluginDataPort({
+			scripts: {
+				"script-drift-sec003": { source: "drift.cjs", checksum: "new-checksum", version: 7 },
+			},
+		});
+		const vault = makeVaultAdapterPort();
+		vault._files.set(
+			DEVICE_PATH,
+			JSON.stringify({
+				enabled: { "script-drift-sec003": true },
+				consent: { "script-drift-sec003": { checksum: "old-checksum", version: 7 } },
+			}),
+		);
+		const store = makeStore(pluginData, vault);
+
+		const result = await store.evaluateTrust("script-drift-sec003");
+		expect(result.status).toBe("drift-blocked");
+	});
+});
+
+// ---------------------------------------------------------------------------
 // (d) Drift: same version, different checksum → "drift-blocked"
 // ---------------------------------------------------------------------------
 

@@ -25,7 +25,7 @@
 //   1. id not in manifest                         → "unknown"
 //   2. enabled flag is explicitly false           → "disabled"
 //   3. no consent recorded for id                 → "needs-consent"
-//   4. consent.version < manifest.version         → "needs-consent"  (re-prompt; NOT drift)
+//   4. consent.version !== manifest.version       → "needs-consent"  (re-prompt; fail-closed on rollback too)
 //   5. same version, checksum mismatch            → "drift-blocked"  (hard-block)
 //   6. same version, same checksum                → "ok"
 //
@@ -206,7 +206,7 @@ export class ScriptStore {
 	 *   1. unknown   — id not in manifest
 	 *   2. disabled  — enabled flag is explicitly false
 	 *   3. needs-consent — no consent recorded
-	 *   4. needs-consent — consent.version < manifest.version (version bump → re-prompt)
+	 *   4. needs-consent — consent.version !== manifest.version (version mismatch → re-prompt; fail-closed on rollback)
 	 *   5. drift-blocked — same version, different checksum (trust violation; hard-block)
 	 *   6. ok        — same version, same checksum
 	 */
@@ -231,7 +231,9 @@ export class ScriptStore {
 			return { status: "needs-consent" };
 		}
 
-		if (consent.version < entry.version) {
+		// Require exact version match — fail-closed on both upgrades and rollbacks.
+		// A rollback (consent.version > entry.version) is equally suspect and must re-prompt.
+		if (consent.version !== entry.version) {
 			return { status: "needs-consent" };
 		}
 

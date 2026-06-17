@@ -28,6 +28,7 @@
 // (Electron) where the full Node runtime is available.
 
 import { createHash } from "node:crypto";
+import path from "node:path";
 import type { VaultAdapterPort, ScriptStore } from "./store";
 
 // ---------------------------------------------------------------------------
@@ -65,16 +66,25 @@ export interface ImportScriptArgs {
  *   5. Record manifest entry: store.setManifestEntry(id, { source: vaultPath, checksum, version })
  *
  * Throws if the source file cannot be read (vaultAdapter.read rejects).
- * Throws if vaultPath or destPath contains a ".." segment (path traversal rejected).
+ * Throws if vaultPath or destPath is absolute (absolute paths rejected).
+ * Throws if vaultPath or destPath contains a ".." segment on any separator (path traversal rejected).
  *
+ * Callers should pre-normalize paths via Obsidian's normalizePath() before passing here.
  * Callers must construct destPath from a sanitized id (no ".." segments allowed).
  */
 export async function importScript(args: ImportScriptArgs): Promise<void> {
 	const { id, vaultPath, destPath, version, store, vaultAdapter } = args;
 
-	// Guard: reject path traversal in vaultPath or destPath
+	// Guard: reject absolute paths
 	for (const p of [vaultPath, destPath]) {
-		if (p.split("/").some((seg) => seg === "..")) {
+		if (path.isAbsolute(p)) {
+			throw new Error(`importScript: absolute path rejected: ${p}`);
+		}
+	}
+
+	// Guard: reject path traversal on both "/" and "\" separators (catches Windows-style paths)
+	for (const p of [vaultPath, destPath]) {
+		if (p.split(/[/\\]/).some((seg) => seg === "..")) {
 			throw new Error(`importScript: path traversal rejected: ${p}`);
 		}
 	}
