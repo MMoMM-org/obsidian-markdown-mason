@@ -54,7 +54,7 @@ const makeEditor = (doc: string): HeadlessEditor => {
 };
 
 // ---------------------------------------------------------------------------
-// Test document: 201 characters — long enough to have a clear body region
+// Test document: 186 characters — long enough to have a clear body region
 // (around offset 10) and a near-end tail region (around offset 190).
 // ---------------------------------------------------------------------------
 
@@ -70,10 +70,10 @@ const DOC =
 	"\n" +                                     // 140   (1 char)
 	"Penultimate line to reach target length.\n" + // 141–182 (42 chars)
 	"\n" +                                     // 183   (1 char)
-	"Z end.";                                  // 184–189 (6 chars) → total 190
+	"Z end.";                                  // 184–189 (6 chars) → total 186
 
 // Sanity: confirm offsets before testing.
-// DOC.length should be 190; body insert at 10, tail insert at 185.
+// DOC.length === 186; body insert at 10, tail insert at 185.
 
 // ---------------------------------------------------------------------------
 // (a) + (b) — two-range plan applies atomically; cursor at mapped body-end
