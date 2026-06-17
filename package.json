@@ -10,7 +10,8 @@
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"lint": "eslint src/",
-		"check:manifest": "node scripts/check-manifest.mjs"
+		"check:manifest": "node scripts/check-manifest.mjs",
+		"compliance": "vitest run test/compliance.test.ts"
 	},
 	"keywords": [
 		"obsidian",
