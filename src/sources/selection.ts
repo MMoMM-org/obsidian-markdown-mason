@@ -20,8 +20,11 @@ export function selectionContext(
 ): OperationContext {
 	const doc = editor.getValue();
 	const [sel] = editor.listSelections();
-	const anchorOffset = editor.posToOffset(sel!.anchor);
-	const headOffset = editor.posToOffset(sel!.head);
+	if (!sel) {
+		throw new Error("selectionContext: editor has no selections");
+	}
+	const anchorOffset = editor.posToOffset(sel.anchor);
+	const headOffset = editor.posToOffset(sel.head);
 
 	const from = Math.min(anchorOffset, headOffset);
 	const to = Math.max(anchorOffset, headOffset);

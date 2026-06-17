@@ -220,3 +220,18 @@ describe("selectionContext — multi-line selection", () => {
 		expect(ctx.input).toBe(DOC.slice(7, 20));
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Degenerate editor — listSelections() returns empty array (W1 guard)
+// ---------------------------------------------------------------------------
+
+describe("selectionContext — no selections (defensive guard)", () => {
+	const editor = {
+		getValue: () => DOC,
+		listSelections: () => [] as EditorSelection[],
+	} as unknown as Editor;
+
+	it("throws with a message containing 'no selections'", () => {
+		expect(() => selectionContext(editor, SETTINGS)).toThrow(/no selections/);
+	});
+});
