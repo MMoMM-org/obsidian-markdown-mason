@@ -31,8 +31,11 @@ describe("perplexityWeb.canParse", () => {
 	});
 
 	it("returns false for input that contains a [^n_n] footnote definition", () => {
-		const input = "[^1_1]: https://example.com Some footnote text here";
-		expect(perplexityWeb.canParse(input)).toBe(false);
+		const syntheticInput = "[^1_1]: https://example.com Some footnote text here";
+		expect(perplexityWeb.canParse(syntheticInput)).toBe(false);
+
+		const webDownloadInput = loadFixture("webDownload");
+		expect(perplexityWeb.canParse(webDownloadInput)).toBe(false);
 	});
 
 	it("returns false for input with a Citations: block", () => {
