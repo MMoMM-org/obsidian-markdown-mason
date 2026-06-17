@@ -18,6 +18,20 @@
 //   Empty plan      →  descriptive Notice per-op (see EMPTY_NOTICES map)
 //   noContextHeading (cascade only) → shown via runRich before count check
 //
+// CASCADE SELECTION SEMANTICS (F6.1 ops×sources matrix)
+//   cascade is a PASTE + SELECTION operation — it transforms content that is
+//   NEW to the document (pasted text) or SELECTED text that should be re-levelled
+//   relative to the heading above. It is NOT a whole-note operation.
+//
+//   When cascade runs on a selection the core returns a plan with a single
+//   INSERT at cursor ({from:cursor, to:cursor, insert:<transformed text>}).
+//   That insert semantics is correct for PASTE (new content appears at cursor).
+//   For a SELECTION the content already exists in the document, so we REMAP
+//   the insert into a REPLACE over the selection bounds:
+//     {from: selection.from, to: selection.to, insert: plan[0].insert}
+//   This replaces the existing selected headings in place without duplicating them.
+//   See cascadeSelectionPlan() below.
+//
 // PRESETS (F5)
 //   Chains ops by concatenating their EditPlans from entry.run(ctx) and
 //   applying via ONE applyEditPlan call (single undo step).
@@ -38,7 +52,7 @@ import { buildRegistry } from "./core/registry";
 import type { RegistryEntry } from "./core/registry";
 import { applyEditPlan } from "./sources/apply";
 import { selectionContext } from "./sources/selection";
-import type { EditPlan, MasonSettings, OperationContext } from "./core/types";
+import type { Edit, EditPlan, MasonSettings, OperationContext } from "./core/types";
 
 // ---------------------------------------------------------------------------
 // Descriptive no-op Notices per operation (F7 — never silent)
@@ -98,6 +112,43 @@ function selectionCtx(settings: MasonSettings): CtxFactory {
 }
 
 // ---------------------------------------------------------------------------
+// cascadeSelectionPlan — insert→replace remap for the already-in-doc selection
+//
+// cascade core emits {from:cursor, to:cursor, insert:<transformed text>} —
+// this is correct for PASTE (new content is inserted at cursor). When cascade
+// operates on a SELECTION, the selected text already lives in the document.
+// We remap the insert into a REPLACE over the selection range:
+//   {from: selection.from, to: selection.to, insert: <transformed text>}
+// so the existing selected headings are replaced in place rather than the
+// transformed text being inserted at cursor (which would double the selection).
+//
+// Returns null when the cascade result has no plan (noContextHeading or no
+// headings in selection), so callers can handle that uniformly.
+// ---------------------------------------------------------------------------
+
+function cascadeSelectionPlan(
+	entry: RegistryEntry,
+	ctx: OperationContext,
+): { plan: Edit[] | null; noContextHeading: boolean } {
+	if (!entry.runRich) {
+		return { plan: null, noContextHeading: false };
+	}
+	const result = entry.runRich(ctx);
+	if (result.noContextHeading) {
+		return { plan: null, noContextHeading: true };
+	}
+	if (result.plan.length === 0) {
+		return { plan: null, noContextHeading: false };
+	}
+	// Remap insert-at-cursor → replace-over-selection.
+	// ctx.selection is always set by selectionContext; non-null assertion is safe here.
+	const sel = ctx.selection!;
+	const transformedText = result.plan[0]!.insert;
+	const replacePlan: Edit[] = [{ from: sel.from, to: sel.to, insert: transformedText }];
+	return { plan: replacePlan, noContextHeading: false };
+}
+
+// ---------------------------------------------------------------------------
 // runOperation — synchronous; builds ctx, runs op, dispatches result
 // ---------------------------------------------------------------------------
 
@@ -117,8 +168,38 @@ function runOperation(
 ): EditPlan {
 	const ctx = buildCtx(editor);
 
-	// cascade: use runRich to surface noContextHeading Notice (F7 / SDD)
+	// cascade: use cascadeSelectionPlan (when selection-scoped) or runRich (whole-note).
+	// In both cases the insert→replace remap only applies when a selection is present.
 	if (entry.id === "headings.cascade" && entry.runRich) {
+		if (ctx.selection !== undefined) {
+			// Selection-scoped cascade: remap insert→replace so the selection is
+			// replaced in place, not inserted at cursor (which would double the text).
+			const { plan, noContextHeading } = cascadeSelectionPlan(entry, ctx);
+			if (noContextHeading) {
+				if (apply) {
+					new Notice(EMPTY_NOTICES["headings.cascade"] ?? DEFAULT_EMPTY_NOTICE);
+				}
+				return [];
+			}
+			if (plan === null || plan.length === 0) {
+				if (apply) {
+					showEmptyNotice(entry.id);
+				}
+				return [];
+			}
+			if (apply) {
+				applyEditPlan(editor, plan);
+				showCountNotice(plan.length);
+			}
+			return plan;
+		}
+
+		// No selection (whole-note path, e.g. from a command that builds wholeNoteCtx).
+		// W3: In preset mode (apply=false) any noContextHeading result folds silently
+		// into the preset-level no-op Notice rather than emitting a per-step Notice.
+		// This is an intentional trade-off (one preset-level Notice, not per-step
+		// Notices) so the user sees a single coherent message. F7 "never silent"
+		// intent is satisfied at the preset level, not the step level.
 		const result = entry.runRich(ctx);
 		if (result.noContextHeading) {
 			if (apply) {
@@ -232,6 +313,8 @@ export function registerCommands(
 	// "Mason: Format selection" — cascade → normalize → fromCitations → identity → move
 	// Operates on the SELECTION (F5.2): context is built via selectionContext so cascade
 	// and normalize act on the selected text, not the whole document.
+	// cascade step uses selection-replace semantics (cascadeSelectionPlan remap):
+	// the selected headings are replaced in place, not inserted at cursor.
 	// PARSER-PENDING: footnote steps are stubs until Phase 4.
 	// TODO(Phase 4): wire selection-scoped context for footnote steps.
 	plugin.addCommand({
@@ -249,25 +332,23 @@ export function registerCommands(
 		},
 	});
 
-	// "Mason: Paste and format" — cascade → normalize → fromCitations → identity → move
-	// PARSER-PENDING: clipboard reading + paste interception = Phase 5.
-	// TODO(Phase 5): intercept paste event, read clipboard, prepend content
-	// before the format steps so pasted text is processed.
+	// "Mason: Paste and format" — Phase 5 seam.
+	// This preset requires clipboard content (Phase 5 paste interception).
+	// It must NOT run live operations in Phase 3 — cascade with ctx.input=doc
+	// would insert a transformed copy of the whole document at cursor (doubling).
+	// Guard: show a descriptive Notice and return without running any steps.
+	// TODO(Phase 5): intercept paste event, read clipboard, build pasteCtx with
+	// clipboard content as ctx.input, then run the full format pipeline:
+	//   cascade → normalize → fromCitations → identity → move
+	// Empty clipboard → Notice "Nothing is on the clipboard"; return.
 	plugin.addCommand({
 		id: "preset.pasteAndFormat",
 		name: "Mason: Paste and format",
 		editorCallback(editor: Editor): void {
-			// Phase 5 seam: clipboard content will be read here and inserted before
-			// running the format pipeline. Empty clipboard → Notice (F5 AC).
-			// TODO(Phase 5): if clipboard empty → show Notice "Nothing is on the clipboard"; return.
-			const steps = [
-				byId["headings.cascade"],
-				byId["headings.normalize"],
-				byId["footnotes.fromCitations"],
-				byId["footnotes.identity"],
-				byId["footnotes.move"],
-			].filter((e): e is RegistryEntry => e !== undefined);
-			runPreset(steps, editor, wholeNoteCtx(plugin.settings), "Nothing to paste and format");
+			// Phase 5 seam — clipboard paste not yet available.
+			// editor unused until Phase 5 wires clipboard paste.
+			void editor;
+			new Notice("Paste and format isn't available yet.");
 		},
 	});
 
@@ -283,14 +364,33 @@ export function registerCommands(
 			continue;
 		}
 
-		// Capture entry in closure to avoid loop-variable aliasing
-		const capturedEntry = entry;
+		// "Mason: Cascade headings" — SELECTION-scoped (F6.1 ops×sources matrix).
+		// cascade is a PASTE + SELECTION operation; it is NOT a whole-note op.
+		// With no selection (collapsed/empty): show descriptive Notice and return.
+		// With a selection: build selectionCtx, run cascade via runOperation
+		// (which calls cascadeSelectionPlan to remap insert→replace), apply, Notice.
+		if (entry.id === "headings.cascade") {
+			plugin.addCommand({
+				id: entry.id,
+				name: entry.command.name,
+				editorCallback(editor: Editor): void {
+					const ctx = selectionContext(editor, plugin.settings);
+					// Guard: empty selection → no content to cascade
+					if (ctx.input === "") {
+						new Notice("Select text to cascade headings.");
+						return;
+					}
+					runOperation(entry, editor, selectionCtx(plugin.settings), true);
+				},
+			});
+			continue;
+		}
 
 		plugin.addCommand({
-			id: capturedEntry.id,
-			name: capturedEntry.command.name,
+			id: entry.id,
+			name: entry.command.name,
 			editorCallback(editor: Editor): void {
-				runOperation(capturedEntry, editor, wholeNoteCtx(plugin.settings), true);
+				runOperation(entry, editor, wholeNoteCtx(plugin.settings), true);
 			},
 		});
 	}

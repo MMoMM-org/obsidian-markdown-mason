@@ -320,8 +320,8 @@ describe("T3.4(d) — preset chains ops; changes are fully undone in one step", 
 	it("preset.formatSelection with heading skip: doc changes then ONE undo fully restores it", async () => {
 		// H1 → H3: normalize will demote ### to ##.
 		// Selection context: default zero-length selection at offset 0 → cascade gets empty
-		// input (no headings in selection) → no cascade plan. Normalize still operates on
-		// whole ctx.doc → produces one edit demoting ### to ##.
+		// input (no headings in selection) → no cascade plan (empty input guard).
+		// Normalize still operates on whole ctx.doc → produces one edit demoting ### to ##.
 		const doc = "# Title\n\n### Skipped Level\n\nContent.\n";
 		const editor = makeCmEditor(doc);
 
@@ -355,16 +355,24 @@ describe("T3.4(d) — preset chains ops; changes are fully undone in one step", 
 });
 
 // ---------------------------------------------------------------------------
-// (e) cascade with no heading above cursor → noContextHeading Notice
+// (e) cascade with no selection → descriptive Notice, doc unchanged, no apply
 // ---------------------------------------------------------------------------
 
-describe("T3.4(e) — cascade noContextHeading Notice", () => {
+describe("T3.4(e) — cascade with no selection shows Notice, doc unchanged", () => {
 	beforeEach(() => clearNoticeLog());
 
-	it("cascade on a doc with no heading above cursor shows the noContextHeading Notice", async () => {
-		// A document with NO headings at all — cascade will set noContextHeading=true
-		const doc = "Just plain text, no headings at all.\n";
-		const editor = makeCmEditor(doc);
+	it("cascade with collapsed (empty) selection shows 'Select text' Notice and leaves doc unchanged", async () => {
+		// Doc has a heading above cursor so noContextHeading would NOT fire —
+		// the empty-selection guard must fire first.
+		const doc = "# Title\n\nSome content.\n";
+		// Collapsed selection (anchor === head) → input will be ""
+		const editor = makeCmEditor(doc, {
+			cursor: { line: 1, ch: 0 },
+			selections: [
+				{ anchor: { line: 1, ch: 0 }, head: { line: 1, ch: 0 } },
+			],
+		});
+		const docBefore = editor.getValue();
 
 		const plugin = makePlugin();
 		await plugin.onload();
@@ -382,14 +390,309 @@ describe("T3.4(e) — cascade noContextHeading Notice", () => {
 
 		cascadeCmd!.editorCallback(editor as unknown as Editor);
 
-		// Should show a Notice about no heading context
+		// Doc must NOT have been mutated
+		expect(editor.getValue()).toBe(docBefore);
+
+		// Must show a descriptive Notice about selecting text
 		const notices = noticeLog();
 		expect(notices.length, "expected at least one Notice").toBeGreaterThan(0);
-		// The noContextHeading Notice should mention heading or context
+		const hasSelectNotice = notices.some(
+			(m: string) => /select/i.test(m),
+		);
+		expect(
+			hasSelectNotice,
+			`expected a "select text" Notice; got: ${JSON.stringify(notices)}`,
+		).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// (e2) cascade noContextHeading Notice — with a selection but no heading above
+// ---------------------------------------------------------------------------
+
+describe("T3.4(e2) — cascade noContextHeading Notice when no heading above cursor", () => {
+	beforeEach(() => clearNoticeLog());
+
+	it("cascade with a selection but no heading above cursor shows noContextHeading Notice", async () => {
+		// A document with NO headings at all — cascade will set noContextHeading=true
+		// Select the text so the empty-selection guard is bypassed.
+		const doc = "Just plain text, no headings at all.\n";
+		// Select the whole content
+		const editor = makeCmEditor(doc, {
+			cursor: { line: 0, ch: 36 },
+			selections: [
+				{ anchor: { line: 0, ch: 0 }, head: { line: 0, ch: 36 } },
+			],
+		});
+		const docBefore = editor.getValue();
+
+		const plugin = makePlugin();
+		await plugin.onload();
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		(plugin.app as any).workspace._fireLayoutReady();
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const commands = (plugin as any)._commands as Array<{
+			id: string;
+			editorCallback(editor: Editor): void;
+		}>;
+
+		const cascadeCmd = commands.find((c) => c.id === "headings.cascade");
+		expect(cascadeCmd).toBeDefined();
+
+		cascadeCmd!.editorCallback(editor as unknown as Editor);
+
+		// Doc must NOT have been mutated
+		expect(editor.getValue()).toBe(docBefore);
+
+		// Should show a Notice about no heading context (not "select text")
+		const notices = noticeLog();
+		expect(notices.length, "expected at least one Notice").toBeGreaterThan(0);
 		const hasHeadingNotice = notices.some(
 			(m: string) => /head/i.test(m) || /context/i.test(m) || /cursor/i.test(m) || /no heading/i.test(m),
 		);
 		expect(hasHeadingNotice, `expected a heading-related Notice; got: ${JSON.stringify(notices)}`).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// (f) Cascade replaces selection — no doubling
+//
+// Proof: select a heading within the doc, run cascade, assert:
+//   1. The doc does NOT double in length (no insert-at-cursor duplication).
+//   2. The selected heading text appears EXACTLY ONCE in the result.
+//   3. The heading level was shifted (cascade transformed it).
+//   4. A count Notice was shown.
+//
+// Doc layout:
+//   "# Top\n"     → 6 chars (line 0, offsets 0-5)
+//   "\n"          → 1 char  (line 1, offset 6)
+//   "## Sub\n"    → 7 chars (line 2, offsets 7-13)
+//   "Content.\n"  → 9 chars (line 3)
+//
+// Selection: the "## Sub\n" line (anchor=line2,ch0 → offset7; head=line3,ch0 → offset14).
+// selectionContext: input="## Sub\n", cursor=14, from=7, to=14.
+// findContextLevel(doc, 14): doc.slice(0,14) has "# Top" → ctxLevel=1.
+// cascade shift = (1+1 - 2) = 0 → no heading level change.
+//
+// Change doc so cursor is between headings to get a non-zero shift:
+// Doc: "# Top\n\n## Sub\nContent.\n"
+//   line 0: "# Top\n"  → 6 chars
+//   line 1: "\n"       → 1 char (offset 6)
+//   line 2: "## Sub\n" → 7 chars (offset 7-13)
+//   line 3: "Content.\n"
+// Selection: anchor={line:2,ch:0} → offset 7; head={line:3,ch:0} → offset 14.
+// ctx.cursor = 14. doc.slice(0,14) = "# Top\n\n## Sub" → last heading = ## level 2.
+// WAIT: cursor is at offset 14 (start of "Content"), so doc.slice(0,14) ends AFTER "## Sub\n".
+// findContextLevel sees "## Sub" → ctxLevel=2. shift = (2+1-2) = 1.
+// "## Sub\n" → "### Sub\n".
+// REPLACE edit: {from:7, to:14, insert:"### Sub\n"} — same length, replaces in place.
+// Result doc: "# Top\n\n### Sub\nContent.\n" — "## Sub" gone, "### Sub" present once.
+// ---------------------------------------------------------------------------
+
+describe("T3.4(f) — cascade REPLACES selection; no document doubling", () => {
+	beforeEach(() => clearNoticeLog());
+
+	it("cascade on a selection replaces the selected heading in place — heading shifted, no doubling", async () => {
+		// Doc: "# Top\n\n## Sub\nContent.\n"
+		const doc = "# Top\n\n## Sub\nContent.\n";
+		// Selection: "## Sub\n" — anchor=line2,ch0 (offset7), head=line3,ch0 (offset14)
+		// cursor=14: doc.slice(0,14)="# Top\n\n## Sub" → last heading=## ctxLevel=2
+		// shift=(2+1-2)=1 → "## Sub\n" → "### Sub\n"
+		const editor = makeCmEditor(doc, {
+			cursor: { line: 3, ch: 0 },
+			selections: [
+				{ anchor: { line: 2, ch: 0 }, head: { line: 3, ch: 0 } },
+			],
+		});
+
+		const plugin = makePlugin();
+		await plugin.onload();
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		(plugin.app as any).workspace._fireLayoutReady();
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const commands = (plugin as any)._commands as Array<{
+			id: string;
+			editorCallback(editor: Editor): void;
+		}>;
+
+		const cascadeCmd = commands.find((c) => c.id === "headings.cascade");
+		expect(cascadeCmd, "headings.cascade must be registered").toBeDefined();
+
+		cascadeCmd!.editorCallback(editor as unknown as Editor);
+
+		const result = editor.getValue();
+
+		// 1. No doubling: result must not be longer than the original + 2 chars (level shift adds 1 #)
+		expect(
+			result.length,
+			`doc length must not roughly double: original=${doc.length}, result=${result.length}`,
+		).toBeLessThan(doc.length + 10);
+
+		// 2. The original "## Sub" must appear at most 0 times (replaced by "### Sub")
+		const originalHeadingCount = (result.match(/^## Sub/gm) ?? []).length;
+		expect(
+			originalHeadingCount,
+			`"## Sub" must be replaced (not duplicated); found ${originalHeadingCount} occurrences`,
+		).toBe(0);
+
+		// 3. The shifted heading must appear exactly once
+		const shiftedCount = (result.match(/^### Sub/gm) ?? []).length;
+		expect(
+			shiftedCount,
+			`"### Sub" must appear exactly once after cascade replace; found ${shiftedCount}`,
+		).toBe(1);
+
+		// 4. Count Notice must have been shown
+		const countNotices = noticeLog().filter((m: string) => /^Mason: \d+ change/.test(m));
+		expect(
+			countNotices.length,
+			"expected a count Notice after cascade replaced the selection",
+		).toBeGreaterThanOrEqual(1);
+	});
+
+	it("preset.formatSelection cascade step replaces the selection — no doubling", async () => {
+		// Same setup as above but via preset.formatSelection.
+		// Doc layout (offsets):
+		//   "# Heading\n"  → 10 chars (line 0, offsets 0-9)
+		//   "\n"           →  1 char  (line 1, offset 10)
+		//   "## Sub\n"     →  7 chars (line 2, offsets 11-17)
+		//   "\n"           →  1 char  (line 3, offset 18)
+		//   "Rest.\n"      →  6 chars (line 4)
+		const doc = "# Heading\n\n## Sub\n\nRest.\n";
+
+		// Selection: anchor = start of "## Sub" (line 2, ch 0, offset 11)
+		//            head   = start of blank line after (line 3, ch 0, offset 18)
+		// selectionContext: input="## Sub\n", cursor=18, from=11, to=18
+		// doc.slice(0,18) = "# Heading\n\n## Sub" → last heading=## ctxLevel=2
+		// shift = (2+1-2) = 1 → "## Sub\n" → "### Sub\n"
+		// cascadeSelectionPlan remaps to {from:11, to:18, insert:"### Sub\n"} (replace)
+		const editor = makeCmEditor(doc, {
+			cursor: { line: 3, ch: 0 },
+			selections: [
+				{ anchor: { line: 2, ch: 0 }, head: { line: 3, ch: 0 } },
+			],
+		});
+
+		const plugin = makePlugin();
+		await plugin.onload();
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		(plugin.app as any).workspace._fireLayoutReady();
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const commands = (plugin as any)._commands as Array<{
+			id: string;
+			editorCallback(editor: Editor): void;
+		}>;
+
+		const presetCmd = commands.find((c) => c.id === "preset.formatSelection");
+		expect(presetCmd, "preset.formatSelection must be registered").toBeDefined();
+
+		presetCmd!.editorCallback(editor as unknown as Editor);
+
+		const result = editor.getValue();
+
+		// No doubling: result must be close in length to original
+		expect(
+			result.length,
+			`doc length must not roughly double: original=${doc.length}, result=${result.length}`,
+		).toBeLessThan(doc.length + 10);
+
+		// cascade must have transformed "## Sub" → "### Sub"
+		expect(result, "cascade must have shifted the heading level").toContain("### Sub");
+
+		// The original "## Sub" heading must be gone (replaced, not duplicated)
+		const originalHeadingCount = (result.match(/^## Sub/gm) ?? []).length;
+		expect(
+			originalHeadingCount,
+			`"## Sub" must be replaced, not retained; found ${originalHeadingCount} occurrences`,
+		).toBe(0);
+
+		// A count Notice must have been shown
+		const countNotices = noticeLog().filter((m: string) => /^Mason: \d+ change/.test(m));
+		expect(
+			countNotices.length,
+			"expected a count Notice after Format selection applied a cascade plan",
+		).toBeGreaterThanOrEqual(1);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// (g) Paste and format — guarded as Phase 5 not-yet-available
+//
+// "Mason: Paste and format" must NOT run any live operations in Phase 3.
+// It must show a "not available yet" Notice and leave the doc unchanged.
+// ---------------------------------------------------------------------------
+
+describe("T3.4(g) — Paste and format is guarded (Phase 5 seam)", () => {
+	beforeEach(() => clearNoticeLog());
+
+	it("preset.pasteAndFormat shows not-available Notice and leaves doc unchanged", async () => {
+		const doc = "# Title\n\n## Section\n\nContent.\n";
+		const editor = makeCmEditor(doc, {
+			cursor: { line: 1, ch: 0 },
+		});
+		const docBefore = editor.getValue();
+
+		const plugin = makePlugin();
+		await plugin.onload();
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		(plugin.app as any).workspace._fireLayoutReady();
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const commands = (plugin as any)._commands as Array<{
+			id: string;
+			editorCallback(editor: Editor): void;
+		}>;
+
+		const pasteCmd = commands.find((c) => c.id === "preset.pasteAndFormat");
+		expect(pasteCmd, "preset.pasteAndFormat must be registered").toBeDefined();
+
+		pasteCmd!.editorCallback(editor as unknown as Editor);
+
+		// Doc must NOT have been mutated
+		expect(
+			editor.getValue(),
+			"pasteAndFormat must not modify the document in Phase 3",
+		).toBe(docBefore);
+
+		// Must show a Notice indicating the feature is not available
+		const notices = noticeLog();
+		expect(notices.length, "expected at least one Notice").toBeGreaterThan(0);
+		const hasNotAvailableNotice = notices.some(
+			(m: string) => /available/i.test(m) || /not yet/i.test(m) || /phase/i.test(m),
+		);
+		expect(
+			hasNotAvailableNotice,
+			`expected a "not available" Notice; got: ${JSON.stringify(notices)}`,
+		).toBe(true);
+	});
+
+	it("preset.pasteAndFormat does not show a count Notice (no operations ran)", async () => {
+		const doc = "# Title\n\n## Section\n\nContent.\n";
+		const editor = makeCmEditor(doc);
+
+		const plugin = makePlugin();
+		await plugin.onload();
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		(plugin.app as any).workspace._fireLayoutReady();
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const commands = (plugin as any)._commands as Array<{
+			id: string;
+			editorCallback(editor: Editor): void;
+		}>;
+
+		const pasteCmd = commands.find((c) => c.id === "preset.pasteAndFormat");
+		pasteCmd!.editorCallback(editor as unknown as Editor);
+
+		// Must NOT show a count Notice ("Mason: N change(s)") — no steps ran
+		const countNotices = noticeLog().filter((m: string) => /^Mason: \d+ change/.test(m));
+		expect(
+			countNotices.length,
+			"pasteAndFormat must not show a count Notice",
+		).toBe(0);
 	});
 });
 
@@ -427,187 +730,5 @@ describe("T3.4 single-undo integration — preset produces one undo step", () =>
 		// One undo must restore the original document exactly
 		undo(editor.cm);
 		expect(editor.getValue()).toBe(doc);
-	});
-});
-
-// ---------------------------------------------------------------------------
-// (f) Format selection scoping — cascade receives selection as input, not whole doc
-//
-// Proof: place a selection covering "## Sub\n" (a level-2 heading) with the
-// selection head positioned AFTER "## Sub\n" (offset 18). The heading
-// "# Heading" precedes the selection in ctx.doc. With selectionContext:
-//   ctx.input  = "## Sub\n"   (selected text)
-//   ctx.cursor = 18           (head offset)
-//   findContextLevel(doc, 18) finds "## Sub" as the last heading → ctxLevel=2
-//   cascade shifts "## Sub" by (ctxLevel+1 - minIn) = (3-2) = 1 → "### Sub"
-//   plan = [{from:18, to:18, insert:"### Sub\n"}]
-//
-// After applying, the doc contains "### Sub" — proving cascade used the
-// selection as input (not the whole doc). With whole-note ctx and cursor=0
-// (incorrect path), cascade would find ctxLevel=0 → noContextHeading → no
-// plan → doc unchanged.
-// ---------------------------------------------------------------------------
-
-describe("T3.4(f) — Format selection scopes cascade to the selection", () => {
-	beforeEach(() => clearNoticeLog());
-
-	it("preset.formatSelection inserts a cascade-shifted heading at the selection head", async () => {
-		// Doc layout (offsets):
-		//   "# Heading\n"  → 10 chars (line 0, offsets 0-9)
-		//   "\n"           →  1 char  (line 1, offset 10)
-		//   "## Sub\n"     →  7 chars (line 2, offsets 11-17)
-		//   "\n"           →  1 char  (line 3, offset 18)
-		//   "Rest.\n"      →  6 chars (line 4)
-		const doc = "# Heading\n\n## Sub\n\nRest.\n";
-
-		// Selection: anchor = start of "## Sub" (line 2, ch 0, offset 11)
-		//            head   = start of blank line after (line 3, ch 0, offset 18)
-		// selectionContext produces: input="## Sub\n", cursor=18, from=11, to=18
-		const editor = makeCmEditor(doc, {
-			cursor: { line: 3, ch: 0 },
-			selections: [
-				{ anchor: { line: 2, ch: 0 }, head: { line: 3, ch: 0 } },
-			],
-		});
-
-		const plugin = makePlugin();
-		await plugin.onload();
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		(plugin.app as any).workspace._fireLayoutReady();
-
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const commands = (plugin as any)._commands as Array<{
-			id: string;
-			editorCallback(editor: Editor): void;
-		}>;
-
-		const presetCmd = commands.find((c) => c.id === "preset.formatSelection");
-		expect(presetCmd, "preset.formatSelection must be registered").toBeDefined();
-
-		presetCmd!.editorCallback(editor as unknown as Editor);
-
-		// cascade must have transformed "## Sub" → "### Sub" and inserted at offset 18.
-		// The resulting doc must contain "### Sub" — proving selection-scoped input was used.
-		// If whole-note ctx with cursor=0 were used instead, cascade would find ctxLevel=0
-		// (noContextHeading) and produce no plan, leaving the doc unchanged.
-		expect(
-			editor.getValue(),
-			"cascade must have inserted a shifted heading — proving selectionContext was used",
-		).toContain("### Sub");
-
-		// A count Notice must have been shown (plan was non-empty)
-		const countNotices = noticeLog().filter((m: string) => /^Mason: \d+ change/.test(m));
-		expect(
-			countNotices.length,
-			"expected a count Notice after Format selection applied a cascade plan",
-		).toBeGreaterThanOrEqual(1);
-	});
-});
-
-// ---------------------------------------------------------------------------
-// (g) Cascade functional with real cursor — Bug 2 regression
-//
-// Before the fix, editorCtx hardcoded cursor=0, so cascade always found
-// ctxLevel=0 → noContextHeading=true even when a heading existed above the
-// real caret. This test proves that the whole-note ctx now reads the real
-// caret position, making cascade functional.
-//
-// Doc: "## Context\n\n### Target\n"
-//   "## Context\n" = 11 chars (line 0)
-//   "\n"           =  1 char  (line 1, offset 11)
-//   "### Target\n" = 11 chars (line 2)
-//
-// Caret at {line:1, ch:0} → offset 11.
-// doc.slice(0, 11) = "## Context\n" → ctxLevel = 2.
-// cascade input = whole doc (## Context, level 2 and ### Target, level 3).
-// minIn = 2, shift = (2+1) - 2 = 1 → ## Context → ### Context, ### Target → #### Target.
-// plan.length = 1 → one insert at offset 11 → count Notice shown.
-// noContextHeading Notice must NOT be shown.
-// ---------------------------------------------------------------------------
-
-describe("T3.4(g) — cascade is functional when caret is below a real heading", () => {
-	beforeEach(() => clearNoticeLog());
-
-	it("cascade shows count Notice (not noContextHeading) when caret is below a heading", async () => {
-		// ## Context is above the caret; ### Target is below. Caret on the blank line.
-		const doc = "## Context\n\n### Target\n";
-
-		// Caret at line 1, ch 0 → offset 11 (the blank line between the headings)
-		const editor = makeCmEditor(doc, {
-			cursor: { line: 1, ch: 0 },
-		});
-
-		const plugin = makePlugin();
-		await plugin.onload();
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		(plugin.app as any).workspace._fireLayoutReady();
-
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const commands = (plugin as any)._commands as Array<{
-			id: string;
-			editorCallback(editor: Editor): void;
-		}>;
-
-		const cascadeCmd = commands.find((c) => c.id === "headings.cascade");
-		expect(cascadeCmd, "headings.cascade must be registered").toBeDefined();
-
-		cascadeCmd!.editorCallback(editor as unknown as Editor);
-
-		const notices = noticeLog();
-		expect(notices.length, "expected at least one Notice").toBeGreaterThan(0);
-
-		// Must NOT show noContextHeading Notice (heading IS above cursor)
-		const hasNoHeadingNotice = notices.some(
-			(m: string) => /no heading above cursor/i.test(m),
-		);
-		expect(
-			hasNoHeadingNotice,
-			`noContextHeading Notice must NOT fire when a heading is above cursor; got: ${JSON.stringify(notices)}`,
-		).toBe(false);
-
-		// Must show a count Notice (plan was non-empty)
-		const countNotices = notices.filter((m: string) => /^Mason: \d+ change/.test(m));
-		expect(
-			countNotices.length,
-			"expected a count Notice after cascade applied a non-empty plan",
-		).toBeGreaterThanOrEqual(1);
-
-		// Doc must have changed (cascade inserted the transformed content)
-		expect(editor.getValue(), "cascade must mutate the doc").not.toBe(doc);
-	});
-
-	it("cascade on a doc with no heading above cursor still shows noContextHeading Notice", async () => {
-		// Regression: existing behavior — no heading above caret → noContextHeading Notice.
-		// This test was T3.4(e); we verify it still passes with the real-cursor fix.
-		const doc = "Just plain text, no headings at all.\n";
-
-		// Default cursor {line:0, ch:0} → offset 0; doc.slice(0,0)="" → ctxLevel=0
-		const editor = makeCmEditor(doc);
-
-		const plugin = makePlugin();
-		await plugin.onload();
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		(plugin.app as any).workspace._fireLayoutReady();
-
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const commands = (plugin as any)._commands as Array<{
-			id: string;
-			editorCallback(editor: Editor): void;
-		}>;
-
-		const cascadeCmd = commands.find((c) => c.id === "headings.cascade");
-		expect(cascadeCmd).toBeDefined();
-
-		cascadeCmd!.editorCallback(editor as unknown as Editor);
-
-		const notices = noticeLog();
-		expect(notices.length, "expected at least one Notice").toBeGreaterThan(0);
-		const hasHeadingNotice = notices.some(
-			(m: string) => /head/i.test(m) || /context/i.test(m) || /cursor/i.test(m) || /no heading/i.test(m),
-		);
-		expect(
-			hasHeadingNotice,
-			`expected a heading-related Notice; got: ${JSON.stringify(notices)}`,
-		).toBe(true);
 	});
 });
