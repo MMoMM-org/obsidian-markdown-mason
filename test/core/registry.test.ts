@@ -298,15 +298,15 @@ describe("footnotes.identity — composition", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Phase-4 seam stubs — entry.run for fromCitations / identity
+// footnotes.fromCitations / identity — entry.run on empty doc
 // ---------------------------------------------------------------------------
 //
-// W3: These stubs return [] to signal "no EditPlan without a ParseResult".
-// Tests guard against a silent no-op if T3.4 accidentally routes through
-// entry.run instead of the api.footnotes.* two-argument paths.
+// Both ops are now fully wired (Phase 5+). On a doc with no footnotes the
+// result is [] — verified here so any regression that wires the wrong path
+// fails loudly rather than silently.
 
-describe("footnotes.fromCitations — entry.run stub", () => {
-	it("entry.run returns empty plan (Phase-4 seam, ParseResult not yet available from ctx)", () => {
+describe("footnotes.fromCitations — entry.run on doc with no citations", () => {
+	it("returns empty plan when doc has no bare [n] markers", () => {
 		const { entries } = buildRegistry();
 		const entry = entries.find((e) => e.id === "footnotes.fromCitations")!;
 		const plan = entry.run(makeCtx());
@@ -314,8 +314,8 @@ describe("footnotes.fromCitations — entry.run stub", () => {
 	});
 });
 
-describe("footnotes.identity — entry.run stub", () => {
-	it("entry.run returns empty plan (Phase-4 seam, ParseResult not yet available from ctx)", () => {
+describe("footnotes.identity — entry.run on doc with no footnotes", () => {
+	it("returns empty plan when doc has no numeric footnote refs or defs", () => {
 		const { entries } = buildRegistry();
 		const entry = entries.find((e) => e.id === "footnotes.identity")!;
 		const plan = entry.run(makeCtx());

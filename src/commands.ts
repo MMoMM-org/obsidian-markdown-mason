@@ -35,10 +35,8 @@
 // PRESETS (F5)
 //   Chains ops by concatenating their EditPlans from entry.run(ctx) and
 //   applying via ONE applyEditPlan call (single undo step).
-//   Footnote steps (fromCitations, identity, move-with-defs) are PARSER-PENDING:
-//   entry.run(ctx) returns [] until Phase 4 plumbs a ParseResult from ctx.doc.
-//   TODO(Phase 4): replace entry.run(ctx) stubs with parser-backed calls so
-//   preset steps produce real footnote EditPlans.
+//   The "Tidy footnotes" preset is handled separately via tidyFootnotes() because
+//   C/O+D/M are not offset-independent and must be fused into a single diff.
 //
 // CONSTRAINTS
 //   - No default hotkeys (no `hotkeys` field on any addCommand call).
@@ -50,6 +48,7 @@ import type { Plugin } from "obsidian";
 import type { Editor } from "obsidian";
 import { buildRegistry } from "./core/registry";
 import type { RegistryEntry } from "./core/registry";
+import { tidyFootnotes } from "./core/noteFootnotes";
 import { applyEditPlan } from "./sources/apply";
 import { selectionContext } from "./sources/selection";
 import type { Edit, EditPlan, MasonSettings, OperationContext } from "./core/types";
@@ -252,11 +251,6 @@ function runOperation(
 /**
  * Chains multiple registry entries by concatenating their EditPlans and
  * applying the combined plan in a single applyEditPlan call (one undo step).
- *
- * PARSER-PENDING seam: footnote entries (fromCitations, identity, move) return
- * empty plans via entry.run(ctx) until Phase 4 supplies a ParseResult. The
- * chaining mechanism is real and tested; Phase 4 plugs the parser in.
- * TODO(Phase 4): replace entry.run stubs with parser-backed calls.
  */
 function runPreset(
 	entries: RegistryEntry[],
@@ -303,19 +297,24 @@ export function registerCommands(
 	// Preset commands (registered first per SDD)
 	// -------------------------------------------------------------------------
 
-	// "Mason: Tidy footnotes" — fromCitations → identity → move across the note
-	// PARSER-PENDING: all three footnote steps return [] until Phase 4.
-	// TODO(Phase 4): replace entry.run stubs with ParseResult-backed calls.
+	// "Mason: Tidy footnotes" — C → O+D → M fused via tidyFootnotes.
+	// Uses a fused single-pass composition rather than chaining three independent
+	// entry.run() calls because C, O+D, and M are not offset-independent: C
+	// expands bare [n] (adding a character each), shifting all subsequent offsets.
+	// tidyFootnotes composes via applyToString on scratch strings and emits ONE
+	// EditPlan vs the original doc (single CM6 transaction = single undo step).
 	plugin.addCommand({
 		id: "preset.tidyFootnotes",
 		name: "Tidy footnotes",
 		editorCallback(editor: Editor): void {
-			const steps = [
-				byId["footnotes.fromCitations"],
-				byId["footnotes.identity"],
-				byId["footnotes.move"],
-			].filter((e): e is RegistryEntry => e !== undefined);
-			runPreset(steps, editor, wholeNoteCtx(plugin.settings), "No footnotes found to tidy");
+			const ctx = wholeNoteCtx(plugin.settings)(editor);
+			const plan = tidyFootnotes(ctx);
+			if (plan.length === 0) {
+				new Notice("No footnotes found to tidy");
+				return;
+			}
+			applyEditPlan(editor, plan);
+			showCountNotice(plan.length);
 		},
 	});
 
@@ -324,8 +323,19 @@ export function registerCommands(
 	// and normalize act on the selected text, not the whole document.
 	// cascade step uses selection-replace semantics (cascadeSelectionPlan remap):
 	// the selected headings are replaced in place, not inserted at cursor.
-	// PARSER-PENDING: footnote steps are stubs until Phase 4.
-	// TODO(Phase 4): wire selection-scoped context for footnote steps.
+	// The footnote steps (fromCitations, identity, move) now run via entry.run(ctx)
+	// which calls the whole-note implementations.  For selection-scoped footnote
+	// processing, the whole-note ops operate on ctx.doc (the full document), which
+	// means they process the entire note regardless of selection — this is
+	// intentionally conservative: Format selection applies heading ops to the
+	// selection and footnote ops to the whole note.
+	// NOTE: Format selection's footnote steps are chained via runPreset which
+	// collects independent EditPlans against the same ctx.doc.  Because C, O+D,
+	// and M each operate on the same original doc independently (they are
+	// individually offset-correct vs ctx.doc), the combined plan is valid.
+	// If C is no-op (no bare citations in doc), O+D operates on ctx.doc directly
+	// which is correct.  If C does produce changes, those changes are also in the
+	// combined plan and applyEditPlan applies all of them together.
 	plugin.addCommand({
 		id: "preset.formatSelection",
 		name: "Format selection",

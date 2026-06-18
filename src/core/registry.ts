@@ -68,8 +68,14 @@ import {
 	applyFootnoteInlineRename,
 	fromCitations,
 	moveToResources,
+	scanExistingRefs,
 } from "./footnotes";
 import type { ResolvedRef } from "./footnotes";
+import {
+	wholeNoteFromCitations,
+	wholeNoteIdentity,
+	wholeNoteMove,
+} from "./noteFootnotes";
 import { normalizeUrl } from "./url";
 
 // ---------------------------------------------------------------------------
@@ -246,13 +252,14 @@ function buildFromCitationsEntry(): RegistryEntry {
 		apiName: "mason.footnotes.fromCitations",
 		command: { name: "Convert citations to footnotes" },
 		/**
-		 * run(ctx) is a safe no-op — fromCitations needs a ParseResult that the
-		 * command layer must supply.  Commands that call this op pass parseResult
-		 * via the api.footnotes.fromCitations(ctx, parseResult) path.
+		 * run(ctx) performs the whole-note C operation: converts bare [n] citation
+		 * markers in ctx.doc to [^n] footnote refs.
+		 *
+		 * The two-argument api.footnotes.fromCitations(ctx, parseResult) path
+		 * continues to support paste-flow scripts that supply a ParseResult directly.
 		 */
 		run(ctx: OperationContext): EditPlan {
-			void ctx;
-			return [];
+			return wholeNoteFromCitations(ctx);
 		},
 	};
 }
@@ -263,21 +270,25 @@ function buildIdentityEntry(): RegistryEntry {
 		apiName: "mason.footnotes.identity",
 		command: { name: "Resolve footnote identity" },
 		/**
-		 * run(ctx) returns an empty plan — identity needs a ParseResult.
-		 * Use identityFull(ctx, parseResult) to get both plan and newRefs.
+		 * run(ctx) performs the whole-note O+D operation: renumbers numeric footnotes
+		 * gap-free in first-reference order, deduplicates by URL, and collapses
+		 * duplicate definitions.  Alpha footnotes are preserved unchanged.
+		 *
+		 * identityFull(ctx, parseResult) remains for paste-flow scripts that supply
+		 * a ParseResult and need access to the newRefs list for threading into move.
 		 */
 		run(ctx: OperationContext): EditPlan {
-			void ctx;
-			return [];
+			return wholeNoteIdentity(ctx);
 		},
 		identityFull(
 			ctx: OperationContext,
 			parseResult: ParseResult,
 		): { plan: EditPlan; newRefs: ResolvedRef[] } {
-			// TODO(Phase 4): extract existingRefs from ctx.doc via the footnote parser.
-			// For now, existing refs are empty — all incoming refs treated as new.
-			void ctx;
-			const { idMap, newRefs } = resolveFootnoteIdentity(parseResult.sources, []);
+			// Paste-flow: extract existingRefs from ctx.doc so new paste ids start
+			// past maxExisting and never collide with pre-existing footnotes.
+			// This replaces the TODO(Phase 4) stub with a real implementation.
+			const existingRefs = scanExistingRefs(ctx.doc);
+			const { idMap, newRefs } = resolveFootnoteIdentity(parseResult.sources, existingRefs);
 			const plan = applyFootnoteInlineRename(parseResult.body, idMap);
 			return { plan, newRefs };
 		},
@@ -290,11 +301,16 @@ function buildMoveEntry(): RegistryEntry {
 		apiName: "mason.footnotes.move",
 		command: { name: "Move footnotes to resources" },
 		/**
-		 * run(ctx) calls moveToResources with empty defs → safe no-op.
-		 * The api.footnotes.move(ctx, defs?) path accepts caller-supplied defs.
+		 * run(ctx) performs the whole-note M operation: moves all numeric footnote
+		 * definition blocks that are not already in ## <resourcesName> into that
+		 * section.  Orphaned lines in Resources are preserved; alpha defs are not
+		 * moved.  Creates the section at note end if absent (only when defs exist).
+		 *
+		 * The api.footnotes.move(ctx, defs?) path continues to support paste-flow
+		 * scripts that supply pre-formatted defs from moveToResources.
 		 */
 		run(ctx: OperationContext): EditPlan {
-			return moveToResources(ctx, []);
+			return wholeNoteMove(ctx);
 		},
 	};
 }
