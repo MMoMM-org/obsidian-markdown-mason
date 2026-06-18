@@ -5,8 +5,8 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-06-16 |
-| **Current Phase** | Ready |
-| **Last Updated** | 2026-06-16 |
+| **Current Phase** | Implemented |
+| **Last Updated** | 2026-06-18 |
 
 ## Documents
 
@@ -30,6 +30,8 @@
 | 2026-06-16 | **PIVOT: JS-scripts-first (Advanced Paste model), declarative core dropped** (PRD v1.1) | User feedback on PRD: extensibility is via custom JS scripts invokable on paste or as a command on a selection; ops H/C/O+D/M are an in-plugin **versioned, extensible API** scripts call; the 3 Perplexity surfaces ship as **downloadable scripts, not built-ins**; reuse the in-house `miyo-tomo-hashi` `src/hooks/` execution model. Script support is **foundational v0.1** (no later rewrite). **Desktop-only** accepted (`isDesktopOnly:true`). Storage = plugin dir; download from vetted official repo (Markdown-in-note only, doc-required PR) or vault-import community scripts at user discretion. Consent = once per **checksum/version**. §2 blocker **resolved** — 3 samples committed under `assets/`. |
 
 | 2026-06-16 | **SDD: 10 ADRs confirmed** | Hexagonal core + hashi-derived script runtime. ADR-1 EditPlan+single CM6 transaction · ADR-2 fused O+D · ADR-3 hashi runtime · ADR-4 per-checksum/version consent · ADR-5 versioned `mason.*` registry/API · ADR-6 plugin-dir storage + per-device sidecar · ADR-7 desktop-only · ADR-8 official-repo distribution (v0.2) · **ADR-9 three Perplexity scripts + auto-dispatcher** (amended) · ADR-10 explicit-invoke paste in v0.1 (auto-on-paste → v0.3). |
+| 2026-06-18 | **T7.5 Sync spike resolves open-decision #3 — corrects the 2026-06-16 assumption** | Empirically: Obsidian Sync replicates only the plugin's own core files (`manifest.json`, `main.js`, `data.json`) — **NOT** `scripts/*.cjs` or the `device.json` sidecar. So the earlier "whole plugin folder syncs" premise (and the per-device-sidecar rationale built on it) was wrong. **v0.1 ships unaffected** (the non-syncing `device.json` is a correct per-device store; local-import + per-device consent is consistent, fail-closed). **For v0.2, ADR-6 is superseded:** enable/consent rides synced `data.json`; code is re-materialized per-device from the vetted SHA-pinned repo (ADR-8) or vault-import, accepted only on `checksum`+`version` match. See [`sync-spike.md`](sync-spike.md). |
+| 2026-06-18 | **Implementation complete (Phase 7 / v0.1)** | All 7 plan phases done. Phase 7: full-stack E2E harness over CM6 (T7.1), consolidated invariant/failure suite (T7.2), EARS↔test traceability 14/14 (T7.3, `trace.md`), release workflow with `actions/attest-build-provenance` + manifest submission-lint (T7.4), Sync spike (T7.5), phase validation (T7.6). Two drift fixes surfaced & repaired: **DRIFT-1** script-path success count Notice (PRD F8-AC2/F7-AC3); **DRIFT-2** `scanExistingRefs` prevents paste footnote collision (PRD F3/F9). **680 tests green; build + lint + `check:manifest` clean.** Branch `feat/001-markdown-mason`. Live GitHub Actions release run is the only unverified-in-sandbox item. |
 
 ### Research agents (resumable via SendMessage)
 
