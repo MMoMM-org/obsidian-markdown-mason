@@ -7,6 +7,7 @@ import {
 	fromCitations,
 	moveToResources,
 	scanExistingRefs,
+	countFootnoteDefs,
 } from "../../src/core/footnotes";
 import type { FootnoteRef, ExistingRef, ParseResult, OperationContext, MasonSettings } from "../../src/core/types";
 import type { ResolvedRef } from "../../src/core/footnotes";
@@ -1224,5 +1225,80 @@ describe("scanExistingRefs — max id raises offset for new paste", () => {
 		);
 		expect(idMap[1]).not.toBe(1);
 		expect(idMap[1]).not.toBe(2);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// countFootnoteDefs — counts DISTINCT footnote definition ids across an EditPlan
+// ---------------------------------------------------------------------------
+
+describe("countFootnoteDefs — counts distinct [^n]: definition ids across EditPlan inserts", () => {
+	it("returns 0 for an empty plan", () => {
+		expect(countFootnoteDefs([])).toBe(0);
+	});
+
+	it("returns 0 when no insert contains a footnote definition line", () => {
+		const plan = [
+			{ from: 0, to: 5, insert: "## Answer\n\nSome prose here." },
+		];
+		expect(countFootnoteDefs(plan)).toBe(0);
+	});
+
+	it("counts a single [^1]: definition in one edit", () => {
+		const plan = [
+			{ from: 10, to: 10, insert: "\n[^1]: My snippet\n[Title](https://example.com)\n" },
+		];
+		expect(countFootnoteDefs(plan)).toBe(1);
+	});
+
+	it("counts two distinct [^1]: and [^2]: definitions in one edit", () => {
+		const plan = [
+			{
+				from: 0,
+				to: 0,
+				insert: "\n[^1]: first snippet\n[A](https://a.com)\n\n[^2]: second snippet\n[B](https://b.com)\n",
+			},
+		];
+		expect(countFootnoteDefs(plan)).toBe(2);
+	});
+
+	it("counts distinct ids across multiple edits", () => {
+		const plan = [
+			{ from: 0, to: 0, insert: "prose [^1]\n" },
+			{ from: 100, to: 100, insert: "\n[^1]: first\n[A](https://a.com)\n\n[^2]: second\n[B](https://b.com)\n" },
+		];
+		expect(countFootnoteDefs(plan)).toBe(2);
+	});
+
+	it("deduplicates the same [^n]: id appearing in multiple edits", () => {
+		const plan = [
+			{ from: 0, to: 0, insert: "\n[^1]: first definition\n[A](https://a.com)\n" },
+			{ from: 50, to: 50, insert: "\n[^1]: duplicate definition\n[B](https://b.com)\n" },
+		];
+		// Same id [^1] in both edits → counted once
+		expect(countFootnoteDefs(plan)).toBe(1);
+	});
+
+	it("ignores inline [^n] references (not definitions)", () => {
+		// "[^1]" without trailing ":" is an inline reference, not a definition
+		const plan = [
+			{ from: 0, to: 0, insert: "Some prose with [^1] and [^2] inline references.\n" },
+		];
+		expect(countFootnoteDefs(plan)).toBe(0);
+	});
+
+	it("only matches [^n]: at the start of a line (not mid-line)", () => {
+		// A [^1]: that appears mid-line must NOT be counted
+		const plan = [
+			{ from: 0, to: 0, insert: "See this note: [^1]: not a definition\n" },
+		];
+		expect(countFootnoteDefs(plan)).toBe(0);
+	});
+
+	it("handles compact single-line defs ('[^n]: [title](url)')", () => {
+		const plan = [
+			{ from: 0, to: 0, insert: "\n[^3]: [Example](https://example.com)\n[^4]: [Other](https://other.com)\n" },
+		];
+		expect(countFootnoteDefs(plan)).toBe(2);
 	});
 });

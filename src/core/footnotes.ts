@@ -137,6 +137,36 @@ export function resolveFootnoteIdentity(
 	return { idMap, newRefs };
 }
 
+// ---------------------------------------------------------------------------
+// countFootnoteDefs — count distinct footnote definition ids in an EditPlan
+// ---------------------------------------------------------------------------
+
+/**
+ * Count the number of DISTINCT footnote definition ids across all inserts in a plan.
+ *
+ * A footnote definition line matches /^\[\^(\d+)\]:/m — it must appear at the
+ * start of a line (multiline mode).  Inline references like "[^1]" that do not
+ * have a trailing colon are NOT counted.
+ *
+ * Returns the number of distinct ids (via a Set), so a [^n]: definition appearing
+ * in multiple edits is counted only once.
+ *
+ * Typical use: after a script run, call countFootnoteDefs(outcome.plan) to produce
+ * a user-facing "N footnotes filed" notice rather than reporting raw edit count.
+ */
+export function countFootnoteDefs(plan: EditPlan): number {
+	const seen = new Set<string>();
+	const re = /^\[\^(\d+)\]:/gm;
+	for (const edit of plan) {
+		let m: RegExpExecArray | null;
+		re.lastIndex = 0;
+		while ((m = re.exec(edit.insert)) !== null) {
+			seen.add(m[1]);
+		}
+	}
+	return seen.size;
+}
+
 /** Build a normalizedUrl → id lookup from the existing refs. */
 function buildExistingByUrl(existing: ExistingRef[]): Record<string, number> {
 	const map: Record<string, number> = {};

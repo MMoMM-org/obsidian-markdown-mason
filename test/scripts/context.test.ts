@@ -8,8 +8,8 @@
 //
 // NO obsidian import in context.ts — these tests confirm purity.
 
-import { describe, it, expect, vi } from "vitest";
-import { buildScriptContext } from "../../src/scripts/context";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { buildScriptContext, buildGatedLogger } from "../../src/scripts/context";
 import type { ScriptContext } from "../../src/scripts/context";
 import { buildRegistry } from "../../src/core/registry";
 import type { OperationContext, MasonSettings } from "../../src/core/types";
@@ -160,5 +160,50 @@ describe("buildScriptContext — custom logger injection", () => {
 		});
 		ctx.logger.info("hello");
 		expect(infoMessages).toEqual(["hello"]);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// buildGatedLogger — debug=false → info is silent; debug=true → info traces
+// ---------------------------------------------------------------------------
+
+describe("buildGatedLogger — gated info traces", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("info does NOT call console.debug when debug=false", () => {
+		const spy = vi.spyOn(console, "debug").mockImplementation(() => undefined);
+		const logger = buildGatedLogger(false);
+		logger.info("some trace");
+		expect(spy).not.toHaveBeenCalled();
+	});
+
+	it("info DOES call console.debug when debug=true", () => {
+		const spy = vi.spyOn(console, "debug").mockImplementation(() => undefined);
+		const logger = buildGatedLogger(true);
+		logger.info("some trace");
+		expect(spy).toHaveBeenCalledOnce();
+	});
+
+	it("info call with debug=true includes [mason] prefix", () => {
+		const spy = vi.spyOn(console, "debug").mockImplementation(() => undefined);
+		const logger = buildGatedLogger(true);
+		logger.info("hello");
+		expect(spy).toHaveBeenCalledWith(expect.stringContaining("[mason]"));
+	});
+
+	it("warn always calls console.warn regardless of debug flag", () => {
+		const spy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+		const loggerOff = buildGatedLogger(false);
+		loggerOff.warn("a warning");
+		expect(spy).toHaveBeenCalledOnce();
+	});
+
+	it("error always calls console.error regardless of debug flag", () => {
+		const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+		const loggerOff = buildGatedLogger(false);
+		loggerOff.error("an error");
+		expect(spy).toHaveBeenCalledOnce();
 	});
 });

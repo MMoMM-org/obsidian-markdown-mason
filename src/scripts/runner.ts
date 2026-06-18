@@ -109,9 +109,13 @@ export interface RunOptions {
  *   noop    — script returned undefined or []; nothing applied, no notify.
  *   blocked — policy was "disabled" or ask returned "disable"; nothing ran.
  *   failed  — script threw or timed out; rawFallback + notify were called.
+ *
+ * The applied variant carries the full plan so callers can inspect it
+ * (e.g. count footnote definitions via countFootnoteDefs) without the runner
+ * needing to know about footnotes.  count = plan.length is kept for back-compat.
  */
 export type RunOutcome =
-	| { kind: "applied"; count: number }
+	| { kind: "applied"; count: number; plan: EditPlan }
 	| { kind: "noop" }
 	| { kind: "blocked" }
 	| { kind: "failed"; reason: string };
@@ -206,7 +210,7 @@ export class ScriptRunner {
 
 		// Non-empty plan: apply atomically.
 		this._effects.applyPlan(plan);
-		return { kind: "applied", count: plan.length };
+		return { kind: "applied", count: plan.length, plan };
 	}
 
 	// -----------------------------------------------------------------------

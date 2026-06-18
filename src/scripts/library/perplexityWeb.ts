@@ -51,6 +51,8 @@ import { replaceMarkersInBody } from "./replaceMarkersInBody";
 export const perplexityWebScript: ScriptFunction = (ctx: ScriptContext): EditPlan | undefined => {
 	if (!perplexityWeb.canParse(ctx.input)) return undefined;
 
+	ctx.logger.info(`perplexity-web started (source=${ctx.source})`);
+
 	const pr = perplexityWeb.parse(ctx.input);
 
 	// Step 1: Replace [text](url) inline links with [^n] footnote references.
@@ -61,7 +63,9 @@ export const perplexityWebScript: ScriptFunction = (ctx: ScriptContext): EditPla
 	// Step 2: Resolve identity — dedup by URL, build idMap and new refs.
 	// Scan the destination note for existing numeric footnote defs so new paste ids
 	// start past maxExisting and never collide with pre-existing [^n] footnotes.
-	const { idMap, newRefs } = resolveFootnoteIdentity(pr.sources, scanExistingRefs(ctx.op.doc));
+	const existing = scanExistingRefs(ctx.op.doc);
+	const { idMap, newRefs } = resolveFootnoteIdentity(pr.sources, existing);
+	ctx.logger.info(`resolved ${pr.sources.length} footnotes (${newRefs.length} new, ${pr.sources.length - newRefs.length} reused)`);
 
 	// Step 3: Rename [^n] → [^finalId] using the resolved idMap.
 	const renameEdits = applyFootnoteInlineRename(bodyFC, idMap);
@@ -78,5 +82,7 @@ export const perplexityWebScript: ScriptFunction = (ctx: ScriptContext): EditPla
 	const defs = compactRefDefinitions(newRefs);
 	const resourcesPlan = moveToResources(ctx.op, defs);
 
-	return [...cascadePlan, ...resourcesPlan];
+	const plan = [...cascadePlan, ...resourcesPlan];
+	ctx.logger.info(`plan: ${plan.length} edits`);
+	return plan;
 };

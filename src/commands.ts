@@ -77,6 +77,10 @@ export function countNoticeMessage(count: number): string {
 	const label = count === 1 ? "change" : "changes";
 	return `Mason: ${count} ${label}`;
 }
+// TODO: registry-operation command Notices (e.g. "Tidy footnotes") could adopt
+// countFootnoteDefs from src/core/footnotes.ts in a future pass to report
+// "N footnotes filed" instead of the generic edit count.
+
 
 function showCountNotice(count: number): void {
 	new Notice(countNoticeMessage(count));

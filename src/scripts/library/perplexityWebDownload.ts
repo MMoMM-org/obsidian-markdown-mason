@@ -55,6 +55,8 @@ import { replaceMarkersInBody, filterCitedSources } from "./replaceMarkersInBody
 export const perplexityWebDownloadScript: ScriptFunction = (ctx: ScriptContext): EditPlan | undefined => {
 	if (!perplexityWebDownload.canParse(ctx.input)) return undefined;
 
+	ctx.logger.info(`perplexity-web-download started (source=${ctx.source})`);
+
 	const pr = perplexityWebDownload.parse(ctx.input);
 
 	// Step 1: Replace [^a_b] inline markers with sequential [^n] footnote references.
@@ -69,7 +71,9 @@ export const perplexityWebDownloadScript: ScriptFunction = (ctx: ScriptContext):
 	// Step 3: Resolve identity — dedup cited sources by URL, build idMap and new refs.
 	// Scan the destination note for existing numeric footnote defs so new paste ids
 	// start past maxExisting and never collide with pre-existing [^n] footnotes.
-	const { idMap, newRefs } = resolveFootnoteIdentity(citedSources, scanExistingRefs(ctx.op.doc));
+	const existing = scanExistingRefs(ctx.op.doc);
+	const { idMap, newRefs } = resolveFootnoteIdentity(citedSources, existing);
+	ctx.logger.info(`resolved ${citedSources.length} footnotes (${newRefs.length} new, ${citedSources.length - newRefs.length} reused)`);
 
 	// Step 4: Rename [^n] → [^finalId] using the resolved idMap.
 	const renameEdits = applyFootnoteInlineRename(bodyFC, idMap);
@@ -85,5 +89,7 @@ export const perplexityWebDownloadScript: ScriptFunction = (ctx: ScriptContext):
 	const defs = compactRefDefinitions(newRefs);
 	const resourcesPlan = moveToResources(ctx.op, defs);
 
-	return [...cascadePlan, ...resourcesPlan];
+	const plan = [...cascadePlan, ...resourcesPlan];
+	ctx.logger.info(`plan: ${plan.length} edits`);
+	return plan;
 };

@@ -6,11 +6,12 @@ import { registerCommands, countNoticeMessage } from "./commands";
 import { pasteContext } from "./sources/paste";
 import { selectionContext } from "./sources/selection";
 import { applyEditPlan } from "./sources/apply";
-import { buildScriptContext } from "./scripts/context";
+import { buildScriptContext, buildGatedLogger } from "./scripts/context";
 import { ScriptRunner } from "./scripts/runner";
 import type { RunnerEffects } from "./scripts/runner";
 import type { ScriptFunction } from "./scripts/context";
 import { buildRegistry } from "./core/registry";
+import { countFootnoteDefs } from "./core/footnotes";
 import { perplexityAutoScript } from "./scripts/library/perplexityAuto";
 import { perplexityAppScript } from "./scripts/library/perplexityApp";
 import { perplexityWebScript } from "./scripts/library/perplexityWeb";
@@ -214,6 +215,7 @@ export class MarkdownMasonPlugin extends Plugin {
 			source: "selection",
 			op,
 			mason,
+			logger: buildGatedLogger(this.settings.debugLogging),
 		});
 
 		const applyPlanFn: (plan: EditPlan) => void =
@@ -236,10 +238,19 @@ export class MarkdownMasonPlugin extends Plugin {
 		// .cjs files; it does not apply to code shipped inside the plugin itself.
 		const runner = new ScriptRunner(effects, { policy: "enabled" });
 		const outcome = await runner.run(activeScript, ctx);
-		// PRD F8-AC2 / F7-AC3: fire a count Notice when the script applies changes.
-		// The runner stays silent on success; the command layer owns the Notice.
+		// PRD F8-AC2 / F7-AC3: fire a Notice when the script applies changes.
+		// Prefer footnote-count ("N footnotes filed") when the plan contains defs;
+		// fall back to edit-count ("N change(s)") for non-footnote plans.
 		if (outcome.kind === "applied") {
-			effects.notify(countNoticeMessage(outcome.count));
+			if (this.settings.debugLogging) {
+				console.debug(`[MarkdownMason] selection outcome: ${outcome.kind} (${outcome.count} edits)`);
+			}
+			const fn = countFootnoteDefs(outcome.plan);
+			effects.notify(
+				fn > 0
+					? `Mason: ${fn} footnote${fn === 1 ? "" : "s"} filed`
+					: countNoticeMessage(outcome.count),
+			);
 		}
 	}
 }
@@ -266,6 +277,10 @@ async function runPasteCommand(
 		return;
 	}
 
+	if (settings.debugLogging) {
+		console.debug(`[MarkdownMason] paste: clipboard read (${rawText.length} chars)`);
+	}
+
 	// 2. Guard: empty clipboard
 	if (rawText.trim() === "") {
 		new Notice("Mason: clipboard is empty — nothing to paste.");
@@ -282,6 +297,7 @@ async function runPasteCommand(
 		source: "paste",
 		op,
 		mason,
+		logger: buildGatedLogger(settings.debugLogging),
 	});
 
 	// 5. Wire RunnerEffects
@@ -311,10 +327,19 @@ async function runPasteCommand(
 
 	// 8. Run (ScriptRunner enforces atomicity: applyPlan XOR rawFallback)
 	const outcome = await runner.run(script, ctx);
-	// PRD F8-AC2 / F7-AC3: fire a count Notice when the script applies changes.
-	// The runner stays silent on success; the command layer owns the Notice.
+	// PRD F8-AC2 / F7-AC3: fire a Notice when the script applies changes.
+	// Prefer footnote-count ("N footnotes filed") when the plan contains defs;
+	// fall back to edit-count ("N change(s)") for non-footnote plans.
 	if (outcome.kind === "applied") {
-		effects.notify(countNoticeMessage(outcome.count));
+		if (settings.debugLogging) {
+			console.debug(`[MarkdownMason] paste outcome: ${outcome.kind} (${outcome.count} edits)`);
+		}
+		const fn = countFootnoteDefs(outcome.plan);
+		effects.notify(
+			fn > 0
+				? `Mason: ${fn} footnote${fn === 1 ? "" : "s"} filed`
+				: countNoticeMessage(outcome.count),
+		);
 	}
 }
 

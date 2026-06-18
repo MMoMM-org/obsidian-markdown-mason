@@ -52,6 +52,8 @@ import { filterCitedSources } from "./replaceMarkersInBody";
 export const perplexityAppScript: ScriptFunction = (ctx: ScriptContext): EditPlan | undefined => {
 	if (!perplexityApp.canParse(ctx.input)) return undefined;
 
+	ctx.logger.info(`perplexity-app started (source=${ctx.source})`);
+
 	const pr = perplexityApp.parse(ctx.input);
 
 	// Step 1: Convert bare [n] citation markers to [^n] footnote references.
@@ -64,7 +66,9 @@ export const perplexityAppScript: ScriptFunction = (ctx: ScriptContext): EditPla
 	// Step 3: Resolve identity — dedup cited sources by URL, build idMap and new refs.
 	// Scan the destination note for existing numeric footnote defs so new paste ids
 	// start past maxExisting and never collide with pre-existing [^n] footnotes.
-	const { idMap, newRefs } = resolveFootnoteIdentity(citedSources, scanExistingRefs(ctx.op.doc));
+	const existing = scanExistingRefs(ctx.op.doc);
+	const { idMap, newRefs } = resolveFootnoteIdentity(citedSources, existing);
+	ctx.logger.info(`resolved ${newRefs.length + (citedSources.length - newRefs.length)} footnotes (${newRefs.length} new, ${citedSources.length - newRefs.length} reused)`);
 
 	// Step 4: Rename [^n] → [^finalId] using the resolved idMap.
 	const renameEdits = applyFootnoteInlineRename(bodyFC, idMap);
@@ -78,5 +82,7 @@ export const perplexityAppScript: ScriptFunction = (ctx: ScriptContext): EditPla
 	const defs = newRefDefinitions(newRefs);
 	const resourcesPlan = moveToResources(ctx.op, defs);
 
-	return [...cascadePlan, ...resourcesPlan];
+	const plan = [...cascadePlan, ...resourcesPlan];
+	ctx.logger.info(`plan: ${plan.length} edits`);
+	return plan;
 };

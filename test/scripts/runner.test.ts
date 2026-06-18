@@ -153,6 +153,30 @@ describe("ScriptRunner — policy 'enabled', success", () => {
 		}
 	});
 
+	it("applied outcome includes the plan that was applied", async () => {
+		const effects = makeEffects();
+		const runner = new ScriptRunner(effects, { policy: "enabled" });
+
+		const outcome = await runner.run(scriptReturnsPlan, makeCtx());
+
+		expect(outcome.kind).toBe("applied");
+		if (outcome.kind === "applied") {
+			expect(outcome.plan).toEqual(samplePlan);
+		}
+	});
+
+	it("applied outcome plan matches what applyPlan received", async () => {
+		const effects = makeEffects();
+		const runner = new ScriptRunner(effects, { policy: "enabled" });
+
+		const outcome = await runner.run(scriptReturnsPlan, makeCtx());
+
+		expect(outcome.kind).toBe("applied");
+		if (outcome.kind === "applied") {
+			expect(outcome.plan).toEqual(effects.appliedPlans[0]);
+		}
+	});
+
 	it("calls applyPlan with the returned plan", async () => {
 		const effects = makeEffects();
 		const runner = new ScriptRunner(effects, { policy: "enabled" });

@@ -495,9 +495,9 @@ describe("T5.5C — paste command success path", () => {
 		).toHaveLength(0);
 	});
 
-	// PRD F8-AC2 / F7-AC3: a success Notice fires with the count of changes.
-	// Convention from commands.ts showCountNotice: "Mason: N change" / "Mason: N changes".
-	it("paste command shows count Notice ('Mason: N change(s)') when script produces a non-empty EditPlan (PRD F8-AC2/F7-AC3)", async () => {
+	// PRD F8-AC2 / F7-AC3: a success Notice fires reporting footnotes filed.
+	// For Perplexity-app input the script files footnote defs into Resources.
+	it("paste command shows footnote-count Notice ('Mason: N footnote(s) filed') when script produces footnote defs (PRD F8-AC2/F7-AC3)", async () => {
 		const plugin = await makePluginAndFireLayout();
 		// Editor that already has a H1 heading so cascade can find a context heading above cursor.
 		const editor = makePasteEditorStub("# Notes\n\n");
@@ -505,7 +505,7 @@ describe("T5.5C — paste command success path", () => {
 		const applyPlanSpy = vi.fn();
 
 		plugin._commandInjection = {
-			// Clipboard contains Perplexity-app text → produces a real, non-empty EditPlan
+			// Clipboard contains Perplexity-app text → produces a real, non-empty EditPlan with footnote defs
 			clipboardReader: async () => PERPLEXITY_APP_INPUT,
 			applyPlan: applyPlanSpy,
 		};
@@ -523,11 +523,11 @@ describe("T5.5C — paste command success path", () => {
 		const notices = noticeLog();
 		expect(notices, "exactly one count Notice must fire on apply success").toHaveLength(1);
 
-		// The Notice message must follow the "Mason: N change(s)" convention (PRD F7-AC3)
+		// The Notice message must report footnotes filed (feature b)
 		expect(
 			notices[0],
-			"count Notice message must match 'Mason: N change' or 'Mason: N changes' convention",
-		).toMatch(/^Mason: \d+ changes?$/);
+			"count Notice message must match 'Mason: N footnote' or 'Mason: N footnotes filed'",
+		).toMatch(/^Mason: \d+ footnotes? filed$/);
 	});
 });
 
@@ -811,8 +811,8 @@ describe("D — selection script commands: bound script runs on selection, apply
 		).not.toHaveBeenCalled();
 	});
 
-	// PRD F8-AC2 / F7-AC3: success path — selection command shows count Notice.
-	it("selection command shows count Notice ('Mason: N change(s)') when script produces a non-empty EditPlan (PRD F8-AC2/F7-AC3)", async () => {
+	// PRD F8-AC2 / F7-AC3: success path — selection command shows footnote-count Notice.
+	it("selection command shows footnote-count Notice ('Mason: N footnote(s) filed') when script produces footnote defs (PRD F8-AC2/F7-AC3)", async () => {
 		const plugin = await makePluginAndFireLayout();
 		const editor = makeSelectionEditorStub(PERPLEXITY_APP_INPUT);
 
@@ -835,11 +835,11 @@ describe("D — selection script commands: bound script runs on selection, apply
 		const notices = noticeLog();
 		expect(notices, "exactly one count Notice must fire on apply success").toHaveLength(1);
 
-		// The Notice message must follow the "Mason: N change(s)" convention (PRD F7-AC3)
+		// The Notice message must report footnotes filed (feature b)
 		expect(
 			notices[0],
-			"count Notice message must match 'Mason: N change' or 'Mason: N changes' convention",
-		).toMatch(/^Mason: \d+ changes?$/);
+			"count Notice message must match 'Mason: N footnote' or 'Mason: N footnotes filed'",
+		).toMatch(/^Mason: \d+ footnotes? filed$/);
 	});
 
 	it("selection command throw path: rawFallback is no-op, applyPlan not called, Notice shown", async () => {

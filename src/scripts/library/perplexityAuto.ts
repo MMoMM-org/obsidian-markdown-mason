@@ -45,7 +45,10 @@ export const perplexityAutoScript: ScriptFunction = (
 	ctx: ScriptContext,
 ): EditPlan | undefined => {
 	const parser = detect(ctx.input);
-	if (parser === null) return undefined;
+	if (parser === null) {
+		ctx.logger.info("perplexity-auto: no parser matched");
+		return undefined;
+	}
 
 	// Map the detected CitationParser to its concrete script.
 	// Use identity checks against the parser singletons.
@@ -53,11 +56,14 @@ export const perplexityAutoScript: ScriptFunction = (
 	// ScriptFunction union type includes Promise but these implementations
 	// never return one.
 	if (parser === perplexityApp) {
+		ctx.logger.info("perplexity-auto → app");
 		return perplexityAppScript(ctx) as EditPlan | undefined;
 	}
 	if (parser === perplexityWebDownload) {
+		ctx.logger.info("perplexity-auto → web-download");
 		return perplexityWebDownloadScript(ctx) as EditPlan | undefined;
 	}
 	// Remaining case: perplexityWeb
+	ctx.logger.info("perplexity-auto → web");
 	return perplexityWebScript(ctx) as EditPlan | undefined;
 };

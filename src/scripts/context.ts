@@ -87,7 +87,7 @@ export interface BuildScriptContextArgs {
 }
 
 // ---------------------------------------------------------------------------
-// Default logger — console-backed
+// Default logger — console-backed (always-on info; used when no logger injected)
 // ---------------------------------------------------------------------------
 
 function buildDefaultLogger(): ScriptLogger {
@@ -95,6 +95,29 @@ function buildDefaultLogger(): ScriptLogger {
 		info: (s: string): void => { console.debug(`[mason-script] ${s}`); },
 		warn: (s: string): void => { console.warn(`[mason-script] ${s}`); },
 		error: (s: string): void => { console.error(`[mason-script] ${s}`); },
+	};
+}
+
+// ---------------------------------------------------------------------------
+// buildGatedLogger — debug-flag-gated logger for use in main.ts command layer
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a ScriptLogger whose info traces are gated on the debugLogging setting.
+ *
+ *   debug=true  → info writes to console.debug with a [mason] prefix
+ *   debug=false → info is a no-op (traces are silent)
+ *
+ * warn and error are always-on regardless of the flag, so problems are always
+ * surfaced even when debug tracing is off.
+ */
+export function buildGatedLogger(debug: boolean): ScriptLogger {
+	return {
+		info: debug
+			? (s: string): void => { console.debug(`[mason] ${s}`); }
+			: (): void => { /* no-op when debugLogging is off */ },
+		warn: (s: string): void => { console.warn(`[mason] ${s}`); },
+		error: (s: string): void => { console.error(`[mason] ${s}`); },
 	};
 }
 
