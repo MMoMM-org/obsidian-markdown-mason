@@ -245,15 +245,21 @@ function assertSingleUndo(editor: HeadlessEditor): void {
 // ---------------------------------------------------------------------------
 // Notice count assertion
 //
-// On the SUCCESS path, the current production implementation does NOT emit
-// a Notice — ScriptRunner returns { kind: "applied" } silently; no notify()
-// is called. Zero Notices is the correct expected behavior for a successful
-// paste when invoked at the script layer (not through the full plugin wiring).
+// PRD F8-AC2 / F7-AC3: a success Notice fires and includes the count of changes.
+// Convention (matching commands.ts showCountNotice): "Mason: N change" (N=1) or
+// "Mason: N changes" (N>1). The E2E harness calls the script directly (not
+// through the full plugin wiring), so no Notice is emitted at this layer —
+// the count Notice is the command layer's job (main.ts), not the script layer's.
+// These assertions verify the script layer stays silent on success (zero Notices),
+// which is the correct contract: the runner does NOT emit the success Notice.
+//
+// NOTE: The command-layer Notice is tested in test/scripts/integration.test.ts
+// (the "count Notice" tests that drive the full paste/selection commands).
 // ---------------------------------------------------------------------------
 
 function assertNoNoticesOnSuccess(): void {
 	const notices = noticeLog();
-	expect(notices).toHaveLength(0);
+	expect(notices, "script layer must not emit Notices on success (command layer's job)").toHaveLength(0);
 }
 
 // ---------------------------------------------------------------------------

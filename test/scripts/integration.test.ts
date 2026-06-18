@@ -450,6 +450,17 @@ describe("T5.5C — mason.pasteAndFormat command registration", () => {
 // for arbitrary text, the key invariant is: NO rawFallback on non-failure path.
 // ---------------------------------------------------------------------------
 
+// Minimal Perplexity-app clipboard text that perplexityAutoScript recognises and
+// produces a non-empty EditPlan for.  Shared with the selection command tests below.
+const PASTE_PERPLEXITY_APP_INPUT = [
+	"## Answer",
+	"",
+	"Some answer text with citation [1].",
+	"",
+	"Sources",
+	"[1] Example Article https://example.com/article",
+].join("\n");
+
 describe("T5.5C — paste command success path", () => {
 	beforeEach(() => clearNoticeLog());
 
@@ -477,6 +488,40 @@ describe("T5.5C — paste command success path", () => {
 			editor._replaced,
 			"rawFallback (replaceSelection) must NOT be called on success/noop path",
 		).toHaveLength(0);
+	});
+
+	// PRD F8-AC2 / F7-AC3: a success Notice fires with the count of changes.
+	// Convention from commands.ts showCountNotice: "Mason: N change" / "Mason: N changes".
+	it("paste command shows count Notice ('Mason: N change(s)') when script produces a non-empty EditPlan (PRD F8-AC2/F7-AC3)", async () => {
+		const plugin = await makePluginAndFireLayout();
+		// Editor that already has a H1 heading so cascade can find a context heading above cursor.
+		const editor = makePasteEditorStub("# Notes\n\n");
+
+		const applyPlanSpy = vi.fn();
+
+		plugin._commandInjection = {
+			// Clipboard contains Perplexity-app text → produces a real, non-empty EditPlan
+			clipboardReader: async () => PASTE_PERPLEXITY_APP_INPUT,
+			applyPlan: applyPlanSpy,
+		};
+
+		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		expect(cmd).toBeDefined();
+
+		await cmd.editorCallback(editor);
+
+		// Script produced a non-empty EditPlan → applyPlan called (pre-condition for Notice)
+		expect(applyPlanSpy, "applyPlan must be called before we check the Notice").toHaveBeenCalledOnce();
+
+		// Exactly ONE count Notice must fire (PRD F8-AC2)
+		const notices = noticeLog();
+		expect(notices, "exactly one count Notice must fire on apply success").toHaveLength(1);
+
+		// The Notice message must follow the "Mason: N change(s)" convention (PRD F7-AC3)
+		expect(
+			notices[0],
+			"count Notice message must match 'Mason: N change' or 'Mason: N changes' convention",
+		).toMatch(/^Mason: \d+ changes?$/);
 	});
 });
 
@@ -773,6 +818,36 @@ describe("D — selection script commands: bound script runs on selection, apply
 			applyPlanSpy,
 			"applyPlan must not be called when script returns noop",
 		).not.toHaveBeenCalled();
+	});
+
+	// PRD F8-AC2 / F7-AC3: success path — selection command shows count Notice.
+	it("selection command shows count Notice ('Mason: N change(s)') when script produces a non-empty EditPlan (PRD F8-AC2/F7-AC3)", async () => {
+		const plugin = await makePluginAndFireLayout();
+		const editor = makeSelectionEditorStub(PERPLEXITY_APP_INPUT);
+
+		const applyPlanSpy = vi.fn();
+
+		plugin._commandInjection = {
+			applyPlan: applyPlanSpy,
+		};
+
+		const cmd = findCommand(plugin, "mason.script.perplexity-auto");
+		expect(cmd).toBeDefined();
+
+		await cmd.editorCallback(editor);
+
+		// Script produced a non-empty EditPlan → applyPlan called (pre-condition for Notice)
+		expect(applyPlanSpy, "applyPlan must be called before we check the Notice").toHaveBeenCalledOnce();
+
+		// Exactly ONE count Notice must fire (PRD F8-AC2)
+		const notices = noticeLog();
+		expect(notices, "exactly one count Notice must fire on apply success").toHaveLength(1);
+
+		// The Notice message must follow the "Mason: N change(s)" convention (PRD F7-AC3)
+		expect(
+			notices[0],
+			"count Notice message must match 'Mason: N change' or 'Mason: N changes' convention",
+		).toMatch(/^Mason: \d+ changes?$/);
 	});
 
 	it("selection command throw path: rawFallback is no-op, applyPlan not called, Notice shown", async () => {

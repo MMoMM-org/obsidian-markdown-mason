@@ -2,7 +2,7 @@ import { Notice, Plugin } from "obsidian";
 import type { Editor } from "obsidian";
 import { DEFAULT_SETTINGS, type MasonSettings } from "./core/types";
 import type { EditPlan } from "./core/types";
-import { registerCommands } from "./commands";
+import { registerCommands, countNoticeMessage } from "./commands";
 import { pasteContext } from "./sources/paste";
 import { selectionContext } from "./sources/selection";
 import { applyEditPlan } from "./sources/apply";
@@ -235,7 +235,12 @@ export class MarkdownMasonPlugin extends Plugin {
 		// The consent model (ScriptStore + disclosure modal) protects user-imported external
 		// .cjs files; it does not apply to code shipped inside the plugin itself.
 		const runner = new ScriptRunner(effects, { policy: "enabled" });
-		await runner.run(activeScript, ctx);
+		const outcome = await runner.run(activeScript, ctx);
+		// PRD F8-AC2 / F7-AC3: fire a count Notice when the script applies changes.
+		// The runner stays silent on success; the command layer owns the Notice.
+		if (outcome.kind === "applied") {
+			effects.notify(countNoticeMessage(outcome.count));
+		}
 	}
 }
 
@@ -305,7 +310,12 @@ async function runPasteCommand(
 		: perplexityAutoScript;
 
 	// 8. Run (ScriptRunner enforces atomicity: applyPlan XOR rawFallback)
-	await runner.run(script, ctx);
+	const outcome = await runner.run(script, ctx);
+	// PRD F8-AC2 / F7-AC3: fire a count Notice when the script applies changes.
+	// The runner stays silent on success; the command layer owns the Notice.
+	if (outcome.kind === "applied") {
+		effects.notify(countNoticeMessage(outcome.count));
+	}
 }
 
 // ---------------------------------------------------------------------------

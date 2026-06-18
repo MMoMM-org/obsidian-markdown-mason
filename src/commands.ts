@@ -72,9 +72,14 @@ const DEFAULT_EMPTY_NOTICE = "Nothing to do";
 // Notice helpers
 // ---------------------------------------------------------------------------
 
-function showCountNotice(count: number): void {
+/** Returns the count Notice message string — "Mason: N change" or "Mason: N changes". */
+export function countNoticeMessage(count: number): string {
 	const label = count === 1 ? "change" : "changes";
-	new Notice(`Mason: ${count} ${label}`);
+	return `Mason: ${count} ${label}`;
+}
+
+function showCountNotice(count: number): void {
+	new Notice(countNoticeMessage(count));
 }
 
 function showEmptyNotice(opId: string): void {
