@@ -6,6 +6,7 @@ import {
 	formatF4Def,
 	fromCitations,
 	moveToResources,
+	scanExistingRefs,
 } from "../../src/core/footnotes";
 import type { FootnoteRef, ExistingRef, ParseResult, OperationContext, MasonSettings } from "../../src/core/types";
 import type { ResolvedRef } from "../../src/core/footnotes";
@@ -1017,5 +1018,211 @@ describe("moveToResources — Bug 3 regression: existing section at EOF offset p
 		const plan = moveToResources(ctx, defs);
 		expect(plan).toHaveLength(1);
 		expect(plan[0].from).toBeLessThanOrEqual(doc.length);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// T7.2  scanExistingRefs — scans F4 two-line definitions in the note doc
+//
+// Reverse-parses the note's existing F4 two-line definitions into ExistingRef[]:
+//   line 1: "[^{id}]: {snippet}"   (id must be NUMERIC)
+//   line 2: "[{title}]({url})"
+//
+// Rules:
+//   - Alpha markers ([^a]:, [^note]:) are skipped.
+//   - Empty doc / no defs → [].
+//   - A numeric [^n]: def with no parseable url line: include with url="" so
+//     that its id still raises maxExisting (new paste ids never collide with it).
+//   - Multiple defs are all returned.
+// ---------------------------------------------------------------------------
+
+describe("scanExistingRefs — empty doc returns []", () => {
+	it("returns [] for empty string", () => {
+		expect(scanExistingRefs("")).toEqual([]);
+	});
+
+	it("returns [] for a doc with no footnote definitions", () => {
+		const doc = "# Title\n\nSome prose without any footnotes.\n";
+		expect(scanExistingRefs(doc)).toEqual([]);
+	});
+});
+
+describe("scanExistingRefs — parses a single F4 two-line definition", () => {
+	// F4 format: "[^id]: snippet\n[title](url)"
+	const doc = [
+		"## Resources",
+		"",
+		"[^1]: some snippet",
+		"[Some Title](https://example.com/page)",
+		"",
+	].join("\n");
+
+	it("returns exactly one ExistingRef", () => {
+		expect(scanExistingRefs(doc)).toHaveLength(1);
+	});
+
+	it("extracted id is 1", () => {
+		const refs = scanExistingRefs(doc);
+		expect(refs[0].id).toBe(1);
+	});
+
+	it("extracted url is the raw url from line 2", () => {
+		const refs = scanExistingRefs(doc);
+		expect(refs[0].url).toBe("https://example.com/page");
+	});
+});
+
+describe("scanExistingRefs — parses multiple F4 two-line definitions", () => {
+	const doc = [
+		"## Resources",
+		"",
+		"[^1]: first snippet",
+		"[First Title](https://first.com/a)",
+		"",
+		"[^2]: second snippet",
+		"[Second Title](https://second.com/b)",
+		"",
+	].join("\n");
+
+	it("returns two ExistingRefs", () => {
+		expect(scanExistingRefs(doc)).toHaveLength(2);
+	});
+
+	it("ids are 1 and 2 respectively", () => {
+		const refs = scanExistingRefs(doc);
+		const ids = refs.map((r) => r.id).sort((a, b) => a - b);
+		expect(ids).toEqual([1, 2]);
+	});
+
+	it("urls match those in the definitions", () => {
+		const refs = scanExistingRefs(doc);
+		const urls = refs.map((r) => r.url).sort();
+		expect(urls).toContain("https://first.com/a");
+		expect(urls).toContain("https://second.com/b");
+	});
+});
+
+describe("scanExistingRefs — alpha [^a]: definitions are skipped", () => {
+	const doc = [
+		"[^a]: alpha footnote",
+		"[Alpha](https://alpha.com)",
+		"",
+		"[^note]: named footnote",
+		"[Note](https://note.com)",
+		"",
+		"[^3]: numeric footnote",
+		"[Three](https://three.com)",
+		"",
+	].join("\n");
+
+	it("skips alpha [^a]: definition — not included in result", () => {
+		const refs = scanExistingRefs(doc);
+		expect(refs.every((r) => typeof r.id === "number" && r.id > 0)).toBe(true);
+	});
+
+	it("skips [^note]: definition — only numeric ids are included", () => {
+		const refs = scanExistingRefs(doc);
+		// Only [^3] is numeric; result must have exactly one ref
+		expect(refs).toHaveLength(1);
+	});
+
+	it("numeric [^3] is included with id=3", () => {
+		const refs = scanExistingRefs(doc);
+		expect(refs[0].id).toBe(3);
+		expect(refs[0].url).toBe("https://three.com");
+	});
+});
+
+describe("scanExistingRefs — numeric def with no parseable url line still contributes its id", () => {
+	// A numeric [^5]: def that is NOT followed by a [title](url) line.
+	// The id must still be in the result so maxExisting rises past 5.
+	const doc = [
+		"[^5]: orphaned snippet — no link line follows",
+		"This is just prose, not a markdown link.",
+		"",
+	].join("\n");
+
+	it("returns one ref with id=5", () => {
+		const refs = scanExistingRefs(doc);
+		expect(refs).toHaveLength(1);
+		expect(refs[0].id).toBe(5);
+	});
+
+	it("url is empty string (no parseable link)", () => {
+		const refs = scanExistingRefs(doc);
+		expect(refs[0].url).toBe("");
+	});
+
+	it("maxExisting offset: resolveFootnoteIdentity with this ref offsets new ids past 5", () => {
+		const refs = scanExistingRefs(doc);
+		const { idMap } = resolveFootnoteIdentity(
+			[makeRef({ incomingId: 1, url: "https://brand-new.com" })],
+			refs,
+		);
+		expect(idMap[1]).toBeGreaterThan(5);
+	});
+});
+
+describe("scanExistingRefs — multi-digit ids are parsed correctly", () => {
+	const doc = [
+		"[^12]: twelve snippet",
+		"[Twelve](https://twelve.com)",
+		"",
+		"[^99]: ninety-nine snippet",
+		"[NinetyNine](https://ninetynine.com)",
+		"",
+	].join("\n");
+
+	it("parses id=12 correctly", () => {
+		const refs = scanExistingRefs(doc);
+		expect(refs.some((r) => r.id === 12)).toBe(true);
+	});
+
+	it("parses id=99 correctly", () => {
+		const refs = scanExistingRefs(doc);
+		expect(refs.some((r) => r.id === 99)).toBe(true);
+	});
+});
+
+describe("scanExistingRefs — max id raises offset for new paste", () => {
+	// Note already has [^1] and [^2] with F4 defs in Resources.
+	// Pasting new content → new ids must start at 3 or higher, never 1 or 2.
+	const doc = [
+		"# Note",
+		"",
+		"Existing text.[^1][^2]",
+		"",
+		"## Resources",
+		"",
+		"[^1]: first snippet",
+		"[First](https://first.example.com)",
+		"",
+		"[^2]: second snippet",
+		"[Second](https://second.example.com)",
+		"",
+	].join("\n");
+
+	const existingRefs = scanExistingRefs(doc);
+
+	it("scans two refs with ids 1 and 2", () => {
+		const ids = existingRefs.map((r) => r.id).sort((a, b) => a - b);
+		expect(ids).toEqual([1, 2]);
+	});
+
+	it("new paste ref gets id 3 — not 1 or 2", () => {
+		const { idMap } = resolveFootnoteIdentity(
+			[makeRef({ incomingId: 1, url: "https://brand-new.com/page" })],
+			existingRefs,
+		);
+		expect(idMap[1]).toBe(3);
+	});
+
+	it("new paste ref id is neither 1 nor 2 (no collision)", () => {
+		const { idMap } = resolveFootnoteIdentity(
+			[makeRef({ incomingId: 1, url: "https://brand-new.com/page" })],
+			existingRefs,
+		);
+		expect(idMap[1]).not.toBe(1);
+		expect(idMap[1]).not.toBe(2);
 	});
 });

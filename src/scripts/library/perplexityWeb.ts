@@ -35,6 +35,7 @@ import {
 	applyFootnoteInlineRename,
 	newRefDefinitions,
 	moveToResources,
+	scanExistingRefs,
 } from "../../core/footnotes";
 import { applyToString } from "../../core/applyToString";
 import { cascade } from "../../core/headings";
@@ -58,7 +59,9 @@ export const perplexityWebScript: ScriptFunction = (ctx: ScriptContext): EditPla
 	const bodyFC = replaceMarkersInBody(pr.body, pr.inline);
 
 	// Step 2: Resolve identity — dedup by URL, build idMap and new refs.
-	const { idMap, newRefs } = resolveFootnoteIdentity(pr.sources, []);
+	// Scan the destination note for existing numeric footnote defs so new paste ids
+	// start past maxExisting and never collide with pre-existing [^n] footnotes.
+	const { idMap, newRefs } = resolveFootnoteIdentity(pr.sources, scanExistingRefs(ctx.op.doc));
 
 	// Step 3: Rename [^n] → [^finalId] using the resolved idMap.
 	const renameEdits = applyFootnoteInlineRename(bodyFC, idMap);

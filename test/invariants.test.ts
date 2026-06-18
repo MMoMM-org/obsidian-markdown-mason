@@ -342,23 +342,21 @@ describe("I1 — Alpha footnotes survive a full perplexityAppScript run", () => 
 		expect(result).toContain("[^note]: Named footnote definition");
 	});
 
-	it("new numeric footnote from paste is inserted (production: starts from id=1, not from maxExisting+1)", () => {
-		// PRODUCTION GAP (documented): perplexityAppScript passes [] as the existing
-		// refs to resolveFootnoteIdentity, so new paste footnotes always start from 1
-		// rather than from maxExisting+1 (the note's highest numeric id + 1). This
-		// means paste footnotes may collide with existing note footnotes when the note
-		// already has [^1], [^2], etc. The alpha-footnote invariant is still honoured
-		// (alpha refs are structurally excluded), but numeric collision is possible.
-		//
-		// The test below asserts ACTUAL production behavior: new source gets [^1].
-		// This is intentionally a failing-gracefully assertion — it documents the gap
-		// rather than masking it.
+	it("new numeric footnote from paste does NOT collide with existing [^3] (starts from maxExisting+1)", () => {
+		// DRIFT-2 fix: perplexityAppScript now scans ctx.op.doc for existing numeric
+		// footnote defs and passes them to resolveFootnoteIdentity so new paste ids
+		// start past maxExisting. The note already has [^3]; the new source must get
+		// id=4 (or higher), never id=1, 2, or 3.
 		const doc = PRE_EXISTING_ALPHA_NOTE;
 		const ctx = makeCtx(doc, PERPLEXITY_APP_INPUT);
 		const plan = perplexityAppScript(ctx) as EditPlan;
 		const result = applyPlan(doc, plan ?? []);
-		// Production: new source is assigned id=1 (fresh paste, no existing-ref scan)
-		expect(result).toContain("[^1]");
+		// New source must be id=4 (maxExisting was 3 from [^3])
+		expect(result).toContain("[^4]");
+		// The paste must NOT introduce a new definition for [^3] — the only [^3]:
+		// line must be the pre-existing one from PRE_EXISTING_ALPHA_NOTE.
+		const def3Matches = (result.match(/\[\^3\]:/g) ?? []).length;
+		expect(def3Matches).toBe(1); // exactly the original def — no new one from paste
 	});
 
 	it("existing numeric [^3] is not renumbered by the script run", () => {
@@ -381,6 +379,102 @@ describe("I1 — Alpha footnotes survive a full perplexityAppScript run", () => 
 		expect(result).not.toContain("[^a]: Numeric");
 		// The [^a] definition must still say "Alpha footnote definition"
 		expect(result).toContain("[^a]: Alpha footnote definition");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// T7.2  Paste collision-avoidance: DRIFT-2 fix
+//
+// Verifies that pasting Perplexity content into a note that already has [^1]
+// and [^2] (with F4 Resources defs) does NOT introduce duplicate [^1]/[^2].
+// New paste ids must start at 3 (or higher), and existing defs must survive.
+//
+// Also tests dedup: when pasted content cites a URL already in the note,
+// the existing id is REUSED (no new def, no collision).
+// ---------------------------------------------------------------------------
+
+describe("T7.2 — paste collision-avoidance: no duplicate footnote ids when note already has [^1][^2]", () => {
+	// A note that already has [^1] and [^2] with F4 two-line defs in Resources.
+	const NOTE_WITH_NUMERIC_DEFS = [
+		"# Research Note",
+		"",
+		"Prior findings.[^1][^2]",
+		"",
+		"## Resources",
+		"",
+		"[^1]: first existing snippet",
+		"[First Existing](https://first-existing.example.com)",
+		"",
+		"[^2]: second existing snippet",
+		"[Second Existing](https://second-existing.example.com)",
+		"",
+	].join("\n");
+
+	// Perplexity paste that introduces one NEW source (different URL from existing).
+	const PASTE_WITH_NEW_SOURCE = [
+		"## Answer",
+		"",
+		"New finding with citation [1].",
+		"",
+		"Sources",
+		"[1] Brand New Article https://brand-new.example.com/article",
+	].join("\n");
+
+	// Perplexity paste that cites a URL already in the note (for dedup test).
+	const PASTE_WITH_EXISTING_URL = [
+		"## Answer",
+		"",
+		"Finding referencing existing source [1].",
+		"",
+		"Sources",
+		"[1] First Existing https://first-existing.example.com",
+	].join("\n");
+
+	it("new paste footnote starts at id=3, not id=1 or id=2", () => {
+		const ctx = makeCtx(NOTE_WITH_NUMERIC_DEFS, PASTE_WITH_NEW_SOURCE);
+		const plan = perplexityAppScript(ctx) as EditPlan;
+		const result = applyPlan(NOTE_WITH_NUMERIC_DEFS, plan ?? []);
+		expect(result).toContain("[^3]");
+	});
+
+	it("no duplicate [^1] is introduced for new content", () => {
+		const ctx = makeCtx(NOTE_WITH_NUMERIC_DEFS, PASTE_WITH_NEW_SOURCE);
+		const plan = perplexityAppScript(ctx) as EditPlan;
+		const result = applyPlan(NOTE_WITH_NUMERIC_DEFS, plan ?? []);
+		// The only [^1] references should be the originals in the note body and def.
+		// The paste citation [1] must be renumbered to [^3], not [^1].
+		const newContentIdx = result.indexOf("New finding");
+		const citation1AfterNewContent = result.indexOf("[^1]", newContentIdx);
+		// No [^1] should appear in the pasted paragraph itself
+		expect(citation1AfterNewContent).toBe(-1);
+	});
+
+	it("existing [^1] definition is preserved", () => {
+		const ctx = makeCtx(NOTE_WITH_NUMERIC_DEFS, PASTE_WITH_NEW_SOURCE);
+		const plan = perplexityAppScript(ctx) as EditPlan;
+		const result = applyPlan(NOTE_WITH_NUMERIC_DEFS, plan ?? []);
+		expect(result).toContain("[^1]: first existing snippet");
+	});
+
+	it("existing [^2] definition is preserved", () => {
+		const ctx = makeCtx(NOTE_WITH_NUMERIC_DEFS, PASTE_WITH_NEW_SOURCE);
+		const plan = perplexityAppScript(ctx) as EditPlan;
+		const result = applyPlan(NOTE_WITH_NUMERIC_DEFS, plan ?? []);
+		expect(result).toContain("[^2]: second existing snippet");
+	});
+
+	it("dedup: pasting a URL already in the note reuses the existing id (no new def)", () => {
+		// The paste cites https://first-existing.example.com which is already [^1].
+		// The pasted inline citation [1] must be renumbered to [^1] (reuse), and
+		// NO new definition for that URL must be added.
+		const ctx = makeCtx(NOTE_WITH_NUMERIC_DEFS, PASTE_WITH_EXISTING_URL);
+		const plan = perplexityAppScript(ctx) as EditPlan;
+		const result = applyPlan(NOTE_WITH_NUMERIC_DEFS, plan ?? []);
+		// The pasted citation must reference [^1] (reused id)
+		expect(result).toContain("[^1]");
+		// There must be exactly ONE definition for [^1] — no duplicate def added
+		const defMatches = result.match(/\[\^1\]:/g) ?? [];
+		expect(defMatches).toHaveLength(1);
 	});
 });
 

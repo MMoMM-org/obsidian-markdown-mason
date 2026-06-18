@@ -147,6 +147,56 @@ function buildExistingByUrl(existing: ExistingRef[]): Record<string, number> {
 }
 
 // ---------------------------------------------------------------------------
+// scanExistingRefs — reverse-parse F4 two-line definitions in the note doc
+// ---------------------------------------------------------------------------
+
+/**
+ * Scan a note document for existing F4 two-line footnote definitions and
+ * return their numeric ids and urls as ExistingRef[].
+ *
+ * F4 two-line format (produced by formatF4Def):
+ *   line 1: "[^{id}]: {snippet}"   — id must be numeric; alpha defs are skipped
+ *   line 2: "[{title}]({url})"     — markdown link carrying the url
+ *
+ * Tolerant recovery: a numeric [^n]: def whose following line is not a parseable
+ * markdown link still contributes an ExistingRef with url="" so its id raises
+ * maxExisting and new paste ids never collide with it.
+ *
+ * Empty doc / no defs → [].
+ *
+ * Note: the same scanner could later serve the whole-note ctx.doc registry
+ * (registry.ts TODO(Phase 4)) — that is a separate concern left for future work.
+ */
+export function scanExistingRefs(doc: string): ExistingRef[] {
+	const refs: ExistingRef[] = [];
+	const lines = doc.split("\n");
+
+	for (let i = 0; i < lines.length; i++) {
+		const id = parseNumericDefLine(lines[i]);
+		if (id === null) continue;
+
+		const url = parseUrlLine(lines[i + 1]);
+		refs.push({ id, url });
+	}
+
+	return refs;
+}
+
+/** Match "[^{digits}]: ..." and return the numeric id, or null if not matched. */
+function parseNumericDefLine(line: string): number | null {
+	const m = /^\[\^(\d+)\]:/.exec(line);
+	if (!m) return null;
+	return Number(m[1]);
+}
+
+/** Match "[{title}]({url})" and return the url, or "" if not parseable. */
+function parseUrlLine(line: string | undefined): string {
+	if (!line) return "";
+	const m = /^\[[^\]]*\]\(([^)]+)\)/.exec(line);
+	return m ? m[1] : "";
+}
+
+// ---------------------------------------------------------------------------
 // applyFootnoteInlineRename
 // ---------------------------------------------------------------------------
 
