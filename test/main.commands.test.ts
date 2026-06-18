@@ -788,3 +788,91 @@ describe("T3.4 single-undo integration — preset produces one undo step", () =>
 		expect(editor.getValue()).toBe(doc);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// C-1 regression: preset.formatSelection must produce a VALID, non-overlapping
+// EditPlan when the doc has numeric footnotes needing renumber AND a def outside
+// Resources (O+D emits rename on def.from..def.to, M emits delete on the same
+// span → overlapping edits in one CM6 transaction → garbled output before fix).
+//
+// Before fix: O+D and M each independently emit edits over the same def span;
+// concatenating those plans via runPreset produces overlapping edits that CM6
+// applies in undefined order, producing garbled output (e.g. doubled defs).
+// After fix: the format-selection pipeline fuses the footnote steps via
+// in-memory composition, emitting one clean EditPlan vs the original.
+// ---------------------------------------------------------------------------
+
+describe("C-1 regression — preset.formatSelection: no overlapping CM6 edits, single undo", () => {
+	beforeEach(() => clearNoticeLog());
+
+	it("produces correct output (not garbled) and single-undo when doc has numeric footnotes needing renumber AND def outside Resources", async () => {
+		// This is the exact overlap trigger:
+		//   - [^3] appears first in body (only numeric ref) → O+D renumbers to [^1]
+		//   - [^3] def is outside Resources → M moves it to Resources
+		//   Both O+D and M independently emit edits over the def's span (50..103)
+		//   when concatenated via runPreset → overlapping edits → garbled output.
+		//
+		// After the fix (fused in-memory composition):
+		//   - [^3] renamed to [^1] AND moved to Resources in one clean plan
+		//   - Doc contains exactly one def [^1]: in Resources and no defs in body
+		//   - One undo restores original (single-transaction proof)
+		const doc = [
+			"# Title",
+			"",
+			"Body text [^3] with a skipped footnote.",
+			"",
+			"[^3]: example snippet",
+			"[Example](https://example.com)",
+			"",
+		].join("\n");
+
+		const editor = makeCmEditor(doc);
+
+		const plugin = makePlugin();
+		await plugin.onload();
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		(plugin.app as any).workspace._fireLayoutReady();
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const commands = (plugin as any)._commands as Array<{
+			id: string;
+			editorCallback(editor: Editor): void;
+		}>;
+
+		const formatCmd = commands.find((c) => c.id === "preset.formatSelection");
+		expect(formatCmd, "preset.formatSelection must be registered").toBeDefined();
+
+		// (a) Must NOT throw
+		expect(() => {
+			formatCmd!.editorCallback(editor as unknown as Editor);
+		}).not.toThrow();
+
+		// (b) Doc must have changed (footnote was processed)
+		const after = editor.getValue();
+		expect(after, "preset.formatSelection must have changed the doc").not.toBe(doc);
+
+		// (c) Output must be correct (not garbled):
+		//     - [^1] def must appear exactly once (not doubled)
+		//     - No def should remain in the body before ## Resources
+		//     - Def should be in Resources section
+		const resourcesIdx = after.indexOf("## Resources");
+		expect(resourcesIdx, "## Resources section must exist after format").toBeGreaterThan(-1);
+		const bodySection = after.slice(0, resourcesIdx);
+		const resourcesSection = after.slice(resourcesIdx);
+		// No defs in body (they were moved to Resources)
+		expect(bodySection.match(/^\[\^\d+\]:/gm), "no footnote defs should remain in body").toBeNull();
+		// Def appears exactly once in Resources (not doubled)
+		const defCount = (resourcesSection.match(/^\[\^\d+\]:/gm) ?? []).length;
+		expect(defCount, "exactly one footnote def in Resources (not doubled or missing)").toBe(1);
+		// Ref was renumbered to [^1]
+		expect(after).toContain("[^1]");
+		expect(after).not.toContain("[^3]");
+
+		// (d) One undo must restore the original doc exactly (single-transaction proof)
+		undo(editor.cm);
+		expect(
+			editor.getValue(),
+			"one undo must fully restore the original doc (single-transaction proof)",
+		).toBe(doc);
+	});
+});

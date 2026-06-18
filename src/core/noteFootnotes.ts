@@ -396,8 +396,7 @@ export function wholeNoteIdentity(ctx: OperationContext): EditPlan {
 		const newId = idMap[def.id];
 		if (newId === undefined) continue;
 
-		const canonKey = `${def.id}`;
-		const isCanonical = canonicalDef.get(canonKey) === def;
+		const isCanonical = canonicalDef.get(def.id) === def;
 
 		if (!isCanonical) {
 			// Duplicate definition: delete it (replace with empty string).
@@ -408,8 +407,13 @@ export function wholeNoteIdentity(ctx: OperationContext): EditPlan {
 		// Rename this def: replace [^oldId]: with [^newId]:
 		const newDefText = renameDef(def, String(newId));
 		if (newDefText !== def.raw) {
-			// Replace the entire def block (from..to) with the renamed version + trailing newline
-			const insertText = newDefText + "\n";
+			// Replace the entire def block (from..to) with the renamed version.
+			// Append "\n" only when the original span included a trailing newline
+			// (def.to > def.from + def.raw.length). When the def is the last line
+			// of the doc and has no trailing newline, def.to was clamped to docLength
+			// and appending "\n" would spuriously grow the document (S-1).
+			const hasTrailingNewline = def.to > def.from + def.raw.length;
+			const insertText = hasTrailingNewline ? newDefText + "\n" : newDefText;
 			plan.push({ from: def.from, to: def.to, insert: insertText });
 		}
 	}
@@ -636,8 +640,10 @@ export function tidyFootnotes(ctx: OperationContext): EditPlan {
  * Strategy: find the longest common prefix and suffix, then emit a single Edit
  * for the changed middle region. This produces at most one Edit and is always
  * valid (offsets vs original, ADR-1). If the strings are identical, returns [].
+ *
+ * Exported so commands.ts can use it to build fused format pipelines.
  */
-function diffToEditPlan(original: string, transformed: string): EditPlan {
+export function diffToEditPlan(original: string, transformed: string): EditPlan {
 	if (original === transformed) return [];
 
 	// Find common prefix length.

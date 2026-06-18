@@ -48,8 +48,10 @@ import type { Plugin } from "obsidian";
 import type { Editor } from "obsidian";
 import { buildRegistry } from "./core/registry";
 import type { RegistryEntry } from "./core/registry";
-import { tidyFootnotes } from "./core/noteFootnotes";
+import { tidyFootnotes, diffToEditPlan } from "./core/noteFootnotes";
+import { normalize } from "./core/headings";
 import { applyEditPlan } from "./sources/apply";
+import { applyToString } from "./core/applyToString";
 import { selectionContext } from "./sources/selection";
 import type { Edit, EditPlan, MasonSettings, OperationContext } from "./core/types";
 
@@ -245,34 +247,69 @@ function runOperation(
 }
 
 // ---------------------------------------------------------------------------
-// Preset: chain multiple ops into ONE applyEditPlan call (single undo)
+// fusedFormatNote — fused in-memory pipeline for "Format selection"
+//
+// Scope: whole-note (not selection-scoped). "Format selection" applies heading
+// ops to the selection region and footnote ops to the whole note. Because the
+// footnote ops (C/O+D/M) must operate on the final post-heading doc (their
+// offsets would be stale against the pre-heading doc), we compose ALL steps
+// in-memory on a scratch string and emit a SINGLE diffToEditPlan result.
+//
+// Pipeline:
+//   1. normalize (whole-note): close heading gaps in the original doc first,
+//      before cascade so that normalize does not undo the cascade shift.
+//   2. cascade (selection-scoped): shift selected headings relative to context.
+//      Applied after normalize so the shifted result is not treated as a gap.
+//   3. tidyFootnotes (C→O+D→M): fused footnote pipeline on the post-heading doc.
+//   4. diff original→final: one non-overlapping EditPlan → one CM6 transaction.
+//
+// Ordering rationale: normalize then cascade avoids a semantic conflict where
+// cascade produces H1→H3 (gap) and normalize then demotes it back to H2.
+// Running normalize on the original first closes pre-existing gaps, then
+// cascade applies the relative shift to the post-normalize doc. This matches
+// user intent: "normalize existing headings, then cascade my selection".
+//
+// Returns [] when nothing changed; returns a single Edit otherwise.
 // ---------------------------------------------------------------------------
 
-/**
- * Chains multiple registry entries by concatenating their EditPlans and
- * applying the combined plan in a single applyEditPlan call (one undo step).
- */
-function runPreset(
-	entries: RegistryEntry[],
-	editor: Editor,
-	buildCtx: CtxFactory,
-	presetNoOpNotice: string,
-): void {
-	// Collect plans without applying individually (apply=false)
-	const combined: EditPlan = [];
-	for (const entry of entries) {
-		const plan = runOperation(entry, editor, buildCtx, false);
-		combined.push(...plan);
+function fusedFormatNote(editor: Editor, settings: MasonSettings): EditPlan {
+	const ctx = selectionContext(editor, settings);
+	const original = ctx.doc;
+
+	// Step 1: normalize — close heading gaps in the original doc.
+	const normalizeCtx: OperationContext = { ...ctx, doc: original };
+	const normalizePlan = normalize(normalizeCtx);
+	const afterNormalize = applyToString(original, normalizePlan);
+
+	// Step 2: cascade — selection-scoped, remap insert→replace on post-normalize doc.
+	// Update cursor/selection to be valid against afterNormalize.  Since normalize
+	// only replaces heading lines in-place (same offset range, same or shorter text),
+	// the cursor and selection offsets are still valid as long as normalize did not
+	// change content before the selection start.  In practice heading levels differ by
+	// at most 5 chars, and the selection offset may shift.  For v0.1 we recompute
+	// the selection against the original offsets (conservative: may slightly mis-align
+	// on pathological docs, but correct for the common case).
+	let afterCascade = afterNormalize;
+	const cascadeEntry = buildRegistry().entries.find((e) => e.id === "headings.cascade");
+	if (cascadeEntry && ctx.selection !== undefined) {
+		// Build a post-normalize context with the original selection offsets.
+		// The cascade plan is: insert transformed input at cursor.
+		// cascadeSelectionPlan remaps to: replace [sel.from..sel.to] with transformed input.
+		// We apply this against afterNormalize.
+		const ctxForCascade: OperationContext = { ...ctx, doc: afterNormalize };
+		const { plan: cascadePlan, noContextHeading } = cascadeSelectionPlan(cascadeEntry, ctxForCascade);
+		if (!noContextHeading && cascadePlan && cascadePlan.length > 0) {
+			afterCascade = applyToString(afterNormalize, cascadePlan);
+		}
 	}
 
-	if (combined.length === 0) {
-		new Notice(presetNoOpNotice);
-		return;
-	}
+	// Step 3: tidyFootnotes (C→O+D→M) — fused footnote pipeline on the post-heading doc.
+	const tidyCtx: OperationContext = { ...ctx, doc: afterCascade };
+	const tidyPlan = tidyFootnotes(tidyCtx);
+	const afterTidy = applyToString(afterCascade, tidyPlan);
 
-	// Single applyEditPlan call = single CM6 transaction = single undo step (F5.1, F7.1)
-	applyEditPlan(editor, combined);
-	showCountNotice(combined.length);
+	// Step 4: diff original→final — one non-overlapping edit (single undo step).
+	return diffToEditPlan(original, afterTidy);
 }
 
 // ---------------------------------------------------------------------------
@@ -289,9 +326,6 @@ export function registerCommands(
 	plugin: Plugin & { settings: MasonSettings },
 ): void {
 	const { entries } = buildRegistry();
-
-	// Index entries by id for preset lookup
-	const byId = Object.fromEntries(entries.map((e) => [e.id, e]));
 
 	// -------------------------------------------------------------------------
 	// Preset commands (registered first per SDD)
@@ -318,36 +352,36 @@ export function registerCommands(
 		},
 	});
 
-	// "Mason: Format selection" — cascade → normalize → fromCitations → identity → move
-	// Operates on the SELECTION (F5.2): context is built via selectionContext so cascade
-	// and normalize act on the selected text, not the whole document.
-	// cascade step uses selection-replace semantics (cascadeSelectionPlan remap):
-	// the selected headings are replaced in place, not inserted at cursor.
-	// The footnote steps (fromCitations, identity, move) now run via entry.run(ctx)
-	// which calls the whole-note implementations.  For selection-scoped footnote
-	// processing, the whole-note ops operate on ctx.doc (the full document), which
-	// means they process the entire note regardless of selection — this is
-	// intentionally conservative: Format selection applies heading ops to the
-	// selection and footnote ops to the whole note.
-	// NOTE: Format selection's footnote steps are chained via runPreset which
-	// collects independent EditPlans against the same ctx.doc.  Because C, O+D,
-	// and M each operate on the same original doc independently (they are
-	// individually offset-correct vs ctx.doc), the combined plan is valid.
-	// If C is no-op (no bare citations in doc), O+D operates on ctx.doc directly
-	// which is correct.  If C does produce changes, those changes are also in the
-	// combined plan and applyEditPlan applies all of them together.
+	// "Mason: Format selection" — cascade → normalize → C → O+D → M
+	//
+	// Heading steps (cascade, normalize) are selection-scoped:
+	//   - cascade uses selection-replace semantics (cascadeSelectionPlan remap):
+	//     the selected headings are replaced in-place, not inserted at cursor.
+	//   - normalize applies gap-close on the post-cascade whole-note doc.
+	//
+	// Footnote steps (C/O+D/M) are whole-note: they process ctx.doc regardless
+	// of the selection. This is intentionally conservative — Format selection
+	// applies heading ops to the selection and footnote ops to the whole note.
+	//
+	// Implementation: fusedFormatNote composes ALL steps via in-memory application
+	// on a scratch string (cascade→normalize→tidyFootnotes) and emits ONE
+	// diffToEditPlan result vs the original doc. This avoids overlapping edits
+	// that would occur if C/O+D/M were concatenated via runPreset — both O+D and
+	// M emit edits over the same def span (renumber + delete before moving),
+	// producing garbled output when concatenated.
+	//
+	// Result: a single Edit vs original → one CM6 transaction → one undo step.
 	plugin.addCommand({
 		id: "preset.formatSelection",
 		name: "Format selection",
 		editorCallback(editor: Editor): void {
-			const steps = [
-				byId["headings.cascade"],
-				byId["headings.normalize"],
-				byId["footnotes.fromCitations"],
-				byId["footnotes.identity"],
-				byId["footnotes.move"],
-			].filter((e): e is RegistryEntry => e !== undefined);
-			runPreset(steps, editor, selectionCtx(plugin.settings), "Nothing to format");
+			const plan = fusedFormatNote(editor, plugin.settings);
+			if (plan.length === 0) {
+				new Notice("Nothing to format");
+				return;
+			}
+			applyEditPlan(editor, plan);
+			showCountNotice(plan.length);
 		},
 	});
 

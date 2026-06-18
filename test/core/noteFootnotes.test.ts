@@ -396,16 +396,25 @@ describe("wholeNoteMove — moves scattered defs into ## Resources", () => {
 		expect(defIdx).toBeGreaterThan(resourcesIdx);
 	});
 
-	it("appends to existing ## Resources section", () => {
-		const doc = "Text [^2].\n\n## Resources\n\n[^1]: existing\n[E](https://e.com)\n\n[^2]: new snippet\n[N](https://n.com)\n";
+	it("appends to existing ## Resources section when def is in the body (outside Resources)", () => {
+		// W-1 fix: [^2] def starts in the BODY (before ## Resources) so M actually moves it.
+		// [^1] is already inside Resources and must be preserved there.
+		// The old fixture put both defs after ## Resources → M was a no-op (trivially passing).
+		const doc = "Text [^2].\n\n[^2]: new snippet\n[N](https://n.com)\n\n## Resources\n\n[^1]: existing\n[E](https://e.com)\n";
 		const ctx = makeCtx(doc);
 		const plan = wholeNoteMove(ctx);
+		// M must emit a non-empty plan since [^2] is outside Resources
+		expect(plan.length, "M must produce a non-empty plan when def is outside Resources").toBeGreaterThan(0);
 		const result = applyToString(doc, plan);
-		// Both defs should be in the Resources section
+		// Both defs should be in the Resources section after the move
 		const resourcesIdx = result.indexOf("## Resources");
-		const after = result.slice(resourcesIdx);
-		expect(after).toContain("[^1]: existing");
-		expect(after).toContain("[^2]: new snippet");
+		expect(resourcesIdx, "## Resources must exist in result").toBeGreaterThan(-1);
+		const resourcesSection = result.slice(resourcesIdx);
+		expect(resourcesSection).toContain("[^1]: existing");
+		expect(resourcesSection).toContain("[^2]: new snippet");
+		// [^2] def must NOT remain in the body (it was moved)
+		const bodySection = result.slice(0, resourcesIdx);
+		expect(bodySection.match(/^\[\^2\]:/gm), "[^2] def must not remain in body after move").toBeNull();
 	});
 
 	it("does not create an empty ## Resources section when there are no defs to move", () => {
@@ -425,13 +434,29 @@ describe("wholeNoteMove — moves scattered defs into ## Resources", () => {
 		expect(matches).toHaveLength(1);
 	});
 
-	it("preserves orphaned lines in Resources (lines without [^n]: prefix)", () => {
+	it("preserves orphaned lines in Resources when moving a def from the body", () => {
+		// W-2 fix: the def to move ([^1]) starts in the BODY (outside Resources),
+		// and the orphan line sits inside Resources. M must move [^1] into Resources
+		// AND keep the orphan untouched. The old fixture had [^1] already inside
+		// Resources → M was a no-op (trivially passing the orphan-preservation check).
 		const orphan = "This is an orphaned line in Resources";
-		const doc = `Text [^1].\n\n## Resources\n\n${orphan}\n\n[^1]: snip\n[T](https://t.com)\n`;
+		// [^1] def is in the BODY (before ## Resources); orphan is inside Resources
+		const doc = `Text [^1].\n\n[^1]: snip\n[T](https://t.com)\n\n## Resources\n\n${orphan}\n`;
 		const ctx = makeCtx(doc);
 		const plan = wholeNoteMove(ctx);
+		// M must emit a non-empty plan since [^1] is outside Resources
+		expect(plan.length, "M must produce a non-empty plan when def is outside Resources").toBeGreaterThan(0);
 		const result = applyToString(doc, plan);
+		// Orphan must survive untouched
 		expect(result).toContain(orphan);
+		// [^1] def must be in the Resources section after the move
+		const resourcesIdx = result.indexOf("## Resources");
+		expect(resourcesIdx, "## Resources must exist in result").toBeGreaterThan(-1);
+		const resourcesSection = result.slice(resourcesIdx);
+		expect(resourcesSection).toContain("[^1]: snip");
+		// [^1] def must NOT remain in the body (it was moved)
+		const bodySection = result.slice(0, resourcesIdx);
+		expect(bodySection.match(/^\[\^1\]:/gm), "[^1] def must not remain in body after move").toBeNull();
 	});
 
 	it("uses settings.resourcesName for the section name", () => {
