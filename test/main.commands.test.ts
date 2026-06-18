@@ -295,8 +295,10 @@ describe("T3.4(c) — empty plan shows descriptive Notice, doc unchanged", () =>
 describe("T3.4(d) — preset chains ops; changes are fully undone in one step", () => {
 	beforeEach(() => clearNoticeLog());
 
-	it("preset.tidyFootnotes is registered and shows a Notice (all footnote steps are PARSER-PENDING stubs)", async () => {
-		const doc = "# Title\n\n## Section\n\nContent.\n";
+	it("preset.tidyFootnotes on a doc with no footnotes shows a descriptive Notice and leaves doc unchanged (empty-path coverage)", async () => {
+		// A plain doc with no footnotes at all — tidyFootnotes returns an empty plan,
+		// so the command must show a descriptive Notice and leave the doc untouched.
+		const doc = "# Title\n\n## Section\n\nContent with no footnotes.\n";
 		const editor = makeCmEditor(doc);
 
 		const plugin = makePlugin();
@@ -315,11 +317,80 @@ describe("T3.4(d) — preset chains ops; changes are fully undone in one step", 
 
 		presetCmd!.editorCallback(editor as unknown as Editor);
 
-		// All footnote steps are PARSER-PENDING stubs → empty plan → descriptive Notice
-		// (not a count notice). Doc must be unchanged.
+		// Empty plan → descriptive Notice (not a count notice). Doc must be unchanged.
 		expect(editor.getValue()).toBe(doc);
 		const notices = noticeLog();
 		expect(notices.length, "expected at least one Notice").toBeGreaterThan(0);
+	});
+
+	it("preset.tidyFootnotes on a real footnote doc: doc changes then ONE undo fully restores it (F4.4/F5/F7.1)", async () => {
+		// Fixture: a doc with real footnote work across all three tidy stages (C → O+D → M).
+		//
+		// Body contains:
+		//   [1]  — bare numeric citation (C converts to [^1])
+		//   [^2] — already-converted inline ref
+		//   [^A] — alpha ref, left untouched by all stages
+		//
+		// Defs are placed OUTSIDE the ## Resources section (M will move them in):
+		//   [^1]: First source (unique URL) — renamed to [^1] by O+D
+		//   [^2]: Duplicate URL as [^1]    — O+D merges [^2] into [^1], deletes this def
+		//   [^A]: Alpha def                — never touched
+		//
+		// After C:   [1] → [^1]; doc now has [^1] and [^2] inline refs both present.
+		// After O+D: [^2] refs merged into [^1] (same URL), duplicate def deleted.
+		// After M:   [^1] def (now sole numeric def) moved under ## Resources.
+		//
+		// The overall tidy produces changes, so tidyFootnotes emits a non-empty plan.
+		// That plan is dispatched as a single CM6 transaction; one CM6 undo() must
+		// restore the original doc exactly, proving single-transaction atomicity.
+		const doc = [
+			"# My Note",
+			"",
+			"See footnote [1] and [^2] and [^A] for details.",
+			"",
+			"[^1]: First source",
+			"[https://example.com/source](https://example.com/source)",
+			"[^2]: Same URL as first",
+			"[https://example.com/source](https://example.com/source)",
+			"[^A]: Alpha note — never moved",
+			"",
+			"## Resources",
+			"",
+		].join("\n");
+
+		const editor = makeCmEditor(doc);
+		const original = editor.getValue();
+
+		const plugin = makePlugin();
+		await plugin.onload();
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		(plugin.app as any).workspace._fireLayoutReady();
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const commands = (plugin as any)._commands as Array<{
+			id: string;
+			editorCallback(editor: Editor): void;
+		}>;
+
+		const presetCmd = commands.find((c) => c.id === "preset.tidyFootnotes");
+		expect(presetCmd, "preset.tidyFootnotes must be registered").toBeDefined();
+
+		presetCmd!.editorCallback(editor as unknown as Editor);
+
+		// Assert the plan was non-empty and the doc actually changed.
+		const after = editor.getValue();
+		expect(
+			after,
+			"tidyFootnotes must mutate a doc that has real footnote work to do",
+		).not.toBe(original);
+
+		// One CM6 undo must fully restore the original document exactly,
+		// proving the entire tidy was dispatched as a single CM6 transaction.
+		undo(editor.cm);
+		expect(
+			editor.getValue(),
+			"one undo must restore the original document exactly (single-transaction proof)",
+		).toBe(original);
 	});
 
 	it("preset.formatSelection with heading skip: doc changes then ONE undo fully restores it", async () => {
