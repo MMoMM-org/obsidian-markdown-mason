@@ -446,6 +446,10 @@ function findSectionInsertOffset(doc: string, headingLine: string): number | nul
 function buildSectionAppend(offset: number, defs: string[]): Edit {
 	// Use "\n\n" between defs when they are two-line (contain an internal newline),
 	// otherwise use "\n" so single-line defs are consecutive with no blank line.
+	// Note: a mixed batch (some defs with an internal newline, some without) is not
+	// produced by any current caller — all defs in a batch share the same format.
+	// If that changes, the separator must be computed per adjacent pair rather than
+	// once per batch (i.e. sep(defs[i], defs[i+1]) based on whether defs[i] has "\n").
 	const sep = defs.some((d) => d.includes("\n")) ? "\n\n" : "\n";
 	// Trailing "\n" ensures the next "## Heading" starts on its own line (Bug 1 fix).
 	const content = "\n" + defs.join(sep) + "\n";
@@ -456,6 +460,10 @@ function buildSectionAppend(offset: number, defs: string[]): Edit {
 function buildNoteEndInsert(doc: string, headingLine: string, defs: string[]): Edit {
 	// Use "\n\n" between defs when they are two-line (contain an internal newline),
 	// otherwise use "\n" so single-line defs are consecutive with no blank line.
+	// Note: a mixed batch (some defs with an internal newline, some without) is not
+	// produced by any current caller — all defs in a batch share the same format.
+	// If that changes, the separator must be computed per adjacent pair rather than
+	// once per batch (i.e. sep(defs[i], defs[i+1]) based on whether defs[i] has "\n").
 	const sep = defs.some((d) => d.includes("\n")) ? "\n\n" : "\n";
 	const content = `\n${headingLine}\n\n${defs.join(sep)}`;
 	return { from: doc.length, to: doc.length, insert: content };

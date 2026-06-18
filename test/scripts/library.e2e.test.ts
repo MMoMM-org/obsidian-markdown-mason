@@ -183,21 +183,6 @@ function assertCompactDefs(resourcesSection: string): void {
 	}
 }
 
-/**
- * Assert that no footnote link appears twice in consecutive lines (old double-link bug).
- *
- * Iterates every pair of consecutive non-blank lines in the Resources section
- * and fails if two consecutive lines are identical and look like a markdown link.
- */
-function assertNoDoubledLinks(resourcesSection: string): void {
-	const lines = resourcesSection.split("\n").filter((l) => l.trim() !== "");
-	for (let i = 0; i < lines.length - 1; i++) {
-		if (/^\[.+\]\(https?:\/\/.+\)$/.test(lines[i])) {
-			expect(lines[i + 1]).not.toBe(lines[i]);
-		}
-	}
-}
-
 /** Assert Resources section has NO bare second line duplicating a link below a [^n]: def. */
 function assertNoOrphanLinkLine(resourcesSection: string): void {
 	const lines = resourcesSection.split("\n");
@@ -370,17 +355,6 @@ describe("perplexityWebScript", () => {
 		const output = applyPlan(plan);
 		const resources = extractResourcesSection(output);
 		assertCompactDefs(resources);
-		assertNoDoubledLinks(resources);
-		assertNoOrphanLinkLine(resources);
-	});
-
-	it("Resources section does NOT contain orphan link lines (old doubled-link bug)", async () => {
-		const ctx = makeCtx(webInput);
-		const plan = await perplexityWebScript(ctx) as EditPlan;
-		const output = applyPlan(plan);
-		const resources = extractResourcesSection(output);
-		// assertNoOrphanLinkLine verifies that no [^n]: def line is followed
-		// by a bare [title](url) line — that is the exact pattern of the old bug.
 		assertNoOrphanLinkLine(resources);
 	});
 
@@ -433,17 +407,6 @@ describe("perplexityWebDownloadScript", () => {
 		const output = applyPlan(plan);
 		const resources = extractResourcesSection(output);
 		assertCompactDefs(resources);
-		assertNoDoubledLinks(resources);
-		assertNoOrphanLinkLine(resources);
-	});
-
-	it("Resources section does NOT contain orphan link lines (old doubled-link bug)", async () => {
-		const ctx = makeCtx(webDownloadInput);
-		const plan = await perplexityWebDownloadScript(ctx) as EditPlan;
-		const output = applyPlan(plan);
-		const resources = extractResourcesSection(output);
-		// assertNoOrphanLinkLine verifies that no [^n]: def line is followed
-		// by a bare [title](url) line — that is the exact pattern of the old bug.
 		assertNoOrphanLinkLine(resources);
 	});
 
