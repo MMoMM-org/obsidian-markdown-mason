@@ -450,9 +450,14 @@ describe("T5.5C — mason.pasteAndFormat command registration", () => {
 // for arbitrary text, the key invariant is: NO rawFallback on non-failure path.
 // ---------------------------------------------------------------------------
 
-// Minimal Perplexity-app clipboard text that perplexityAutoScript recognises and
-// produces a non-empty EditPlan for.  Shared with the selection command tests below.
-const PASTE_PERPLEXITY_APP_INPUT = [
+// Minimal Perplexity-app format text: ## Answer header + Sources marker + one cited source.
+// perplexityAutoScript will detect this as perplexityApp format and produce
+// a non-empty EditPlan (Resources section with the footnote definition).
+//
+// The perplexityApp parser requires a "## Answer" block header for prose
+// and source extraction. ctx.op.doc is the same as the selection text.
+// Shared by the paste count-Notice test and the selection command tests below.
+const PERPLEXITY_APP_INPUT = [
 	"## Answer",
 	"",
 	"Some answer text with citation [1].",
@@ -501,13 +506,14 @@ describe("T5.5C — paste command success path", () => {
 
 		plugin._commandInjection = {
 			// Clipboard contains Perplexity-app text → produces a real, non-empty EditPlan
-			clipboardReader: async () => PASTE_PERPLEXITY_APP_INPUT,
+			clipboardReader: async () => PERPLEXITY_APP_INPUT,
 			applyPlan: applyPlanSpy,
 		};
 
 		const cmd = findCommand(plugin, "mason.pasteAndFormat");
 		expect(cmd).toBeDefined();
 
+		clearNoticeLog();
 		await cmd.editorCallback(editor);
 
 		// Script produced a non-empty EditPlan → applyPlan called (pre-condition for Notice)
@@ -709,21 +715,6 @@ function makeSelectionEditorStub(doc: string): Editor & { _replaced: string[] } 
 	} as unknown as Editor & { _replaced: string[] };
 }
 
-// Minimal Perplexity-app format text: ## Answer header + Sources marker + one cited source.
-// perplexityAutoScript will detect this as perplexityApp format and produce
-// a non-empty EditPlan (Resources section with the footnote definition).
-//
-// The perplexityApp parser requires a "## Answer" block header for prose
-// and source extraction. ctx.op.doc is the same as the selection text.
-const PERPLEXITY_APP_INPUT = [
-	"## Answer",
-	"",
-	"Some answer text with citation [1].",
-	"",
-	"Sources",
-	"[1] Example Article https://example.com/article",
-].join("\n");
-
 describe("D — selection script commands: bound script runs on selection, applyPlan called", () => {
 	beforeEach(() => clearNoticeLog());
 
@@ -834,6 +825,7 @@ describe("D — selection script commands: bound script runs on selection, apply
 		const cmd = findCommand(plugin, "mason.script.perplexity-auto");
 		expect(cmd).toBeDefined();
 
+		clearNoticeLog();
 		await cmd.editorCallback(editor);
 
 		// Script produced a non-empty EditPlan → applyPlan called (pre-condition for Notice)
