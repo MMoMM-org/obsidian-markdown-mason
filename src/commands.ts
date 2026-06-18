@@ -308,7 +308,7 @@ export function registerCommands(
 	// TODO(Phase 4): replace entry.run stubs with ParseResult-backed calls.
 	plugin.addCommand({
 		id: "preset.tidyFootnotes",
-		name: "Mason: Tidy footnotes",
+		name: "Tidy footnotes",
 		editorCallback(editor: Editor): void {
 			const steps = [
 				byId["footnotes.fromCitations"],
@@ -328,7 +328,7 @@ export function registerCommands(
 	// TODO(Phase 4): wire selection-scoped context for footnote steps.
 	plugin.addCommand({
 		id: "preset.formatSelection",
-		name: "Mason: Format selection",
+		name: "Format selection",
 		editorCallback(editor: Editor): void {
 			const steps = [
 				byId["headings.cascade"],

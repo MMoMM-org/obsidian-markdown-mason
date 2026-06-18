@@ -169,7 +169,10 @@ describe("T3.4(a) — command registration", () => {
 		}
 	});
 
-	it("all command names start with 'Mason:' and use sentence case", async () => {
+	it("no command name starts with 'Mason:' (Obsidian auto-prepends plugin name)", async () => {
+		// Obsidian prepends "Markdown Mason: " to every command name in the palette.
+		// Command names must NOT carry their own "Mason: " prefix — that would
+		// produce "Markdown Mason: Mason: Paste and format" in the palette.
 		const plugin = makePlugin();
 		await plugin.onload();
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -179,7 +182,10 @@ describe("T3.4(a) — command registration", () => {
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const commands = (plugin as any)._commands as Array<{ name: string }>;
 		for (const cmd of commands) {
-			expect(cmd.name, `"${cmd.name}" must start with "Mason:"`).toMatch(/^Mason:/);
+			expect(
+				cmd.name,
+				`"${cmd.name}" must NOT start with "Mason:" (Obsidian already prepends the plugin name)`,
+			).not.toMatch(/^Mason:/i);
 		}
 	});
 
@@ -656,10 +662,10 @@ describe("T3.4(g) — preset.pasteAndFormat stub removed; real command present",
 			realCmd,
 			"mason.pasteAndFormat real command must be registered",
 		).toBeDefined();
-		expect(realCmd!.name).toBe("Mason: Paste and format");
+		expect(realCmd!.name).toBe("Paste and format");
 	});
 
-	it("exactly ONE command has name 'Mason: Paste and format' — no duplicates", async () => {
+	it("exactly ONE command has name 'Paste and format' — no duplicates", async () => {
 		const plugin = makePlugin();
 		await plugin.onload();
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -667,10 +673,10 @@ describe("T3.4(g) — preset.pasteAndFormat stub removed; real command present",
 
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const commands = (plugin as any)._commands as Array<{ name: string }>;
-		const pasteCommands = commands.filter((c) => c.name === "Mason: Paste and format");
+		const pasteCommands = commands.filter((c) => c.name === "Paste and format");
 		expect(
 			pasteCommands.length,
-			`expected exactly 1 "Mason: Paste and format" command; found ${pasteCommands.length}`,
+			`expected exactly 1 "Paste and format" command; found ${pasteCommands.length}`,
 		).toBe(1);
 	});
 });

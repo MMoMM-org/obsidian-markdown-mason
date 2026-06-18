@@ -78,12 +78,12 @@ describe("buildRegistry — structure", () => {
 		const { entries } = buildRegistry();
 
 		const expectedOps = [
-			{ id: "headings.cascade",         apiName: "mason.headings.cascade",         commandName: "Mason: Cascade headings" },
-			{ id: "headings.normalize",        apiName: "mason.headings.normalize",       commandName: "Mason: Normalize headings" },
-			{ id: "footnotes.fromCitations",   apiName: "mason.footnotes.fromCitations",  commandName: "Mason: Convert citations to footnotes" },
-			{ id: "footnotes.identity",        apiName: "mason.footnotes.identity",       commandName: "Mason: Resolve footnote identity" },
-			{ id: "footnotes.move",            apiName: "mason.footnotes.move",           commandName: "Mason: Move footnotes to resources" },
-			{ id: "util.normalizeUrl",         apiName: "mason.util.normalizeUrl",        commandName: "Mason: Normalize url" },
+			{ id: "headings.cascade",         apiName: "mason.headings.cascade",         commandName: "Cascade headings" },
+			{ id: "headings.normalize",        apiName: "mason.headings.normalize",       commandName: "Normalize headings" },
+			{ id: "footnotes.fromCitations",   apiName: "mason.footnotes.fromCitations",  commandName: "Convert citations to footnotes" },
+			{ id: "footnotes.identity",        apiName: "mason.footnotes.identity",       commandName: "Resolve footnote identity" },
+			{ id: "footnotes.move",            apiName: "mason.footnotes.move",           commandName: "Move footnotes to resources" },
+			{ id: "util.normalizeUrl",         apiName: "mason.util.normalizeUrl",        commandName: "Normalize url" },
 		];
 
 		for (const expected of expectedOps) {

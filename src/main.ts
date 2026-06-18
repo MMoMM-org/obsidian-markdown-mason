@@ -142,7 +142,7 @@ export class MarkdownMasonPlugin extends Plugin {
 	private _registerPasteCommand(): void {
 		this.addCommand({
 			id: "mason.pasteAndFormat",
-			name: "Mason: Paste and format",
+			name: "Paste and format",
 			// Obsidian editorCallback return type is `any`, so returning Promise<void>
 			// is valid and lets tests await the async work without fire-and-forget.
 			// Arrow function captures `this` lexically — no alias needed.
@@ -171,10 +171,10 @@ export class MarkdownMasonPlugin extends Plugin {
 
 	private _registerScriptCommands(): void {
 		const scripts: Array<{ id: string; name: string; script: ScriptFunction }> = [
-			{ id: "mason.script.perplexity-auto", name: "Mason: Perplexity auto", script: perplexityAutoScript },
-			{ id: "mason.script.perplexity-app", name: "Mason: Perplexity app", script: perplexityAppScript },
-			{ id: "mason.script.perplexity-web", name: "Mason: Perplexity web", script: perplexityWebScript },
-			{ id: "mason.script.perplexity-web-download", name: "Mason: Perplexity web download", script: perplexityWebDownloadScript },
+			{ id: "mason.script.perplexity-auto", name: "Perplexity auto", script: perplexityAutoScript },
+			{ id: "mason.script.perplexity-app", name: "Perplexity app", script: perplexityAppScript },
+			{ id: "mason.script.perplexity-web", name: "Perplexity web", script: perplexityWebScript },
+			{ id: "mason.script.perplexity-web-download", name: "Perplexity web download", script: perplexityWebDownloadScript },
 		];
 
 		for (const { id, name, script } of scripts) {
@@ -340,7 +340,15 @@ async function runPasteCommand(
 				? `Mason: ${fn} footnote${fn === 1 ? "" : "s"} filed`
 				: countNoticeMessage(outcome.count),
 		);
+	} else if (outcome.kind === "noop") {
+		// No format matched: insert the raw clipboard text at cursor (plain paste semantics)
+		// and inform the user. This avoids a silent no-op when the user invokes "Paste and format"
+		// on text that no script recognizes.
+		effects.rawFallback();
+		effects.notify("Mason: no recognized format — pasted as-is.");
 	}
+	// failed/blocked: runner already called rawFallback + notify on failure;
+	// blocked is a policy decision (no user action expected).
 }
 
 // ---------------------------------------------------------------------------

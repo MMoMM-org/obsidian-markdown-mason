@@ -219,7 +219,7 @@ function buildCascadeEntry(): RegistryEntry {
 	return {
 		id: "headings.cascade",
 		apiName: "mason.headings.cascade",
-		command: { name: "Mason: Cascade headings" },
+		command: { name: "Cascade headings" },
 		run(ctx: OperationContext): EditPlan {
 			return cascade(ctx).plan;
 		},
@@ -233,7 +233,7 @@ function buildNormalizeEntry(): RegistryEntry {
 	return {
 		id: "headings.normalize",
 		apiName: "mason.headings.normalize",
-		command: { name: "Mason: Normalize headings" },
+		command: { name: "Normalize headings" },
 		run(ctx: OperationContext): EditPlan {
 			return normalize(ctx);
 		},
@@ -244,7 +244,7 @@ function buildFromCitationsEntry(): RegistryEntry {
 	return {
 		id: "footnotes.fromCitations",
 		apiName: "mason.footnotes.fromCitations",
-		command: { name: "Mason: Convert citations to footnotes" },
+		command: { name: "Convert citations to footnotes" },
 		/**
 		 * run(ctx) is a safe no-op — fromCitations needs a ParseResult that the
 		 * command layer must supply.  Commands that call this op pass parseResult
@@ -261,7 +261,7 @@ function buildIdentityEntry(): RegistryEntry {
 	return {
 		id: "footnotes.identity",
 		apiName: "mason.footnotes.identity",
-		command: { name: "Mason: Resolve footnote identity" },
+		command: { name: "Resolve footnote identity" },
 		/**
 		 * run(ctx) returns an empty plan — identity needs a ParseResult.
 		 * Use identityFull(ctx, parseResult) to get both plan and newRefs.
@@ -288,7 +288,7 @@ function buildMoveEntry(): RegistryEntry {
 	return {
 		id: "footnotes.move",
 		apiName: "mason.footnotes.move",
-		command: { name: "Mason: Move footnotes to resources" },
+		command: { name: "Move footnotes to resources" },
 		/**
 		 * run(ctx) calls moveToResources with empty defs → safe no-op.
 		 * The api.footnotes.move(ctx, defs?) path accepts caller-supplied defs.
@@ -303,7 +303,7 @@ function buildNormalizeUrlEntry(): RegistryEntry {
 	return {
 		id: "util.normalizeUrl",
 		apiName: "mason.util.normalizeUrl",
-		command: { name: "Mason: Normalize url" },
+		command: { name: "Normalize url" },
 		/**
 		 * run(ctx) is a no-op stub — normalizeUrl takes a raw string, not a ctx.
 		 * The api.util.normalizeUrl(raw) path is the canonical calling convention.

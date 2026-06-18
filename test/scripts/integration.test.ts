@@ -432,22 +432,20 @@ describe("T5.5C — mason.pasteAndFormat command registration", () => {
 		expect(cmd, "mason.pasteAndFormat command must be registered").toBeDefined();
 	});
 
-	it("'mason.pasteAndFormat' command name starts with 'Mason:'", async () => {
+	it("'mason.pasteAndFormat' command name does not start with 'Mason:' (Obsidian prepends plugin name)", async () => {
 		const plugin = await makePluginAndFireLayout();
 		const cmd = findCommand(plugin, "mason.pasteAndFormat");
-		expect(cmd?.name).toMatch(/^Mason:/);
+		expect(cmd?.name).toBe("Paste and format");
 	});
 });
 
 // ---------------------------------------------------------------------------
 // C2: on success, no rawFallback (replaceSelection) called
 //
-// perplexityAutoScript returns undefined for unrecognized text (noop) and
-// a real EditPlan for recognized Perplexity text. Either way, on the non-failure
-// path rawFallback must NOT be called.
+// When perplexityAutoScript returns a real EditPlan (recognized Perplexity text),
+// the runner produces {kind:"applied"} → applyPlan is called and rawFallback is NOT.
 //
-// We use a simple clipboard input. Since perplexityAutoScript may return noop
-// for arbitrary text, the key invariant is: NO rawFallback on non-failure path.
+// We use recognized Perplexity-app input so the script always returns an EditPlan.
 // ---------------------------------------------------------------------------
 
 // Minimal Perplexity-app format text: ## Answer header + Sources marker + one cited source.
@@ -469,17 +467,18 @@ const PERPLEXITY_APP_INPUT = [
 describe("T5.5C — paste command success path", () => {
 	beforeEach(() => clearNoticeLog());
 
-	it("applyPlan spy is called and rawFallback is NOT called when script succeeds", async () => {
+	it("applyPlan spy is called and rawFallback is NOT called when script produces a plan", async () => {
 		const plugin = await makePluginAndFireLayout();
+		// Use a note with an existing H1 so cascade can find a context heading.
 		const editor = makePasteEditorStub("# My Note\n\n");
 
 		const applyPlanSpy = vi.fn();
 
-		// Inject test doubles via plugin._commandInjection
+		// Inject test doubles via plugin._commandInjection.
+		// Use recognized Perplexity-app input so the script produces a real EditPlan.
 		plugin._commandInjection = {
-			clipboardReader: async () => "Some clipboard text to paste.\n",
+			clipboardReader: async () => PERPLEXITY_APP_INPUT,
 			applyPlan: applyPlanSpy,
-			// failScript not set → perplexityAutoScript runs normally
 		};
 
 		const cmd = findCommand(plugin, "mason.pasteAndFormat");
@@ -488,10 +487,11 @@ describe("T5.5C — paste command success path", () => {
 		// editorCallback is async (fire-and-forget in production); await it in tests
 		await cmd.editorCallback(editor);
 
-		// On success (or noop): rawFallback must NOT be called
+		// Script produced a non-empty EditPlan → applyPlan called, rawFallback NOT called
+		expect(applyPlanSpy, "applyPlan must be called on success path").toHaveBeenCalledOnce();
 		expect(
 			editor._replaced,
-			"rawFallback (replaceSelection) must NOT be called on success/noop path",
+			"rawFallback (replaceSelection) must NOT be called on success path",
 		).toHaveLength(0);
 	});
 
@@ -663,6 +663,61 @@ describe("T5.5C — paste command with empty clipboard", () => {
 });
 
 // ---------------------------------------------------------------------------
+// C5: noop path — script returns undefined → rawFallback fires + "pasted as-is" Notice
+//
+// When perplexityAutoScript returns undefined (no recognized format), the
+// runner returns {kind:"noop"}.  runPasteCommand must:
+//   1. Call rawFallback (replaceSelection with raw clipboard text)
+//   2. Show a Notice matching /pasted as-is/
+//   3. NOT call applyPlan
+// ---------------------------------------------------------------------------
+
+describe("T5.5C — paste command noop path: raw fallback fires when no format matches", () => {
+	beforeEach(() => clearNoticeLog());
+
+	it("replaceSelection called with raw text and 'pasted as-is' Notice shown when script returns undefined (noop)", async () => {
+		const plugin = await makePluginAndFireLayout();
+		const editor = makePasteEditorStub("# Note\n\n");
+
+		const rawClipboardText = "plain text that no Perplexity parser recognizes";
+		const applyPlanSpy = vi.fn();
+
+		plugin._commandInjection = {
+			clipboardReader: async () => rawClipboardText,
+			applyPlan: applyPlanSpy,
+			// scriptOverride returns undefined → runner produces {kind:"noop"}
+			scriptOverride: () => undefined,
+		};
+
+		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		expect(cmd).toBeDefined();
+
+		clearNoticeLog();
+		await cmd.editorCallback(editor);
+
+		// rawFallback must insert the raw clipboard text at cursor
+		expect(
+			editor._replaced,
+			"rawFallback must call replaceSelection with raw text on noop",
+		).toContain(rawClipboardText);
+
+		// applyPlan must NOT be called (noop = no structured plan)
+		expect(
+			applyPlanSpy,
+			"applyPlan must NOT be called on noop",
+		).not.toHaveBeenCalled();
+
+		// A "pasted as-is" Notice must fire
+		const notices = noticeLog();
+		expect(notices.length, "expected exactly one Notice on noop").toBe(1);
+		expect(
+			notices[0],
+			"Notice must match /pasted as-is/",
+		).toMatch(/pasted as-is/);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // D: Selection script commands — bound script runs on selection, applyPlan called
 //
 // Tests verify the per-script selection commands (mason.script.perplexity-*):
@@ -756,7 +811,7 @@ describe("D — selection script commands: bound script runs on selection, apply
 		const plugin = await makePluginAndFireLayout();
 		const cmd = findCommand(plugin, "mason.script.perplexity-auto");
 		expect(cmd, "mason.script.perplexity-auto must be registered").toBeDefined();
-		expect(cmd?.name).toBe("Mason: Perplexity auto");
+		expect(cmd?.name).toBe("Perplexity auto");
 	});
 
 	it("mason.script.perplexity-app is registered after onLayoutReady", async () => {

@@ -56,7 +56,7 @@ const _parseResult: ParseResult = {
 const _operation: Operation = {
 	id: "headings.cascade",
 	apiName: "mason.headings.cascade",
-	command: { name: "Mason: Cascade headings" },
+	command: { name: "Cascade headings" },
 	run(_runCtx: OperationContext): EditPlan {
 		return [];
 	},
