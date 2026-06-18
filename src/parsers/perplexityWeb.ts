@@ -3,11 +3,13 @@
 // ---------------------------------------------------------------------------
 // Contracts chosen for this parser:
 //
-// snippet:        The full original `[text](url)` substring. Serves as a
-//                 stable locator; downstream stages search body for this
-//                 string to position the footnote reference.
+// snippet:        The link text (same as title; plain text, e.g. "thestar.com").
+//                 Compact single-line defs do not use snippet, but the field is
+//                 kept sane for any downstream display.
 //
-// inline.marker:  Same as snippet — the full `[text](url)` substring.
+// inline.marker:  The full `[text](url)` substring — the REAL stable locator.
+//                 The conversion stage searches body for this string and
+//                 replaces it with the footnote reference.
 //
 // body:           Input returned verbatim (links unchanged). The conversion
 //                 stage replaces each marker string in-place with a `[^n]`
@@ -50,7 +52,7 @@ function extractLinks(input: string): Array<{ text: string; url: string; raw: st
 function buildSources(links: Array<{ text: string; url: string; raw: string }>): FootnoteRef[] {
 	return links.map((link, i) => ({
 		incomingId: i + 1,
-		snippet: link.raw,
+		snippet: link.text,
 		title: link.text,
 		url: link.url,
 	}));

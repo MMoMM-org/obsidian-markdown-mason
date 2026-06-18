@@ -10,7 +10,7 @@ import type { CitationParser } from "./types";
 //              order.  Answer-1 defs ([^1_1]..[^1_15]) → ids 1..15.
 //              Answer-2 defs ([^2_1]..[^2_11]) → ids 16..26.
 // title      : new URL(url).host   (e.g. "www.thestar.com.my")
-// snippet    : the raw URL string   (same value as `url`)
+// snippet    : same as title — plain host string (not the raw URL)
 // ---------------------------------------------------------------------------
 
 /** Regex that identifies web-download definition lines: [^a_b]: <url> */
@@ -58,7 +58,7 @@ function buildSourceMap(lines: string[]): {
 		} catch {
 			host = url;
 		}
-		sources.push({ incomingId: seq, snippet: url, title: host, url });
+		sources.push({ incomingId: seq, snippet: host, title: host, url });
 		markerToId.set(marker, seq);
 	}
 

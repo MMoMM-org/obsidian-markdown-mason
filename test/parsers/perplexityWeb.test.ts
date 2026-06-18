@@ -7,12 +7,12 @@ import { loadFixture } from "../fixtures";
 // ---------------------------------------------------------------------------
 // Contract documentation:
 //
-// snippet:        The full original `[text](url)` substring (the inline link as
-//                 it appears in the source). This lets downstream stages
-//                 locate the link without reparsing.
+// snippet:        The link text (same as title; plain text, e.g. "thestar.com").
+//                 Compact single-line defs do not need the raw markdown link —
+//                 snippet is sane plain text for any downstream display.
 //
-// inline.marker:  Same as snippet — the full `[text](url)` substring.
-//                 The conversion stage searches body for this string and
+// inline.marker:  The full `[text](url)` substring.  This is the REAL locator:
+//                 the conversion stage searches body for this string and
 //                 replaces it with the footnote reference.
 //
 // body:           The prose with inline links kept verbatim (unchanged).
@@ -80,7 +80,7 @@ describe("perplexityWeb.parse — image handling", () => {
 			incomingId: 1,
 			title: "this article",
 			url: "https://example.com/article",
-			snippet: "[this article](https://example.com/article)",
+			snippet: "this article",
 		});
 	});
 });
@@ -114,13 +114,9 @@ describe("perplexityWeb.parse — web fixture", () => {
 		});
 	});
 
-	it("snippet equals the full original [text](url) substring for each source", () => {
-		expect(result.sources[0].snippet).toBe(
-			"[thestar.com](https://www.thestar.com.my/aseanplus/aseanplus-news/2025/12/18/japan-releases-first-sakura-forecast-for-2026-tokyo-to-see-blooms-from-mid-march)",
-		);
-		expect(result.sources[1].snippet).toBe(
-			"[n-kishou](https://n-kishou.com/corp/news-contents/sakura/?lang=en)",
-		);
+	it("snippet equals the link text (title) for each source — plain text, not raw markdown link", () => {
+		expect(result.sources[0].snippet).toBe("thestar.com");
+		expect(result.sources[1].snippet).toBe("n-kishou");
 	});
 
 	it("produces 11 inline markers (one per link)", () => {

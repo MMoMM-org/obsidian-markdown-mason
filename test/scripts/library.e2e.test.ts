@@ -156,11 +156,66 @@ function assertFootnoteConsistency(output: string): { K: number } {
 	return { K };
 }
 
-/** Assert Resources section contains two-line F4 defs. */
+/** Assert Resources section contains two-line F4 defs (app format). */
 function assertF4Defs(resourcesSection: string): void {
 	// F4 format: "[^n]: snippet" on one line, "[title](url)" on the next
 	// Check that at least one def follows this pattern
 	expect(resourcesSection).toMatch(/\[\^\d+\]: .+\n\[.+\]\(https?:\/\/.+\)/);
+}
+
+/**
+ * Assert Resources section contains single-line compact defs (web/download format).
+ *
+ * Each def must be a single line matching [^n]: [title](url).
+ * No bare URL or raw markdown link must appear as a second line duplicating the link.
+ */
+function assertCompactDefs(resourcesSection: string): void {
+	// Every [^n]: line must be a single-line compact def: [^n]: [title](url)
+	const defLines = resourcesSection
+		.split("\n")
+		.filter((line) => /^\[\^\d+\]:/.test(line));
+
+	expect(defLines.length).toBeGreaterThan(0);
+
+	for (const line of defLines) {
+		// Must match single-line format: [^n]: [title](url)
+		expect(line).toMatch(/^\[\^\d+\]: \[[^\]]+\]\([^)]+\)$/);
+	}
+}
+
+/**
+ * Assert that no footnote link appears twice in consecutive lines (old double-link bug).
+ *
+ * Iterates every pair of consecutive non-blank lines in the Resources section
+ * and fails if two consecutive lines are identical and look like a markdown link.
+ */
+function assertNoDoubledLinks(resourcesSection: string): void {
+	const lines = resourcesSection.split("\n").filter((l) => l.trim() !== "");
+	for (let i = 0; i < lines.length - 1; i++) {
+		if (/^\[.+\]\(https?:\/\/.+\)$/.test(lines[i])) {
+			expect(lines[i + 1]).not.toBe(lines[i]);
+		}
+	}
+}
+
+/** Assert Resources section has NO bare second line duplicating a link below a [^n]: def. */
+function assertNoOrphanLinkLine(resourcesSection: string): void {
+	const lines = resourcesSection.split("\n");
+	for (let i = 0; i < lines.length - 1; i++) {
+		// If this line is a [^n]: def ...
+		if (/^\[\^\d+\]:/.test(lines[i])) {
+			const nextLine = lines[i + 1];
+			// ... the next line must NOT be a bare markdown link (the old bug was a
+			// second line with [title](url) that duplicated the def's own link content)
+			const isDefLine = /^\[\^\d+\]:/.test(nextLine);
+			const isBlank = nextLine.trim() === "";
+			const isHeading = nextLine.startsWith("#");
+			// A lone [title](url) line after a [^n]: line is the bug
+			if (!isDefLine && !isBlank && !isHeading) {
+				expect(nextLine).not.toMatch(/^\[[^\]]+\]\(https?:\/\//);
+			}
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -309,11 +364,24 @@ describe("perplexityWebScript", () => {
 		expect(output).toContain("## Resources");
 	});
 
-	it("Resources section contains two-line F4 definitions", async () => {
+	it("Resources section contains single-line compact defs (no second duplicate link line)", async () => {
 		const ctx = makeCtx(webInput);
 		const plan = await perplexityWebScript(ctx) as EditPlan;
 		const output = applyPlan(plan);
-		assertF4Defs(extractResourcesSection(output));
+		const resources = extractResourcesSection(output);
+		assertCompactDefs(resources);
+		assertNoDoubledLinks(resources);
+		assertNoOrphanLinkLine(resources);
+	});
+
+	it("Resources section does NOT contain orphan link lines (old doubled-link bug)", async () => {
+		const ctx = makeCtx(webInput);
+		const plan = await perplexityWebScript(ctx) as EditPlan;
+		const output = applyPlan(plan);
+		const resources = extractResourcesSection(output);
+		// assertNoOrphanLinkLine verifies that no [^n]: def line is followed
+		// by a bare [title](url) line — that is the exact pattern of the old bug.
+		assertNoOrphanLinkLine(resources);
 	});
 
 	it("footnote numbering is gap-free 1..K and body/Resources are consistent", async () => {
@@ -359,11 +427,24 @@ describe("perplexityWebDownloadScript", () => {
 		expect(output).toContain("## Resources");
 	});
 
-	it("Resources section contains two-line F4 definitions", async () => {
+	it("Resources section contains single-line compact defs (no second duplicate link line)", async () => {
 		const ctx = makeCtx(webDownloadInput);
 		const plan = await perplexityWebDownloadScript(ctx) as EditPlan;
 		const output = applyPlan(plan);
-		assertF4Defs(extractResourcesSection(output));
+		const resources = extractResourcesSection(output);
+		assertCompactDefs(resources);
+		assertNoDoubledLinks(resources);
+		assertNoOrphanLinkLine(resources);
+	});
+
+	it("Resources section does NOT contain orphan link lines (old doubled-link bug)", async () => {
+		const ctx = makeCtx(webDownloadInput);
+		const plan = await perplexityWebDownloadScript(ctx) as EditPlan;
+		const output = applyPlan(plan);
+		const resources = extractResourcesSection(output);
+		// assertNoOrphanLinkLine verifies that no [^n]: def line is followed
+		// by a bare [title](url) line — that is the exact pattern of the old bug.
+		assertNoOrphanLinkLine(resources);
 	});
 
 	it("footnote numbering is gap-free 1..K and body/Resources are consistent", async () => {

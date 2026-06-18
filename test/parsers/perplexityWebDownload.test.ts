@@ -90,8 +90,8 @@ describe("perplexityWebDownload.parse — body", () => {
 // definition-line order. Answer 1 defs (^1_1..^1_15) → ids 1..15.
 // Answer 2 defs (^2_1..^2_11) → ids 16..26.
 //
-// title  : new URL(url).host
-// snippet: the raw URL string (same as url)
+// title  : new URL(url).host  (e.g. "www.thestar.com.my")
+// snippet: same as title — plain host string (not the raw URL)
 // ---------------------------------------------------------------------------
 
 describe("perplexityWebDownload.parse — sources", () => {
@@ -108,7 +108,7 @@ describe("perplexityWebDownload.parse — sources", () => {
 			"https://www.thestar.com.my/aseanplus/aseanplus-news/2025/12/18/japan-releases-first-sakura-forecast-for-2026-tokyo-to-see-blooms-from-mid-march",
 		);
 		expect(first.title).toBe("www.thestar.com.my");
-		expect(first.snippet).toBe(first.url);
+		expect(first.snippet).toBe(first.title);
 	});
 
 	it("second source: [^1_2] → id=2, n-kishou.com host", () => {
@@ -117,7 +117,7 @@ describe("perplexityWebDownload.parse — sources", () => {
 		expect(s.incomingId).toBe(2);
 		expect(s.url).toBe("https://n-kishou.com/corp/news-contents/sakura/?lang=en");
 		expect(s.title).toBe("n-kishou.com");
-		expect(s.snippet).toBe(s.url);
+		expect(s.snippet).toBe(s.title);
 	});
 
 	it("15th source (last of answer 1): id=15", () => {
@@ -136,7 +136,7 @@ describe("perplexityWebDownload.parse — sources", () => {
 		expect(s.incomingId).toBe(16);
 		expect(s.url).toBe("https://n-kishou.com/corp/news-contents/sakura/?lang=en");
 		expect(s.title).toBe("n-kishou.com");
-		expect(s.snippet).toBe(s.url);
+		expect(s.snippet).toBe(s.title);
 	});
 
 	it("26th source (last of answer 2): [^2_11] → id=26", () => {

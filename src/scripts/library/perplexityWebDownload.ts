@@ -29,7 +29,7 @@
 // 4. resolveFootnoteIdentity(citedSources, []) → { idMap, newRefs }
 // 5. applyFootnoteInlineRename(bodyFC, idMap) → edits against bodyFC; apply → finalBody
 // 6. cascade with ctx.op.input = finalBody → one insert at cursor in doc
-// 7. moveToResources(ctx.op, newRefDefinitions(newRefs)) → insert defs into Resources
+// 7. moveToResources(ctx.op, compactRefDefinitions(newRefs)) → insert single-line defs into Resources
 
 import type { ScriptContext, ScriptFunction } from "../context";
 import type { EditPlan } from "../../core/types";
@@ -37,7 +37,7 @@ import { perplexityWebDownload } from "../../parsers/perplexityWebDownload";
 import {
 	resolveFootnoteIdentity,
 	applyFootnoteInlineRename,
-	newRefDefinitions,
+	compactRefDefinitions,
 	moveToResources,
 	scanExistingRefs,
 } from "../../core/footnotes";
@@ -79,8 +79,10 @@ export const perplexityWebDownloadScript: ScriptFunction = (ctx: ScriptContext):
 	const cascadeOp = { ...ctx.op, input: finalBody };
 	const { plan: cascadePlan } = cascade(cascadeOp);
 
-	// Step 6: Build footnote definitions and move them to the Resources section.
-	const defs = newRefDefinitions(newRefs);
+	// Step 6: Build single-line compact footnote definitions and move them to the Resources section.
+	// Web-download format uses compact single-line defs ("[^n]: [title](url)") to avoid
+	// duplicating the URL: the snippet was the raw URL, which would have appeared twice.
+	const defs = compactRefDefinitions(newRefs);
 	const resourcesPlan = moveToResources(ctx.op, defs);
 
 	return [...cascadePlan, ...resourcesPlan];

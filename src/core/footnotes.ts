@@ -252,6 +252,39 @@ export function formatF4Def(ref: { id: number; snippet: string; title: string; u
 }
 
 // ---------------------------------------------------------------------------
+// formatFootnoteLink — single-line compact definition formatter
+// ---------------------------------------------------------------------------
+
+/**
+ * Produce a single-line compact footnote definition for web and web-download refs.
+ *
+ * Format: "[^{id}]: [{title}]({url})"
+ *
+ * Used by web/download scripts where the snippet would duplicate the link.
+ * The app parser uses the two-line formatF4Def instead.
+ */
+export function formatFootnoteLink(ref: { id: number; title: string; url: string }): string {
+	return `[^${ref.id}]: [${ref.title}](${ref.url})`;
+}
+
+// ---------------------------------------------------------------------------
+// compactRefDefinitions — single-line formatter for web/download refs
+// ---------------------------------------------------------------------------
+
+/**
+ * Format single-line compact definition strings for genuinely new refs.
+ *
+ * Delegates to formatFootnoteLink.  Mirrors newRefDefinitions but produces
+ * compact single-line defs: "[^{id}]: [{title}]({url})" — no snippet line.
+ *
+ * Used by perplexityWeb and perplexityWebDownload scripts.
+ * perplexityApp continues to use newRefDefinitions (two-line F4).
+ */
+export function compactRefDefinitions(newRefs: ResolvedRef[]): string[] {
+	return newRefs.map(formatFootnoteLink);
+}
+
+// ---------------------------------------------------------------------------
 // newRefDefinitions
 // ---------------------------------------------------------------------------
 
@@ -411,13 +444,19 @@ function findSectionInsertOffset(doc: string, headingLine: string): number | nul
 
 /** Build an insert Edit that appends defs at the given offset within the section. */
 function buildSectionAppend(offset: number, defs: string[]): Edit {
+	// Use "\n\n" between defs when they are two-line (contain an internal newline),
+	// otherwise use "\n" so single-line defs are consecutive with no blank line.
+	const sep = defs.some((d) => d.includes("\n")) ? "\n\n" : "\n";
 	// Trailing "\n" ensures the next "## Heading" starts on its own line (Bug 1 fix).
-	const content = "\n" + defs.join("\n\n") + "\n";
+	const content = "\n" + defs.join(sep) + "\n";
 	return { from: offset, to: offset, insert: content };
 }
 
 /** Build an insert Edit that creates a new section at note end. */
 function buildNoteEndInsert(doc: string, headingLine: string, defs: string[]): Edit {
-	const content = `\n${headingLine}\n\n${defs.join("\n\n")}`;
+	// Use "\n\n" between defs when they are two-line (contain an internal newline),
+	// otherwise use "\n" so single-line defs are consecutive with no blank line.
+	const sep = defs.some((d) => d.includes("\n")) ? "\n\n" : "\n";
+	const content = `\n${headingLine}\n\n${defs.join(sep)}`;
 	return { from: doc.length, to: doc.length, insert: content };
 }
