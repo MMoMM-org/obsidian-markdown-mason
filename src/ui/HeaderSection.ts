@@ -58,16 +58,13 @@ export class HeaderSection {
 		const line = parent.createDiv({ cls: "mason-settings-identity" });
 
 		// Plugin name
-		const nameEl = line.createEl("strong");
-		nameEl.setText(this._manifest.name);
+		line.createEl("strong").setText(this._manifest.name);
 
 		// Version
-		const versionEl = line.createEl("span");
-		versionEl.setText(` v${this._manifest.version}`);
+		line.createEl("span").setText(` v${this._manifest.version}`);
 
 		// Separator
-		const sep1 = line.createEl("span");
-		sep1.setText(" · ");
+		line.createEl("span").setText(" · ");
 
 		// Author — anchor when authorUrl present, plain span otherwise
 		const authorName = this._parseAuthorName(this._manifest.author);
@@ -76,13 +73,11 @@ export class HeaderSection {
 			authorEl.setText(authorName);
 			authorEl.setAttribute("href", this._manifest.authorUrl);
 		} else {
-			const authorEl = line.createEl("span");
-			authorEl.setText(authorName);
+			line.createEl("span").setText(authorName);
 		}
 
 		// Separator
-		const sep2 = line.createEl("span");
-		sep2.setText(" · ");
+		line.createEl("span").setText(" · ");
 
 		// Documentation anchor
 		const docsEl = line.createEl("a");

@@ -32,12 +32,12 @@ const { HeaderSection } = await import("../../src/ui/HeaderSection");
 function makeManifest(overrides?: Partial<PluginManifest & { authorUrl?: string }>): PluginManifest & { authorUrl?: string } {
 	return {
 		id: "markdown-mason",
-		name: overrides?.name ?? "Markdown Mason",
-		version: overrides?.version ?? "1.2.3",
+		name: "Markdown Mason",
+		version: "1.2.3",
 		minAppVersion: "1.6.6",
 		description: "Test description.",
-		author: overrides?.author ?? "Marcus Breiden",
-		authorUrl: overrides?.authorUrl ?? "https://www.mmomm.org",
+		author: "Marcus Breiden",
+		authorUrl: "https://www.mmomm.org",
 		isDesktopOnly: true,
 		...overrides,
 	};
@@ -51,22 +51,6 @@ function renderHeader(manifest: PluginManifest & { authorUrl?: string }): MockHT
 	const section = new HeaderSection({ manifest });
 	section.render(container as unknown as HTMLElement);
 	return container;
-}
-
-/**
- * Walk a MockHTMLElement tree depth-first and collect all anchor-like
- * elements (tagName === "a").
- */
-function findAnchors(el: MockHTMLElement): MockHTMLElement[] {
-	const results: MockHTMLElement[] = [];
-	const children = (el as unknown as { _children: MockHTMLElement[] })._children;
-	for (const child of children) {
-		if (child.tagName === "a") {
-			results.push(child);
-		}
-		results.push(...findAnchors(child));
-	}
-	return results;
 }
 
 /**
@@ -116,7 +100,7 @@ describe("HeaderSection — author rendering", () => {
 	it("renders author as an anchor with href === authorUrl when authorUrl is present", () => {
 		const manifest = makeManifest({ author: "Marcus Breiden", authorUrl: "https://www.mmomm.org" });
 		const container = renderHeader(manifest);
-		const anchors = findAnchors(container);
+		const anchors = findAll(container, (n) => n.tagName === "a");
 		const authorAnchor = anchors.find((a) => {
 			const attrs = (a as unknown as { _attrs: Map<string, string> })._attrs;
 			return attrs.get("href") === "https://www.mmomm.org";
@@ -128,7 +112,7 @@ describe("HeaderSection — author rendering", () => {
 	it("renders author as a plain span (not an anchor) when authorUrl is absent", () => {
 		const manifest = makeManifest({ authorUrl: undefined });
 		const container = renderHeader(manifest);
-		const anchors = findAnchors(container);
+		const anchors = findAll(container, (n) => n.tagName === "a");
 		// No anchor should have text "Marcus Breiden"
 		const authorAnchor = anchors.find((a) => a._text === "Marcus Breiden");
 		expect(authorAnchor, "Author should NOT be an anchor when authorUrl is absent").toBeUndefined();
@@ -139,7 +123,7 @@ describe("HeaderSection — author rendering", () => {
 	it("parses 'Full Name <email>' convention and displays only the name part", () => {
 		const manifest = makeManifest({ author: "Jane Doe <jane@example.com>", authorUrl: "https://example.com" });
 		const container = renderHeader(manifest);
-		const anchors = findAnchors(container);
+		const anchors = findAll(container, (n) => n.tagName === "a");
 		const authorAnchor = anchors.find((a) => {
 			const attrs = (a as unknown as { _attrs: Map<string, string> })._attrs;
 			return attrs.get("href") === "https://example.com";
@@ -153,7 +137,7 @@ describe("HeaderSection — author rendering", () => {
 	it("falls back to the full author string when no angle-bracket email is present", () => {
 		const manifest = makeManifest({ author: "NoEmail Author", authorUrl: "https://example.com" });
 		const container = renderHeader(manifest);
-		const anchors = findAnchors(container);
+		const anchors = findAll(container, (n) => n.tagName === "a");
 		const authorAnchor = anchors.find((a) => {
 			const attrs = (a as unknown as { _attrs: Map<string, string> })._attrs;
 			return attrs.get("href") === "https://example.com";
@@ -169,7 +153,7 @@ describe("HeaderSection — author rendering", () => {
 describe("HeaderSection — Documentation anchor", () => {
 	it("renders a Documentation anchor pointing to the repo URL", () => {
 		const container = renderHeader(makeManifest());
-		const anchors = findAnchors(container);
+		const anchors = findAll(container, (n) => n.tagName === "a");
 		const docsAnchor = anchors.find((a) => {
 			const attrs = (a as unknown as { _attrs: Map<string, string> })._attrs;
 			return attrs.get("href") === "https://github.com/MMoMM-org/obsidian-markdown-mason";
@@ -190,11 +174,12 @@ describe("HeaderSection — tagline", () => {
 		expect(paragraphs.length, "Expected at least one <p> element for the tagline").toBeGreaterThanOrEqual(1);
 	});
 
-	it("tagline text is non-empty", () => {
+	it("tagline text is the exact expected string", () => {
 		const container = renderHeader(makeManifest());
 		const paragraphs = findAll(container, (n) => n.tagName === "p");
 		const taglineParagraph = paragraphs.find((p) => p._text.length > 0);
 		expect(taglineParagraph, "Expected a <p> with non-empty text content").toBeDefined();
+		expect(taglineParagraph!._text).toBe("Reshape pasted Markdown to fit your note.");
 	});
 });
 
