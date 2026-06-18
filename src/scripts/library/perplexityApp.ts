@@ -68,7 +68,7 @@ export const perplexityAppScript: ScriptFunction = (ctx: ScriptContext): EditPla
 	// start past maxExisting and never collide with pre-existing [^n] footnotes.
 	const existing = scanExistingRefs(ctx.op.doc);
 	const { idMap, newRefs } = resolveFootnoteIdentity(citedSources, existing);
-	ctx.logger.info(`resolved ${newRefs.length + (citedSources.length - newRefs.length)} footnotes (${newRefs.length} new, ${citedSources.length - newRefs.length} reused)`);
+	ctx.logger.info(`resolved ${citedSources.length} footnotes (${newRefs.length} new, ${citedSources.length - newRefs.length} reused)`);
 
 	// Step 4: Rename [^n] → [^finalId] using the resolved idMap.
 	const renameEdits = applyFootnoteInlineRename(bodyFC, idMap);

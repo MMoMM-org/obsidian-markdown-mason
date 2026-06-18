@@ -38,7 +38,7 @@ export { DEFAULT_SETTINGS, type MasonSettings };
 //   clipboardReader  — replaces navigator.clipboard.readText() (paste only)
 //   applyPlan        — replaces the CM6 applyEditPlan side-effect (paste + selection)
 //   failScript       — when true, forces the paste script to throw (paste rawFallback tests)
-//   scriptOverride   — when set, replaces the script for selection commands (selection throw-path tests)
+//   scriptOverride   — when set, replaces the script for BOTH paste and selection commands
 // ---------------------------------------------------------------------------
 
 export interface CommandInjection {
@@ -48,7 +48,7 @@ export interface CommandInjection {
 	applyPlan?: (plan: EditPlan) => void;
 	/** When true, forces the paste script to throw (for paste rawFallback tests). */
 	failScript?: boolean;
-	/** When set, replaces the script function for selection commands (for selection throw-path tests). */
+	/** When set, replaces the script function for BOTH paste and selection commands. */
 	scriptOverride?: ScriptFunction;
 }
 
@@ -320,10 +320,10 @@ async function runPasteCommand(
 	//    not apply to code shipped inside the plugin itself. (SEC-006)
 	const runner = new ScriptRunner(effects, { policy: "enabled" });
 
-	// 7. Choose script — failScript injection forces a throw for test coverage
+	// 7. Choose script — failScript injection forces a throw; scriptOverride replaces the script.
 	const script = injection?.failScript === true
 		? buildFailScript()
-		: perplexityAutoScript;
+		: (injection?.scriptOverride ?? perplexityAutoScript);
 
 	// 8. Run (ScriptRunner enforces atomicity: applyPlan XOR rawFallback)
 	const outcome = await runner.run(script, ctx);

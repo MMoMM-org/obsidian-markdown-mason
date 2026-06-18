@@ -529,6 +529,40 @@ describe("T5.5C — paste command success path", () => {
 			"count Notice message must match 'Mason: N footnote' or 'Mason: N footnotes filed'",
 		).toMatch(/^Mason: \d+ footnotes? filed$/);
 	});
+	// W1: fallback branch — paste command with a plan that has NO footnote defs.
+	// When countFootnoteDefs returns 0 the Notice must match /^Mason: \d+ changes?$/.
+	// This test deliberately fails if the else-branch in runPasteCommand is removed.
+	it("paste command shows change-count Notice ('Mason: N change(s)') when plan has no footnote defs (W1 fallback branch)", async () => {
+		const plugin = await makePluginAndFireLayout();
+		const editor = makePasteEditorStub("# Note\n\n");
+
+		const applyPlanSpy = vi.fn();
+
+		// A script that returns a non-empty EditPlan with a plain-text insert — no [^n]: defs.
+		// countFootnoteDefs will return 0, so the fallback Notice branch fires.
+		plugin._commandInjection = {
+			clipboardReader: async () => "some text",
+			applyPlan: applyPlanSpy,
+			scriptOverride: () => [{ from: 0, to: 0, insert: "plain text insert" }],
+		};
+
+		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		expect(cmd).toBeDefined();
+
+		clearNoticeLog();
+		await cmd.editorCallback(editor);
+
+		// Script produced a non-empty EditPlan → applyPlan called (pre-condition for Notice)
+		expect(applyPlanSpy, "applyPlan must be called before we check the Notice").toHaveBeenCalledOnce();
+
+		// The fallback Notice must report edit count, not footnotes
+		const notices = noticeLog();
+		expect(notices, "exactly one count Notice must fire on apply success").toHaveLength(1);
+		expect(
+			notices[0],
+			"fallback Notice must match 'Mason: N change(s)' when plan has no footnote defs",
+		).toMatch(/^Mason: \d+ changes?$/);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -840,6 +874,41 @@ describe("D — selection script commands: bound script runs on selection, apply
 			notices[0],
 			"count Notice message must match 'Mason: N footnote' or 'Mason: N footnotes filed'",
 		).toMatch(/^Mason: \d+ footnotes? filed$/);
+	});
+
+	// W1: fallback branch — selection command with a plan that has NO footnote defs.
+	// When countFootnoteDefs returns 0 the Notice must match /^Mason: \d+ changes?$/.
+	// This test deliberately fails if the else-branch in _runScriptOnSelection is removed.
+	it("selection command shows change-count Notice ('Mason: N change(s)') when plan has no footnote defs (W1 fallback branch)", async () => {
+		const plugin = await makePluginAndFireLayout();
+		const doc = "# My Note\n\nSelected text.";
+		const editor = makeSelectionEditorStub(doc);
+
+		const applyPlanSpy = vi.fn();
+
+		// A script that returns a non-empty EditPlan with a plain-text insert — no [^n]: defs.
+		// countFootnoteDefs will return 0, so the fallback Notice branch fires.
+		plugin._commandInjection = {
+			applyPlan: applyPlanSpy,
+			scriptOverride: () => [{ from: 0, to: 0, insert: "plain text insert" }],
+		};
+
+		const cmd = findCommand(plugin, "mason.script.perplexity-auto");
+		expect(cmd).toBeDefined();
+
+		clearNoticeLog();
+		await cmd.editorCallback(editor);
+
+		// Script produced a non-empty EditPlan → applyPlan called (pre-condition for Notice)
+		expect(applyPlanSpy, "applyPlan must be called before we check the Notice").toHaveBeenCalledOnce();
+
+		// The fallback Notice must report edit count, not footnotes
+		const notices = noticeLog();
+		expect(notices, "exactly one count Notice must fire on apply success").toHaveLength(1);
+		expect(
+			notices[0],
+			"fallback Notice must match 'Mason: N change(s)' when plan has no footnote defs",
+		).toMatch(/^Mason: \d+ changes?$/);
 	});
 
 	it("selection command throw path: rawFallback is no-op, applyPlan not called, Notice shown", async () => {

@@ -186,11 +186,11 @@ describe("buildGatedLogger — gated info traces", () => {
 		expect(spy).toHaveBeenCalledOnce();
 	});
 
-	it("info call with debug=true includes [mason] prefix", () => {
+	it("info call with debug=true includes [mason] prefix and the supplied message", () => {
 		const spy = vi.spyOn(console, "debug").mockImplementation(() => undefined);
 		const logger = buildGatedLogger(true);
 		logger.info("hello");
-		expect(spy).toHaveBeenCalledWith(expect.stringContaining("[mason]"));
+		expect(spy).toHaveBeenCalledWith("[mason] hello");
 	});
 
 	it("warn always calls console.warn regardless of debug flag", () => {

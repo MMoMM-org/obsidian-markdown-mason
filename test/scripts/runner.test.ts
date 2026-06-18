@@ -5,7 +5,7 @@
 //
 // RunOutcome discriminated union variants exercised:
 //   { kind: "blocked" }         — policy "disabled" or ask→"disable"
-//   { kind: "applied"; count }  — script returned non-empty EditPlan
+//   { kind: "applied"; count; plan }  — script returned non-empty EditPlan
 //   { kind: "noop" }            — script returned undefined or []
 //   { kind: "failed"; reason }  — script threw or timed out
 //

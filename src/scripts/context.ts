@@ -16,7 +16,7 @@
 // LOGGER DEFAULT
 // --------------
 // When no logger is supplied, a console-backed default is used:
-//   info  → console.debug  (traces; off in production unless debugLogging)
+//   info  → console.debug  (always-on; use buildGatedLogger to gate on debugLogging)
 //   warn  → console.warn
 //   error → console.error
 // The caller may inject a custom logger (e.g. a mock in tests, or an
