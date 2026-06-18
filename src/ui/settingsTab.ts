@@ -1,6 +1,8 @@
 import { App, Notice, Plugin, PluginSettingTab, Setting } from "obsidian";
+import type { PluginManifest } from "obsidian";
 import type { MasonSettings } from "../core/types";
 import type { ScriptStore } from "../scripts/store";
+import { HeaderSection } from "./HeaderSection";
 
 // ---------------------------------------------------------------------------
 // Minimal plugin interface — avoids a hard import cycle with main.ts
@@ -11,6 +13,7 @@ import type { ScriptStore } from "../scripts/store";
 
 /** Minimal plugin surface consumed by MasonSettingTab. */
 export interface MasonPlugin extends Plugin {
+	manifest: PluginManifest & { authorUrl?: string };
 	settings: MasonSettings;
 	saveSettings(): Promise<void>;
 	store: Pick<ScriptStore, "getManifest" | "getDevice" | "setEnabled">;
@@ -53,6 +56,7 @@ export class MasonSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
+		new HeaderSection({ manifest: this._plugin.manifest }).render(containerEl);
 		this._renderGeneralSection(containerEl);
 		await this._renderScriptsSection(containerEl);
 		this._renderAdvancedSection(containerEl);

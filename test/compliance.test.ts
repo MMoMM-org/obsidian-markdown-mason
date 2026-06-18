@@ -327,3 +327,21 @@ describe("compliance — no obsidian sample-plugin boilerplate residue in src/",
 		});
 	}
 });
+
+// ---------------------------------------------------------------------------
+// Suite 6 — GitHub FUNDING.yml presence
+// ---------------------------------------------------------------------------
+
+describe("compliance — .github/FUNDING.yml present", () => {
+	/**
+	 * Policy: the repo must ship a FUNDING.yml so GitHub surfaces the project's
+	 * support channels on the repository page.
+	 */
+	it(".github/FUNDING.yml exists", () => {
+		const fundingPath = path.join(repoRoot, ".github", "FUNDING.yml");
+		expect(
+			fs.existsSync(fundingPath),
+			`.github/FUNDING.yml not found — create it at ${fundingPath}`,
+		).toBe(true);
+	});
+});

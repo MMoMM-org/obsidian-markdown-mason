@@ -119,7 +119,19 @@ function makePluginWithPayload(sourcePayload: string, idPayload: string = "safe-
 		setEnabled: vi.fn().mockResolvedValue(undefined),
 	};
 
-	return { app, settings, saveSettings, store } as const;
+	// Plugin manifest — required by HeaderSection (wired into display()).
+	const pluginManifest = {
+		id: "markdown-mason",
+		name: "Markdown Mason",
+		version: "0.0.1",
+		minAppVersion: "1.6.6",
+		description: "Test description.",
+		author: "Marcus Breiden",
+		authorUrl: "https://www.mmomm.org",
+		isDesktopOnly: true,
+	};
+
+	return { app, settings, saveSettings, store, manifest: pluginManifest } as const;
 }
 
 /**
