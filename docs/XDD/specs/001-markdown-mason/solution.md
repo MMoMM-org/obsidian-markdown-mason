@@ -422,6 +422,7 @@ No change — single plugin. The official script repo is a separate, independent
   - Rationale: no vault clutter; Sync replicates the whole plugin folder (research), so per-device state must not ride `data.json`.
   - Trade-offs: sidecar adds bookkeeping; depends on the Sync verification spike.
   - User confirmed: _Yes (2026-06-16)_
+  - **Sync spike resolved (2026-06-18, [sync-spike.md](sync-spike.md)):** the "Sync replicates the whole plugin folder" premise was **wrong** — Sync carries only the plugin's own core files (`manifest.json`, `main.js`, `data.json`), not `device.json` or `scripts/*.cjs`. **v0.1 is unaffected and ships as-is** (the non-syncing `device.json` sidecar is a correct per-device store; imported `.cjs` files don't propagate, so local-import + per-device consent is consistent and fail-closed). **For v0.2 this ADR is superseded** by: enable/consent rides synced `data.json`, with code re-materialized per device via vetted-repo download (ADR-8) or vault-import, accepted only on `checksum`+`version` match. Gates v0.2.
 
 - [x] **ADR-7 — Desktop-only (`isDesktopOnly: true`).**
   - Rationale: script runtime needs Node.
