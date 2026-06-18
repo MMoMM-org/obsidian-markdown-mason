@@ -49,3 +49,6 @@ claude-docker-home/
 begin-code.sh
 /generated-images/
 .mcp.json
+
+# Local Obsidian dev test vault (manual plugin testing; not tracked)
+test/mason/
