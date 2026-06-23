@@ -12,7 +12,7 @@
 //      okayed.checksum (the identity the user consented to on device A).
 //
 // If ANY check fails, writeBinary is NOT called. This is non-negotiable:
-// the five failure reasons below cover every non-ok path:
+// the four failure reasons below cover every non-ok path:
 //
 //   "drift"             — bytes or version no longer match the consented identity
 //   "offline"           — fetchIndex or fetchScript threw (network unavailable)

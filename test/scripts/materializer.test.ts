@@ -470,6 +470,76 @@ describe("materialize — imported drift", () => {
 });
 
 // ---------------------------------------------------------------------------
+// FAIL-CLOSED GUARD — okayed === null (programming error)
+// ---------------------------------------------------------------------------
+
+describe("materialize — okayed null guard", () => {
+	it("okayed: null (curated) → {ok:false, reason:'drift'} no write", async () => {
+		const vault = makeFakeVault();
+		const catalog = makeFakeCatalog({});
+		const record = makeCuratedRecord({ okayed: null as unknown as { version: number; checksum: string } });
+
+		const result = await materialize("test-script", {
+			record,
+			catalog,
+			vault,
+			destPath: "scripts/test-script.cjs",
+		});
+
+		expect(result).toEqual({ ok: false, reason: "drift" });
+		expect(vault.writeCalls).toHaveLength(0);
+	});
+
+	it("okayed: null (imported) → {ok:false, reason:'drift'} no write", async () => {
+		const vault = makeFakeVault();
+		const catalog = makeFakeCatalog({});
+		const record = makeImportedRecord({ okayed: null as unknown as { version: number; checksum: string } });
+
+		const result = await materialize("test-script", {
+			record,
+			catalog,
+			vault,
+			destPath: "scripts/test-script.cjs",
+		});
+
+		expect(result).toEqual({ ok: false, reason: "drift" });
+		expect(vault.writeCalls).toHaveLength(0);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// MKDIR-SAFE BOUNDARY — no-slash destPath
+// ---------------------------------------------------------------------------
+
+describe("materialize — mkdirSafe no-slash boundary", () => {
+	it("destPath with no '/' → mkdir NOT called, writeBinary called once", async () => {
+		const scriptBytes = new TextEncoder().encode("module.exports = () => 42;");
+		const checksum = sha256Bytes(scriptBytes);
+		const entry = makeCatalogEntry({ checksum, version: 1 });
+		const index = makeCatalogIndex({ "test-script": entry });
+		const record = makeCuratedRecord({ okayed: { version: 1, checksum } });
+
+		const catalog = makeFakeCatalog({
+			fetchIndex: async () => index,
+			fetchScript: async () => scriptBytes,
+		});
+		const vault = makeFakeVault();
+
+		const result = await materialize("test-script", {
+			record,
+			catalog,
+			vault,
+			destPath: "test-script.cjs",
+		});
+
+		expect(result).toEqual({ ok: true });
+		expect(vault.mkdirCalls).toHaveLength(0);
+		expect(vault.writeCalls).toHaveLength(1);
+		expect(vault.writeCalls[0].path).toBe("test-script.cjs");
+	});
+});
+
+// ---------------------------------------------------------------------------
 // FAIL-CLOSED SWEEP — every non-ok branch must NOT call writeBinary
 // ---------------------------------------------------------------------------
 
