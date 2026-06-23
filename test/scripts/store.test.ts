@@ -100,7 +100,7 @@ describe("ScriptStore — getScripts", () => {
 		const store = makeStore(pluginData);
 
 		const result = await store.getScripts();
-		expect(result["my-script"]).toBeDefined();
+		expect(result["my-script"]).toEqual(rec);
 	});
 });
 
@@ -316,5 +316,79 @@ describe("ScriptStore — no device.json I/O", () => {
 		const scripts = await store.getScripts();
 		expect(scripts["lifecycle-test"]?.enabled).toBe(true);
 		expect(scripts["lifecycle-test"]?.okayed).toEqual({ version: 2, checksum: "xyz" });
+	});
+});
+
+// ---------------------------------------------------------------------------
+// (e) Defensive defaults — enabled:true is preserved (W2)
+// ---------------------------------------------------------------------------
+
+describe("ScriptStore — enabled:true is preserved by ?? false (W2)", () => {
+	it("preserves enabled:true when the stored entry has enabled:true", async () => {
+		const pluginData = makePluginDataPort({
+			scripts: {
+				"partial": { enabled: true },
+			},
+		});
+		const store = makeStore(pluginData);
+
+		const scripts = await store.getScripts();
+		expect(scripts["partial"]?.enabled).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// (f) Fail-closed okayed guard — malformed values coerce to null (W3)
+// ---------------------------------------------------------------------------
+
+describe("ScriptStore — malformed okayed coerced to null (W3)", () => {
+	it("returns okayed:null when stored okayed is a number", async () => {
+		const pluginData = makePluginDataPort({
+			scripts: { "s": { okayed: 42 } },
+		});
+		const store = makeStore(pluginData);
+
+		const scripts = await store.getScripts();
+		expect(scripts["s"]?.okayed).toBeNull();
+	});
+
+	it("returns okayed:null when stored okayed is a string", async () => {
+		const pluginData = makePluginDataPort({
+			scripts: { "s": { okayed: "x" } },
+		});
+		const store = makeStore(pluginData);
+
+		const scripts = await store.getScripts();
+		expect(scripts["s"]?.okayed).toBeNull();
+	});
+
+	it("returns okayed:null when stored okayed is an empty object (missing both fields)", async () => {
+		const pluginData = makePluginDataPort({
+			scripts: { "s": { okayed: {} } },
+		});
+		const store = makeStore(pluginData);
+
+		const scripts = await store.getScripts();
+		expect(scripts["s"]?.okayed).toBeNull();
+	});
+
+	it("returns okayed:null when stored okayed has version but is missing checksum", async () => {
+		const pluginData = makePluginDataPort({
+			scripts: { "s": { okayed: { version: 1 } } },
+		});
+		const store = makeStore(pluginData);
+
+		const scripts = await store.getScripts();
+		expect(scripts["s"]?.okayed).toBeNull();
+	});
+
+	it("round-trips a well-formed okayed value unchanged", async () => {
+		const pluginData = makePluginDataPort({
+			scripts: { "s": { okayed: { version: 2, checksum: "sha256:ab" } } },
+		});
+		const store = makeStore(pluginData);
+
+		const scripts = await store.getScripts();
+		expect(scripts["s"]?.okayed).toEqual({ version: 2, checksum: "sha256:ab" });
 	});
 });

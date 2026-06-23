@@ -121,15 +121,26 @@ export class ScriptStore {
 }
 
 // ---------------------------------------------------------------------------
-// Module-private helper — apply defensive defaults to a raw entry
+// Module-private helpers — apply defensive defaults to a raw entry
 // ---------------------------------------------------------------------------
+
+// Fail-closed: malformed okayed (wrong type, missing fields, partial object)
+// → null, meaning "not consented". Only a structurally valid object passes.
+function parseOkayed(raw: unknown): ScriptRecord["okayed"] {
+	if (raw !== null && typeof raw === "object"
+		&& typeof (raw as { version?: unknown }).version === "number"
+		&& typeof (raw as { checksum?: unknown }).checksum === "string") {
+		return raw as { version: number; checksum: string };
+	}
+	return null;
+}
 
 function applyDefaults(raw: unknown): ScriptRecord {
 	const entry = (raw !== null && typeof raw === "object" ? raw : {}) as Partial<ScriptRecord>;
 	return {
 		provenance: entry.provenance ?? "curated",
 		enabled: entry.enabled ?? false,
-		okayed: entry.okayed !== undefined ? entry.okayed : null,
+		okayed: parseOkayed(entry.okayed),
 		source: entry.source ?? "",
 		command: entry.command ?? false,
 	};
