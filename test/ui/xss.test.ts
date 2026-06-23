@@ -42,7 +42,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { App } from "obsidian";
-import type { ManifestEntry, DeviceState } from "../../src/scripts/store";
+import type { ScriptRecord } from "../../src/scripts/store";
 import {
 	capturedSettings,
 	clearCapturedSettings,
@@ -102,21 +102,21 @@ function makePluginWithPayload(sourcePayload: string, idPayload: string = "safe-
 	};
 	const saveSettings = vi.fn().mockResolvedValue(undefined);
 
-	const manifest: Record<string, ManifestEntry> = {
+	// New ScriptRecord shape (T1.4). okayed.version = 1 keeps the rendered desc
+	// "Source: <payload>  ·  v1" identical to the v0.1 shape, so the XSS
+	// text-rendering assertions below remain valid against the migrated tab.
+	const scripts: Record<string, ScriptRecord> = {
 		[idPayload]: {
+			provenance: "imported",
+			enabled: false,
+			okayed: { version: 1, checksum: "sha256:abc" },
 			source: sourcePayload,
-			checksum: "sha256:abc",
-			version: 1,
+			command: false,
 		},
 	};
-	const deviceState: DeviceState = {
-		enabled: { [idPayload]: false },
-		consent: {},
-	};
 	const store = {
-		getManifest: vi.fn().mockResolvedValue(manifest),
-		getDevice: vi.fn().mockResolvedValue(deviceState),
-		setEnabled: vi.fn().mockResolvedValue(undefined),
+		getScripts: vi.fn().mockResolvedValue(scripts),
+		setRecord: vi.fn().mockResolvedValue(undefined),
 	};
 
 	// Plugin manifest — required by HeaderSection (wired into display()).

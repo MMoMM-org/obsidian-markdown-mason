@@ -16,7 +16,7 @@ export interface MasonPlugin extends Plugin {
 	manifest: PluginManifest & { authorUrl?: string };
 	settings: MasonSettings;
 	saveSettings(): Promise<void>;
-	store: Pick<ScriptStore, "getManifest" | "getDevice" | "setEnabled">;
+	store: Pick<ScriptStore, "getScripts" | "setRecord">;
 }
 
 // ---------------------------------------------------------------------------
@@ -107,14 +107,13 @@ export class MasonSettingTab extends PluginSettingTab {
 
 	/** Render the Scripts section heading and per-script controls. */
 	private async _renderScriptsSection(containerEl: HTMLElement): Promise<void> {
+		// TRANSITIONAL (T1.4): minimal transcription onto the ScriptRecord store.
+		// Full Scripts-tab rebuild (Command Management, import lifecycle) lands in T4.2.
 		new Setting(containerEl).setName("Scripts").setHeading();
 
-		const [manifest, device] = await Promise.all([
-			this._plugin.store.getManifest(),
-			this._plugin.store.getDevice(),
-		]);
+		const scripts = await this._plugin.store.getScripts();
 
-		const ids = Object.keys(manifest);
+		const ids = Object.keys(scripts);
 
 		if (ids.length === 0) {
 			// No scripts installed — show an informational row.
@@ -125,17 +124,17 @@ export class MasonSettingTab extends PluginSettingTab {
 		}
 
 		for (const id of ids) {
-			const entry = manifest[id];
-			const isEnabled = device.enabled[id] ?? false;
+			const rec = scripts[id];
+			const version = rec.okayed?.version ?? "—";
 
 			new Setting(containerEl)
 				.setName(id)
-				.setDesc(`Source: ${entry.source}  ·  v${entry.version}`)
+				.setDesc(`Source: ${rec.source}  ·  v${version}`)
 				.addToggle((toggle) => {
 					toggle
-						.setValue(isEnabled)
+						.setValue(rec.enabled)
 						.onChange(async (value) => {
-							await this._plugin.store.setEnabled(id, value);
+							await this._plugin.store.setRecord(id, { ...rec, enabled: value });
 						});
 				})
 				.addButton((button) => {

@@ -193,33 +193,40 @@ export class ScriptDisclosureModal extends Modal {
  */
 export function makeAskCallback(
 	app: App,
-	store: Pick<ScriptStore, "evaluateTrust" | "recordConsent">,
+	store: Pick<ScriptStore, "getScripts" | "setRecord">,
 	scriptId: string,
 	info: ScriptInfo,
 	checksum: string,
 	version: number,
 ): AskCallback {
+	// TRANSITIONAL (T1.4): full evaluateState-based disclosure lands in T3.4.
 	return async (): Promise<AskDecision> => {
-		const { status } = await store.evaluateTrust(scriptId);
-
-		// Lighter path: already consented for this exact checksum+version
-		if (status === "ok") {
-			return "enable-session";
-		}
+		const rec = (await store.getScripts())[scriptId];
 
 		// Kill-switch: user explicitly disabled this script
-		if (status === "disabled") {
+		if (rec?.enabled === false) {
 			return "disable";
 		}
 
-		// All other statuses (needs-consent, drift-blocked, unknown) → show modal
+		// Lighter path: already consented for this exact checksum+version
+		if (rec?.okayed?.version === version && rec?.okayed?.checksum === checksum) {
+			return "enable-session";
+		}
+
+		// Otherwise (no record, or fingerprint changed) → show modal
 		const modal = new ScriptDisclosureModal(app, info);
 		const decision = await modal.present();
 
 		// Record consent only for enable-session (persists approval).
 		// enable-once is intentionally ephemeral: no consent stored → next invocation re-prompts.
 		if (decision === "enable-session") {
-			await store.recordConsent(scriptId, checksum, version);
+			await store.setRecord(scriptId, {
+				provenance: rec?.provenance ?? "imported",
+				enabled: true,
+				okayed: { version, checksum },
+				source: rec?.source ?? "",
+				command: rec?.command ?? false,
+			});
 		}
 
 		return decision;

@@ -60,8 +60,8 @@ export class MarkdownMasonPlugin extends Plugin {
 	declare settings: MasonSettings;
 
 	/**
-	 * Script store — manages the script manifest (data.json) and per-device
-	 * state (device.json). Initialised in onload() after loadSettings().
+	 * Script store — manages all script decisions in the synced data.json
+	 * (plugin.loadData/saveData). Initialised in onload() after loadSettings().
 	 */
 	declare store: ScriptStore;
 
@@ -81,7 +81,7 @@ export class MarkdownMasonPlugin extends Plugin {
 	}
 
 	/**
-	 * Initialise the ScriptStore with plugin data + vault adapter ports.
+	 * Initialise the ScriptStore with the synced data.json port.
 	 * Called once during onload, after settings are loaded.
 	 */
 	private _initStore(): void {
@@ -89,9 +89,7 @@ export class MarkdownMasonPlugin extends Plugin {
 			load: (): Promise<unknown> => this.loadData(),
 			save: (data: unknown): Promise<void> => this.saveData(data),
 		};
-		const vaultAdapterPort = this.app.vault.adapter;
-		const devicePath = ".obsidian/plugins/markdown-mason/device.json";
-		this.store = new ScriptStore(pluginDataPort, vaultAdapterPort, devicePath);
+		this.store = new ScriptStore(pluginDataPort);
 	}
 
 	/**
