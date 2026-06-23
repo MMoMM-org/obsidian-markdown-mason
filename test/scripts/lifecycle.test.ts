@@ -128,6 +128,18 @@ const cases: TestCase[] = [
 		expected: { kind: "Blocked", reason: "drift" },
 	},
 
+	// Step 6 — drift wins over offline: local present + checksum mismatch + online:false → Blocked(drift)
+	// Proves that once local code exists, online state is irrelevant for drift detection
+	{
+		label: "drift wins over offline: local present + checksum mismatch + online:false → Blocked(drift)",
+		input: makeInput({
+			record: makeRecord({ okayed: { version: 1, checksum: "sha256:abc" } }),
+			local: { version: 1, checksum: "sha256:WRONG" },
+			online: false,
+		}),
+		expected: { kind: "Blocked", reason: "drift" },
+	},
+
 	// Step 7 — curated, local matches, catalogVersion > okayed.version → UpdateAvailable
 	{
 		label: "curated + local matches + catalogVersion > okayed.version → UpdateAvailable",

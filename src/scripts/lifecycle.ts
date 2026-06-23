@@ -57,8 +57,8 @@ export interface EvaluateStateInput {
 	record: ScriptRecord | undefined;
 	/**
 	 * Whether the curated catalog offers this script id.
-	 * Used for the no-record case (step 1) and the okayed-null case (step 3).
-	 * Note: step 3 uses record.provenance, not inCatalog — they differ.
+	 * Used only for the no-record case (step 1): is this id offered by the curated catalog?
+	 * Note: step 3 (okayed===null) keys off record.provenance, NOT inCatalog — they differ.
 	 */
 	inCatalog: boolean;
 	/** Materialized code on THIS device: version+checksum, or null if absent. */
