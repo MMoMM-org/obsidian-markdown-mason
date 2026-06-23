@@ -12,11 +12,12 @@ import type { RunnerEffects } from "./scripts/runner";
 import type { ScriptFunction } from "./scripts/context";
 import { buildRegistry } from "./core/registry";
 import { countFootnoteDefs } from "./core/footnotes";
-import { perplexityAutoScript } from "./scripts/library/perplexityAuto";
 import { perplexityAppScript } from "./scripts/library/perplexityApp";
 import { perplexityWebScript } from "./scripts/library/perplexityWeb";
 import { perplexityWebDownloadScript } from "./scripts/library/perplexityWebDownload";
 import { ScriptStore } from "./scripts/store";
+import { buildPasteChain } from "./scripts/paste/buildPasteChain";
+import type { LoadedScript } from "./scripts/paste/buildPasteChain";
 import { MasonSettingTab } from "./ui/settingsTab";
 
 // Re-export so consumers that import from "src/main" still resolve.
@@ -38,7 +39,9 @@ export { DEFAULT_SETTINGS, type MasonSettings };
 //   clipboardReader  — replaces navigator.clipboard.readText() (paste only)
 //   applyPlan        — replaces the CM6 applyEditPlan side-effect (paste + selection)
 //   failScript       — when true, forces the paste script to throw (paste rawFallback tests)
-//   scriptOverride   — when set, replaces the script for BOTH paste and selection commands
+//   scriptOverride   — when set, replaces the script for SELECTION commands only
+//   pasteScripts     — when set, replaces the enabled paste-script set fed to the
+//                      data-driven paste chain (paste only)
 // ---------------------------------------------------------------------------
 
 export interface CommandInjection {
@@ -48,8 +51,13 @@ export interface CommandInjection {
 	applyPlan?: (plan: EditPlan) => void;
 	/** When true, forces the paste script to throw (for paste rawFallback tests). */
 	failScript?: boolean;
-	/** When set, replaces the script function for BOTH paste and selection commands. */
+	/** When set, replaces the script function for SELECTION commands only. */
 	scriptOverride?: ScriptFunction;
+	/**
+	 * When set, replaces the enabled paste-script set passed to buildPasteChain
+	 * (paste command only). Production passes _buildEnabledPasteScripts().
+	 */
+	pasteScripts?: LoadedScript[];
 }
 
 // ---------------------------------------------------------------------------
@@ -145,9 +153,28 @@ export class MarkdownMasonPlugin extends Plugin {
 			// is valid and lets tests await the async work without fire-and-forget.
 			// Arrow function captures `this` lexically — no alias needed.
 			editorCallback: (editor: Editor): Promise<void> => {
-				return runPasteCommand(editor, this.settings, this._commandInjection);
+				return runPasteCommand(
+					editor,
+					this.settings,
+					this._commandInjection,
+					this._buildEnabledPasteScripts(),
+				);
 			},
 		});
+	}
+
+	/**
+	 * Assemble the enabled paste-capable scripts for the data-driven paste chain.
+	 *
+	 * The chain only ever contains scripts that are enabled AND verified (consent +
+	 * match-gate enforced upstream by the store/lifecycle layer), so the runner can
+	 * safely run them with policy "enabled" (SEC-006).
+	 */
+	private _buildEnabledPasteScripts(): LoadedScript[] {
+		// TODO(P4/P5): assemble from store.getScripts() enabled+Active records, loading
+		// each materialized module via loadScriptModule; empty until enable-flow (P4) +
+		// catalog population (P5) exist.
+		return [];
 	}
 
 	// -------------------------------------------------------------------------
@@ -169,7 +196,6 @@ export class MarkdownMasonPlugin extends Plugin {
 
 	private _registerScriptCommands(): void {
 		const scripts: Array<{ id: string; name: string; script: ScriptFunction }> = [
-			{ id: "mason.script.perplexity-auto", name: "Perplexity auto", script: perplexityAutoScript },
 			{ id: "mason.script.perplexity-app", name: "Perplexity app", script: perplexityAppScript },
 			{ id: "mason.script.perplexity-web", name: "Perplexity web", script: perplexityWebScript },
 			{ id: "mason.script.perplexity-web-download", name: "Perplexity web download", script: perplexityWebDownloadScript },
@@ -263,6 +289,7 @@ async function runPasteCommand(
 	editor: Editor,
 	settings: MasonSettings,
 	injection: CommandInjection | undefined,
+	enabledPasteScripts: LoadedScript[],
 ): Promise<void> {
 	// 1. Read clipboard text (or use injected reader in tests)
 	const readClipboard = injection?.clipboardReader ?? defaultClipboardReader;
@@ -311,20 +338,40 @@ async function runPasteCommand(
 		notify: (msg: string): void => { new Notice(msg); },
 	};
 
-	// 6. Build runner — policy "enabled" bypasses the per-checksum consent gate because these are
-	//    FIRST-PARTY bundled library scripts compiled into the plugin bundle. Their sha256 is fixed
-	//    at build time and there is no external file that an attacker can tamper with. The consent
-	//    model (ScriptStore + disclosure modal) protects user-imported external .cjs files; it does
-	//    not apply to code shipped inside the plugin itself. (SEC-006)
+	// 6. Build runner — policy "enabled" bypasses the per-checksum consent gate because the
+	//    paste chain contains ONLY scripts that are already enabled AND verified: consent
+	//    and the canHandle match-gate are enforced upstream (store/lifecycle + buildPasteChain)
+	//    before a handler ever reaches this runner. The consent model (ScriptStore + disclosure
+	//    modal) gates a script INTO the enabled set; once there, running it is the user's
+	//    standing decision, so re-gating per invocation would be redundant. (SEC-006)
 	const runner = new ScriptRunner(effects, { policy: "enabled" });
 
-	// 7. Choose script — failScript injection forces a throw; scriptOverride replaces the script.
-	const script = injection?.failScript === true
-		? buildFailScript()
-		: (injection?.scriptOverride ?? perplexityAutoScript);
+	// 7. failScript injection forces a throw — preserves the rawFallback-on-failure test path.
+	if (injection?.failScript === true) {
+		await runner.run(buildFailScript(), ctx);
+		// runner already called rawFallback + notify on failure (atomicity).
+		return;
+	}
 
-	// 8. Run (ScriptRunner enforces atomicity: applyPlan XOR rawFallback)
-	const outcome = await runner.run(script, ctx);
+	// 8. Data-driven dispatch (ADR-16): pick the first handler in the ordered chain whose
+	//    canHandle(rawText) claims the input. The chain is the single ordering chokepoint
+	//    (curated-before-imported, priority DESC, id ASC). When no handler matches (or the
+	//    chain is empty), fall back to a plain paste.
+	const enabled = injection?.pasteScripts ?? enabledPasteScripts;
+	const chain = buildPasteChain(enabled);
+	const handler = chain.find((h) => h.canHandle(rawText));
+
+	if (handler === undefined) {
+		// No recognized format: insert the raw clipboard text at cursor (plain paste semantics)
+		// and inform the user. This avoids a silent no-op when the user invokes "Paste and format"
+		// on text that no enabled script recognizes.
+		effects.rawFallback();
+		effects.notify("Mason: no recognized format — pasted as-is.");
+		return;
+	}
+
+	// 9. Run the matched handler (ScriptRunner enforces atomicity: applyPlan XOR rawFallback).
+	const outcome = await runner.run(handler.run, ctx);
 	// PRD F8-AC2 / F7-AC3: fire a Notice when the script applies changes.
 	// Prefer footnote-count ("N footnotes filed") when the plan contains defs;
 	// fall back to edit-count ("N change(s)") for non-footnote plans.
@@ -339,9 +386,8 @@ async function runPasteCommand(
 				: countNoticeMessage(outcome.count),
 		);
 	} else if (outcome.kind === "noop") {
-		// No format matched: insert the raw clipboard text at cursor (plain paste semantics)
-		// and inform the user. This avoids a silent no-op when the user invokes "Paste and format"
-		// on text that no script recognizes.
+		// A matched handler that nonetheless produced no plan (e.g. canHandle was broad
+		// but parse found nothing) → plain paste + inform the user.
 		effects.rawFallback();
 		effects.notify("Mason: no recognized format — pasted as-is.");
 	}

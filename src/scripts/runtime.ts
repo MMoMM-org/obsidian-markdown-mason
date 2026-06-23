@@ -47,7 +47,7 @@ export interface VaultAdapterPort {
 
 /** Arguments for importScript (all injected for testability). */
 export interface ImportScriptArgs {
-	/** The script's canonical id (e.g. "perplexity-auto"). */
+	/** The script's canonical id (e.g. "perplexity-app"). */
 	id: string;
 	/** Vault-relative path to the source .cjs file (the user's vault copy). */
 	vaultPath: string;

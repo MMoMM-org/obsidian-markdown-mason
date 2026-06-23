@@ -641,7 +641,8 @@ describe("I3 — Unrecognized selection input → script noop (selection command
 
 	it("script returning undefined for unrecognized input calls neither applyPlan nor replaceSelection", async () => {
 		const plugin = await makePlugin();
-		// Non-empty but unrecognized plain text — perplexityAutoScript returns undefined (noop).
+		// Non-empty but unrecognized plain text — perplexityAppScript returns undefined (noop)
+		// because perplexityApp.canParse finds no Sources/Citations marker block.
 		// The no-op comes from the script returning undefined, not an empty-selection guard.
 		const doc = "# My Note\n\nPlain text with no Perplexity format.";
 		const editor = makeSelectionEditor(doc);
@@ -649,7 +650,7 @@ describe("I3 — Unrecognized selection input → script noop (selection command
 
 		plugin._commandInjection = { applyPlan: applyPlanSpy };
 
-		const cmd = findCommand(plugin, "mason.script.perplexity-auto");
+		const cmd = findCommand(plugin, "mason.script.perplexity-app");
 		await cmd.editorCallback(editor);
 
 		expect(applyPlanSpy, "applyPlan must not be called for noop selection").not.toHaveBeenCalled();
@@ -661,7 +662,7 @@ describe("I3 — Unrecognized selection input → script noop (selection command
 		// When anchor === head (no actual selection), from === to and input === "".
 		// _runScriptOnSelection passes input via `op.input ?? op.doc`; since ""
 		// is not null/undefined, the script receives "" as its input.
-		// perplexityAutoScript returns undefined for empty input → runner emits no
+		// perplexityAppScript returns undefined for empty input → runner emits no
 		// plan → applyPlan and replaceSelection are both never called.
 		const plugin = await makePlugin();
 
@@ -713,7 +714,7 @@ describe("I3 — Unrecognized selection input → script noop (selection command
 		const applyPlanSpy = vi.fn();
 		plugin._commandInjection = { applyPlan: applyPlanSpy };
 
-		const cmd = findCommand(plugin, "mason.script.perplexity-auto");
+		const cmd = findCommand(plugin, "mason.script.perplexity-app");
 		await cmd.editorCallback(emptySelectionEditor);
 
 		expect(applyPlanSpy, "applyPlan must not be called when selection is empty").not.toHaveBeenCalled();
@@ -923,7 +924,7 @@ describe("I6 — Throwing script → raw fallback (selection command)", () => {
 			scriptOverride: (): never => { throw new Error("forced selection failure"); },
 		};
 
-		const cmd = findCommand(plugin, "mason.script.perplexity-auto");
+		const cmd = findCommand(plugin, "mason.script.perplexity-app");
 		await cmd.editorCallback(editor);
 
 		// Raw fallback for selection is a no-op — replaceSelection must NOT be called
@@ -944,7 +945,7 @@ describe("I6 — Throwing script → raw fallback (selection command)", () => {
 			scriptOverride: (): never => { throw new Error("forced selection failure"); },
 		};
 
-		const cmd = findCommand(plugin, "mason.script.perplexity-auto");
+		const cmd = findCommand(plugin, "mason.script.perplexity-app");
 		await cmd.editorCallback(editor);
 
 		expect(applyPlanSpy, "applyPlan must NOT be called when selection script throws").not.toHaveBeenCalled();
@@ -960,7 +961,7 @@ describe("I6 — Throwing script → raw fallback (selection command)", () => {
 			scriptOverride: (): never => { throw new Error("forced selection failure"); },
 		};
 
-		const cmd = findCommand(plugin, "mason.script.perplexity-auto");
+		const cmd = findCommand(plugin, "mason.script.perplexity-app");
 		await cmd.editorCallback(editor);
 
 		expect(noticeLog().length, "a Notice must be shown on selection script failure").toBeGreaterThan(0);

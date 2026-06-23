@@ -6,9 +6,10 @@
 //      sha256 checksum, writes via writeBinary VERBATIM (CRLF bytes survive),
 //      records ScriptRecord with okayed:null; returns { version, checksum }.
 //
-//   C. Paste-and-format command: reads clipboard, builds pasteContext, runs
-//      perplexityAutoScript via ScriptRunner; on success calls applyPlan; on
-//      failure calls rawFallback (inserts raw clipboard text). No partial edits.
+//   C. Paste-and-format command: reads clipboard, builds pasteContext, dispatches
+//      through the data-driven paste chain (T3.3) — first enabled handler whose
+//      canHandle matches runs via ScriptRunner; on applied calls applyPlan; on
+//      noop/no-match calls rawFallback (inserts raw clipboard text). No partial edits.
 //
 // Testability decisions:
 //   - importScript is exported from src/scripts/runtime.ts and accepts injected
@@ -363,9 +364,48 @@ describe("T5.5B importScript — vault import flow", () => {
 import { App } from "obsidian";
 import { noticeLog, clearNoticeLog } from "../__mocks__/obsidian";
 import type { Editor } from "obsidian";
+import { perplexityApp } from "../../src/parsers/perplexityApp";
+import { perplexityAppScript } from "../../src/scripts/library/perplexityApp";
+import type { LoadedScript } from "../../src/scripts/paste/buildPasteChain";
+import type { ScriptFunction } from "../../src/scripts/context";
 
 // Dynamic import of MarkdownMasonPlugin after mock alias is active
 const { MarkdownMasonPlugin } = await import("../../src/main");
+
+// ---------------------------------------------------------------------------
+// Paste-chain LoadedScript factory (T3.3)
+//
+// The data-driven paste chain (buildPasteChain) selects the first enabled
+// handler whose paste.canHandle(clipboardText) returns true. Tests inject the
+// enabled set via _commandInjection.pasteScripts. This factory wraps a concrete
+// ScriptFunction in the LoadedScript envelope the chain consumes.
+// ---------------------------------------------------------------------------
+
+function makeLoadedScript(args: {
+	id: string;
+	run: ScriptFunction;
+	canHandle: (input: string) => boolean;
+	priority?: number;
+	provenance?: "curated" | "imported";
+}): LoadedScript {
+	return {
+		id: args.id,
+		record: { provenance: args.provenance ?? "curated" },
+		module: {
+			run: args.run,
+			paste: { canHandle: args.canHandle, priority: args.priority ?? 100 },
+		},
+	};
+}
+
+/** A curated paste handler that runs the real perplexity-app script. */
+function curatedPerplexityAppPasteScript(): LoadedScript {
+	return makeLoadedScript({
+		id: "perplexity-app",
+		run: perplexityAppScript,
+		canHandle: (input: string) => perplexityApp.canParse(input),
+	});
+}
 
 // --- minimal Editor stub for paste command tests ---
 // (applyEditPlan is not invoked directly; we spy on RunnerEffects.applyPlan)
@@ -478,15 +518,16 @@ describe("T5.5C — mason.pasteAndFormat command registration", () => {
 // ---------------------------------------------------------------------------
 // C2: on success, no rawFallback (replaceSelection) called
 //
-// When perplexityAutoScript returns a real EditPlan (recognized Perplexity text),
-// the runner produces {kind:"applied"} → applyPlan is called and rawFallback is NOT.
-//
-// We use recognized Perplexity-app input so the script always returns an EditPlan.
+// The paste command now dispatches through the data-driven paste chain (T3.3).
+// We inject a curated paste handler (perplexity-app) via _commandInjection.pasteScripts;
+// its canHandle matches the recognized Perplexity-app input, so the chain runs the
+// real perplexityAppScript → {kind:"applied"} → applyPlan called, rawFallback NOT.
 // ---------------------------------------------------------------------------
 
 // Minimal Perplexity-app format text: ## Answer header + Sources marker + one cited source.
-// perplexityAutoScript will detect this as perplexityApp format and produce
-// a non-empty EditPlan (Resources section with the footnote definition).
+// The injected curated handler's canHandle (perplexityApp.canParse) matches this input,
+// so the chain runs perplexityAppScript and produces a non-empty EditPlan
+// (Resources section with the footnote definition).
 //
 // The perplexityApp parser requires a "## Answer" block header for prose
 // and source extraction. ctx.op.doc is the same as the selection text.
@@ -511,10 +552,12 @@ describe("T5.5C — paste command success path", () => {
 		const applyPlanSpy = vi.fn();
 
 		// Inject test doubles via plugin._commandInjection.
-		// Use recognized Perplexity-app input so the script produces a real EditPlan.
+		// Inject a curated paste handler whose canHandle matches the Perplexity-app input,
+		// so the chain runs the real perplexityAppScript and produces a real EditPlan.
 		plugin._commandInjection = {
 			clipboardReader: async () => PERPLEXITY_APP_INPUT,
 			applyPlan: applyPlanSpy,
+			pasteScripts: [curatedPerplexityAppPasteScript()],
 		};
 
 		const cmd = findCommand(plugin, "mason.pasteAndFormat");
@@ -541,9 +584,11 @@ describe("T5.5C — paste command success path", () => {
 		const applyPlanSpy = vi.fn();
 
 		plugin._commandInjection = {
-			// Clipboard contains Perplexity-app text → produces a real, non-empty EditPlan with footnote defs
+			// Clipboard contains Perplexity-app text → the injected curated handler matches
+			// and the chain runs perplexityAppScript → real, non-empty EditPlan with footnote defs
 			clipboardReader: async () => PERPLEXITY_APP_INPUT,
 			applyPlan: applyPlanSpy,
+			pasteScripts: [curatedPerplexityAppPasteScript()],
 		};
 
 		const cmd = findCommand(plugin, "mason.pasteAndFormat");
@@ -574,12 +619,19 @@ describe("T5.5C — paste command success path", () => {
 
 		const applyPlanSpy = vi.fn();
 
-		// A script that returns a non-empty EditPlan with a plain-text insert — no [^n]: defs.
-		// countFootnoteDefs will return 0, so the fallback Notice branch fires.
+		// A curated catch-all paste handler whose run returns a non-empty EditPlan with a
+		// plain-text insert — no [^n]: defs. countFootnoteDefs returns 0, so the fallback
+		// (edit-count) Notice branch fires.
 		plugin._commandInjection = {
 			clipboardReader: async () => "some text",
 			applyPlan: applyPlanSpy,
-			scriptOverride: () => [{ from: 0, to: 0, insert: "plain text insert" }],
+			pasteScripts: [
+				makeLoadedScript({
+					id: "plain-insert",
+					run: () => [{ from: 0, to: 0, insert: "plain text insert" }],
+					canHandle: () => true,
+				}),
+			],
 		};
 
 		const cmd = findCommand(plugin, "mason.pasteAndFormat");
@@ -699,19 +751,19 @@ describe("T5.5C — paste command with empty clipboard", () => {
 });
 
 // ---------------------------------------------------------------------------
-// C5: noop path — script returns undefined → rawFallback fires + "pasted as-is" Notice
+// C5: noop path — a matched handler returns undefined → rawFallback + "pasted as-is" Notice
 //
-// When perplexityAutoScript returns undefined (no recognized format), the
-// runner returns {kind:"noop"}.  runPasteCommand must:
+// When a handler's canHandle matched but its run returns undefined, the runner
+// returns {kind:"noop"}.  runPasteCommand must:
 //   1. Call rawFallback (replaceSelection with raw clipboard text)
 //   2. Show a Notice matching /pasted as-is/
 //   3. NOT call applyPlan
 // ---------------------------------------------------------------------------
 
-describe("T5.5C — paste command noop path: raw fallback fires when no format matches", () => {
+describe("T5.5C — paste command noop path: raw fallback fires when matched handler produces no plan", () => {
 	beforeEach(() => clearNoticeLog());
 
-	it("replaceSelection called with raw text and 'pasted as-is' Notice shown when script returns undefined (noop)", async () => {
+	it("replaceSelection called with raw text and 'pasted as-is' Notice shown when a matched handler returns undefined (noop)", async () => {
 		const plugin = await makePluginAndFireLayout();
 		const editor = makePasteEditorStub("# Note\n\n");
 
@@ -721,8 +773,15 @@ describe("T5.5C — paste command noop path: raw fallback fires when no format m
 		plugin._commandInjection = {
 			clipboardReader: async () => rawClipboardText,
 			applyPlan: applyPlanSpy,
-			// scriptOverride returns undefined → runner produces {kind:"noop"}
-			scriptOverride: () => undefined,
+			// A curated handler that claims the input (canHandle:true) but its run returns
+			// undefined → runner produces {kind:"noop"} → rawFallback + "pasted as-is".
+			pasteScripts: [
+				makeLoadedScript({
+					id: "noop-handler",
+					run: () => undefined,
+					canHandle: () => true,
+				}),
+			],
 		};
 
 		const cmd = findCommand(plugin, "mason.pasteAndFormat");
@@ -754,6 +813,113 @@ describe("T5.5C — paste command noop path: raw fallback fires when no format m
 });
 
 // ---------------------------------------------------------------------------
+// C6: data-driven paste chain — first-canHandle-match dispatch + provenance shadowing
+//
+// These drive the REAL mason.pasteAndFormat command with an injected
+// _commandInjection.pasteScripts set, proving the command dispatches through
+// buildPasteChain (T3.3, ADR-16) with source:"paste":
+//   - the first handler whose canHandle(clipboardText) returns true runs;
+//   - a curated catch-all SHADOWS an imported handler that claims the same input
+//     (curated provenance is ordered before imported in the chain);
+//   - an empty chain → no handler → rawFallback + "no recognized format" notice.
+// ---------------------------------------------------------------------------
+
+describe("T3.3 — data-driven paste chain dispatch via mason.pasteAndFormat", () => {
+	beforeEach(() => clearNoticeLog());
+
+	it("runs the first chain handler whose canHandle matches the clipboard text (source:'paste')", async () => {
+		const plugin = await makePluginAndFireLayout();
+		const editor = makePasteEditorStub("# Note\n\n");
+		const applyPlanSpy = vi.fn();
+
+		let ranWith: { input: string; source: string } | undefined;
+		const matchingHandler = makeLoadedScript({
+			id: "matcher",
+			canHandle: (input: string) => input.includes("CLAIM-ME"),
+			run: (ctx) => {
+				ranWith = { input: ctx.input, source: ctx.source };
+				return [{ from: 0, to: 0, insert: "x" }];
+			},
+		});
+
+		plugin._commandInjection = {
+			clipboardReader: async () => "text with CLAIM-ME token",
+			applyPlan: applyPlanSpy,
+			pasteScripts: [matchingHandler],
+		};
+
+		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		await cmd.editorCallback(editor);
+
+		// The matched handler's run must have been invoked with the clipboard text and source:"paste"
+		expect(ranWith, "matched handler.run must have been invoked").toBeDefined();
+		expect(ranWith?.input).toBe("text with CLAIM-ME token");
+		expect(ranWith?.source, "the paste chain must run handlers with source:'paste'").toBe("paste");
+
+		// applyPlan called (handler produced a non-empty plan), rawFallback NOT called
+		expect(applyPlanSpy).toHaveBeenCalledOnce();
+		expect(editor._replaced, "rawFallback must NOT fire when a handler applies a plan").toHaveLength(0);
+	});
+
+	it("a curated catch-all shadows an imported handler that claims the same input (curated runs)", async () => {
+		const plugin = await makePluginAndFireLayout();
+		const editor = makePasteEditorStub("# Note\n\n");
+		const applyPlanSpy = vi.fn();
+
+		const ran: string[] = [];
+		const importedCatchAll = makeLoadedScript({
+			id: "imported-catch-all",
+			provenance: "imported",
+			canHandle: () => true,
+			run: () => { ran.push("imported"); return [{ from: 0, to: 0, insert: "imported" }]; },
+		});
+		const curatedCatchAll = makeLoadedScript({
+			id: "curated-catch-all",
+			provenance: "curated",
+			canHandle: () => true,
+			run: () => { ran.push("curated"); return [{ from: 0, to: 0, insert: "curated" }]; },
+		});
+
+		plugin._commandInjection = {
+			clipboardReader: async () => "anything at all",
+			applyPlan: applyPlanSpy,
+			// Imported listed FIRST in the array — the chain must still order curated before
+			// imported, so the curated handler runs and the imported one is shadowed.
+			pasteScripts: [importedCatchAll, curatedCatchAll],
+		};
+
+		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		await cmd.editorCallback(editor);
+
+		expect(ran, "exactly one handler runs — the chain stops at the first match").toEqual(["curated"]);
+		const planArg = applyPlanSpy.mock.calls[0]?.[0] as Array<{ insert: string }>;
+		expect(planArg?.[0]?.insert, "the curated handler's plan must be the one applied").toBe("curated");
+	});
+
+	it("empty enabled chain → no handler → rawFallback + 'no recognized format' notice", async () => {
+		const plugin = await makePluginAndFireLayout();
+		const editor = makePasteEditorStub("# Note\n\n");
+		const rawText = "some clipboard text with no enabled handler";
+		const applyPlanSpy = vi.fn();
+
+		plugin._commandInjection = {
+			clipboardReader: async () => rawText,
+			applyPlan: applyPlanSpy,
+			pasteScripts: [], // empty — mirrors the P3 production chain
+		};
+
+		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		await cmd.editorCallback(editor);
+
+		expect(editor._replaced, "empty chain must fall back to a plain paste").toContain(rawText);
+		expect(applyPlanSpy, "applyPlan must not be called when no handler matches").not.toHaveBeenCalled();
+		const notices = noticeLog();
+		expect(notices.length).toBe(1);
+		expect(notices[0]).toMatch(/no recognized format/);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // D: Selection script commands — bound script runs on selection, applyPlan called
 //
 // Tests verify the per-script selection commands (mason.script.perplexity-*):
@@ -767,7 +933,7 @@ describe("T5.5C — paste command noop path: raw fallback fires when no format m
 // so selectionContext() uses the full doc as ctx.input.
 //
 // Input: minimal valid Perplexity-app format text that produces a non-empty
-// EditPlan via perplexityAutoScript (Sources marker + at least one source line).
+// EditPlan via perplexityAppScript (Sources marker + at least one source line).
 // ---------------------------------------------------------------------------
 
 import type { EditorPosition, EditorSelection } from "obsidian";
@@ -843,17 +1009,17 @@ function makeSelectionEditorStub(doc: string): Editor & { _replaced: string[] } 
 describe("D — selection script commands: bound script runs on selection, applyPlan called", () => {
 	beforeEach(() => clearNoticeLog());
 
-	it("mason.script.perplexity-auto is registered after onLayoutReady", async () => {
+	it("mason.script.perplexity-auto is NOT registered (retired in T3.3 — auto detector removed)", async () => {
 		const plugin = await makePluginAndFireLayout();
 		const cmd = findCommand(plugin, "mason.script.perplexity-auto");
-		expect(cmd, "mason.script.perplexity-auto must be registered").toBeDefined();
-		expect(cmd?.name).toBe("Perplexity auto");
+		expect(cmd, "mason.script.perplexity-auto must NOT be registered after the detector retirement").toBeUndefined();
 	});
 
 	it("mason.script.perplexity-app is registered after onLayoutReady", async () => {
 		const plugin = await makePluginAndFireLayout();
 		const cmd = findCommand(plugin, "mason.script.perplexity-app");
 		expect(cmd, "mason.script.perplexity-app must be registered").toBeDefined();
+		expect(cmd?.name).toBe("Perplexity app");
 	});
 
 	it("mason.script.perplexity-web is registered after onLayoutReady", async () => {
@@ -868,7 +1034,7 @@ describe("D — selection script commands: bound script runs on selection, apply
 		expect(cmd, "mason.script.perplexity-web-download must be registered").toBeDefined();
 	});
 
-	it("mason.script.perplexity-auto on a Perplexity-app selection calls applyPlan with the produced plan", async () => {
+	it("mason.script.perplexity-app on a Perplexity-app selection calls applyPlan with the produced plan", async () => {
 		const plugin = await makePluginAndFireLayout();
 		// Editor with full-doc selection: selectionContext uses the entire doc as input
 		const editor = makeSelectionEditorStub(PERPLEXITY_APP_INPUT);
@@ -881,8 +1047,8 @@ describe("D — selection script commands: bound script runs on selection, apply
 			applyPlan: applyPlanSpy,
 		};
 
-		const cmd = findCommand(plugin, "mason.script.perplexity-auto");
-		expect(cmd, "mason.script.perplexity-auto must be registered").toBeDefined();
+		const cmd = findCommand(plugin, "mason.script.perplexity-app");
+		expect(cmd, "mason.script.perplexity-app must be registered").toBeDefined();
 
 		await cmd.editorCallback(editor);
 
@@ -917,10 +1083,11 @@ describe("D — selection script commands: bound script runs on selection, apply
 
 		plugin._commandInjection = {
 			applyPlan: applyPlanSpy,
-			// scriptOverride not set — perplexityAutoScript runs and returns noop for this input
+			// scriptOverride not set — perplexityAppScript runs and returns noop for this
+			// input (perplexityApp.canParse finds no Sources/Citations marker block).
 		};
 
-		const cmd = findCommand(plugin, "mason.script.perplexity-auto");
+		const cmd = findCommand(plugin, "mason.script.perplexity-app");
 		await cmd.editorCallback(editor);
 
 		// Script returned undefined → noop: replaceSelection not called
@@ -947,7 +1114,7 @@ describe("D — selection script commands: bound script runs on selection, apply
 			applyPlan: applyPlanSpy,
 		};
 
-		const cmd = findCommand(plugin, "mason.script.perplexity-auto");
+		const cmd = findCommand(plugin, "mason.script.perplexity-app");
 		expect(cmd).toBeDefined();
 
 		clearNoticeLog();
@@ -984,7 +1151,7 @@ describe("D — selection script commands: bound script runs on selection, apply
 			scriptOverride: () => [{ from: 0, to: 0, insert: "plain text insert" }],
 		};
 
-		const cmd = findCommand(plugin, "mason.script.perplexity-auto");
+		const cmd = findCommand(plugin, "mason.script.perplexity-app");
 		expect(cmd).toBeDefined();
 
 		clearNoticeLog();
@@ -1016,7 +1183,7 @@ describe("D — selection script commands: bound script runs on selection, apply
 			scriptOverride: () => { throw new Error("forced selection failure"); },
 		};
 
-		const cmd = findCommand(plugin, "mason.script.perplexity-auto");
+		const cmd = findCommand(plugin, "mason.script.perplexity-app");
 		await cmd.editorCallback(editor);
 
 		// rawFallback for selection is a no-op — replaceSelection must NOT be called

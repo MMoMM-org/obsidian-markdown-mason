@@ -28,7 +28,6 @@ import type { ScriptContext } from "../../src/scripts/context";
 import { perplexityAppScript } from "../../src/scripts/library/perplexityApp";
 import { perplexityWebScript } from "../../src/scripts/library/perplexityWeb";
 import { perplexityWebDownloadScript } from "../../src/scripts/library/perplexityWebDownload";
-import { perplexityAutoScript } from "../../src/scripts/library/perplexityAuto";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -418,45 +417,3 @@ describe("perplexityWebDownloadScript", () => {
 	});
 });
 
-// ---------------------------------------------------------------------------
-// perplexityAutoScript — delegation routing
-// ---------------------------------------------------------------------------
-
-describe("perplexityAutoScript", () => {
-	it("delegates to perplexityAppScript for app-format input (output matches)", async () => {
-		const ctxAuto = makeCtx(appInput);
-		const ctxConcrete = makeCtx(appInput);
-		const autoPlan = await perplexityAutoScript(ctxAuto) as EditPlan;
-		const concretePlan = await perplexityAppScript(ctxConcrete) as EditPlan;
-		const autoOutput = applyToString(PASTE_DOC, autoPlan);
-		const concreteOutput = applyToString(PASTE_DOC, concretePlan);
-		expect(autoOutput).toBe(concreteOutput);
-	});
-
-	it("delegates to perplexityWebScript for web-format input (output matches)", async () => {
-		const ctxAuto = makeCtx(webInput);
-		const ctxConcrete = makeCtx(webInput);
-		const autoPlan = await perplexityAutoScript(ctxAuto) as EditPlan;
-		const concretePlan = await perplexityWebScript(ctxConcrete) as EditPlan;
-		const autoOutput = applyToString(PASTE_DOC, autoPlan);
-		const concreteOutput = applyToString(PASTE_DOC, concretePlan);
-		expect(autoOutput).toBe(concreteOutput);
-	});
-
-	it("delegates to perplexityWebDownloadScript for web-download input (output matches)", async () => {
-		const ctxAuto = makeCtx(webDownloadInput);
-		const ctxConcrete = makeCtx(webDownloadInput);
-		const autoPlan = await perplexityAutoScript(ctxAuto) as EditPlan;
-		const concretePlan = await perplexityWebDownloadScript(ctxConcrete) as EditPlan;
-		const autoOutput = applyToString(PASTE_DOC, autoPlan);
-		const concreteOutput = applyToString(PASTE_DOC, concretePlan);
-		expect(autoOutput).toBe(concreteOutput);
-	});
-
-	it("returns undefined for plain text that matches no parser", async () => {
-		const plainText = "Just some plain text with no citations at all.\nNo sources block.\n";
-		const ctx = makeCtx(plainText);
-		const result = await perplexityAutoScript(ctx);
-		expect(result).toBeUndefined();
-	});
-});
