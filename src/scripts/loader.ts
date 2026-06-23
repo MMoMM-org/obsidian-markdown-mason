@@ -44,6 +44,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import type { ScriptFunction } from "./context";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -71,6 +72,30 @@ export interface RequireFn {
 
 /** The value returned by loadScriptFresh — the script's exported callable. */
 export type ScriptFn = (...args: unknown[]) => unknown;
+
+/**
+ * The optional paste-handler block inside an ADR-16 script envelope.
+ *
+ * Must be a plain object with a synchronous, side-effect-free `canHandle`
+ * predicate and a numeric `priority` used for conflict resolution when
+ * multiple scripts claim the same paste input.
+ */
+export interface PasteBlock {
+	canHandle(input: string): boolean;
+	priority: number;
+}
+
+/**
+ * An ADR-16 script envelope — the shape that loadScriptModule requires and
+ * returns.  A script without a `paste` block is command-only (valid).
+ *
+ * `run` is exactly ScriptFunction (context.ts:73) — the same signature that
+ * the v0.1 bare-function scripts used, now wrapped in an envelope object.
+ */
+export interface ScriptModule {
+	run: ScriptFunction;
+	paste?: PasteBlock;
+}
 
 // ---------------------------------------------------------------------------
 // FsScriptLoader
@@ -174,6 +199,99 @@ export class FsScriptLoader {
 function noop(): unknown { return undefined; }
 
 /**
+ * Evict every require-cache entry under the directory that contains
+ * `absolutePath`.  Both loadScriptFresh and loadScriptModule call this so
+ * that peer `.cjs` edits are always re-read from disk on the next load.
+ * node_modules entries (outside the directory) are left warm.
+ */
+function evictPrefix(absolutePath: string, requireFn: RequireFn): void {
+	const resolved = requireFn.resolve(absolutePath);
+	const dirPrefix = path.dirname(resolved) + path.sep;
+	for (const k of Object.keys(requireFn.cache)) {
+		if (k.startsWith(dirPrefix)) {
+			delete requireFn.cache[k];
+		}
+	}
+}
+
+/**
+ * Load an ADR-16 envelope-only script module from an already-resolved
+ * absolute path.
+ *
+ * ADR-16 CONTRACT
+ * ---------------
+ * Every v0.2 script must export an envelope object:
+ *   module.exports = { run(ctx): EditPlan | undefined, paste?: { ... } }
+ *
+ * A module that does not expose a callable `run` is a LOAD ERROR (throws).
+ * There is no bare-function fallback — that was the v0.1 loadScriptFresh
+ * behaviour, explicitly retired for this loader.
+ *
+ * SECURITY
+ * --------
+ * The escape guard (path-traversal check) runs at FsScriptLoader.resolve()
+ * time before this function is ever called.  loadScriptModule receives an
+ * already-validated absolute path and does NOT re-run the guard.
+ *
+ * CHECKSUMS
+ * ---------
+ * Per ADR-14, code arriving here is pre-verified by the Materializer before
+ * it lands on disk.  loadScriptModule does NOT re-hash; it requires + shape-
+ * validates only.
+ *
+ * @param absolutePath - Canonical path to the <id>.cjs script file.
+ * @param requireFn    - The Node require function (or createRequire result).
+ * @returns Validated ScriptModule envelope { run, paste? }.
+ * @throws  Error with a descriptive message if the envelope shape is invalid.
+ */
+export function loadScriptModule(absolutePath: string, requireFn: RequireFn): ScriptModule {
+	evictPrefix(absolutePath, requireFn);
+
+	const mod = requireFn(absolutePath);
+
+	// Resolve the envelope object: use mod directly when it has a "run" key,
+	// otherwise fall back to mod.default for ESM→CJS interop (e.g. a script
+	// compiled with `export default { run, paste }`).
+	const maybeDefault = isEnvelopeCandidate(mod)
+		? (mod as Record<string, unknown>)["default"]
+		: undefined;
+	const envelope = (isEnvelopeCandidate(mod) && "run" in (mod as Record<string, unknown>))
+		? mod
+		: isEnvelopeCandidate(maybeDefault)
+			? maybeDefault
+			: mod;
+
+	const env = envelope as Record<string, unknown>;
+
+	if (typeof env["run"] !== "function") {
+		throw new Error(
+			`mason: script "${absolutePath}" has no callable run() export (envelope-only, ADR-16)`,
+		);
+	}
+
+	if (env["paste"] !== undefined) {
+		const paste = env["paste"] as Record<string, unknown>;
+		if (typeof paste["canHandle"] !== "function" || typeof paste["priority"] !== "number") {
+			throw new Error(
+				`mason: script "${absolutePath}" has an invalid paste block — ` +
+				`paste.canHandle must be a function and paste.priority must be a number (ADR-16)`,
+			);
+		}
+		return {
+			run: env["run"] as ScriptFunction,
+			paste: paste as unknown as PasteBlock,
+		};
+	}
+
+	return { run: env["run"] as ScriptFunction };
+}
+
+/** True when `v` looks like it could be an envelope object (not a function). */
+function isEnvelopeCandidate(v: unknown): v is Record<string, unknown> {
+	return v !== null && typeof v === "object";
+}
+
+/**
  * Require a script, evicting every module-cache entry under the script's
  * own directory prefix before loading.
  *
@@ -191,21 +309,9 @@ function noop(): unknown { return undefined; }
  * @returns The script's function export, or a noop if no function is exported.
  */
 export function loadScriptFresh(absolutePath: string, requireFn: RequireFn): ScriptFn {
-	// Resolve the canonical cache key that Node will use for this module.
-	const resolved = requireFn.resolve(absolutePath);
-
-	// Compute the directory prefix: everything up to and including the final
-	// path separator. Use path.dirname + path.sep rather than lastIndexOf("/")
-	// so Windows path separators are handled correctly.
-	const dirPrefix = path.dirname(resolved) + path.sep;
-
-	// Evict every cache entry under the directory prefix.
-	// Entries outside this prefix (node_modules, other dirs) are untouched.
-	for (const k of Object.keys(requireFn.cache)) {
-		if (k.startsWith(dirPrefix)) {
-			delete requireFn.cache[k];
-		}
-	}
+	// Evict every cache entry under the directory prefix so that peer .cjs
+	// helper edits are re-read from disk on the next require call.
+	evictPrefix(absolutePath, requireFn);
 
 	const mod = requireFn(absolutePath);
 
