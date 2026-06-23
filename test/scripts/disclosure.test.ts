@@ -267,7 +267,7 @@ describe("ScriptDisclosureModal — rendered content", () => {
 		modal.present();
 		const text = mockEl(modal)._collectText();
 
-		expect(text).toContain("7");
+		expect(text).toContain("Version: 7");
 	});
 
 	it("renders the checksum in the modal (PRD F2: identity disclosure)", () => {
@@ -714,6 +714,79 @@ describe("makeAskCallback — unknown trust → modal shown", () => {
 
 			expect(decision).toBe("disable");
 			expect(store.setRecord).not.toHaveBeenCalled();
+		} finally {
+			restore();
+		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// (W1) record exists but okayed===null → modal IS shown (first-enable gap)
+//
+// Closes the gap between "no record" (tested in (m)) and "record-with-null-okayed".
+// Both start states must reach the modal — the lighter-path check
+//   `rec?.okayed?.version === version && rec?.okayed?.checksum === checksum`
+// must short-circuit to false when okayed is null.
+// ---------------------------------------------------------------------------
+
+describe("makeAskCallback — record with okayed:null → modal shown (W1)", () => {
+	it("shows modal when record exists but okayed is null; disable does NOT call setRecord", async () => {
+		// Record exists (not undefined) but the user has never consented → okayed:null
+		const store = makeStoreWithRecord(CONSENT_SCRIPT_ID, {
+			...BASE_RECORD,
+			enabled: true,
+			okayed: null,
+		});
+
+		let capturedModal: ScriptDisclosureModal | null = null;
+		const restore = captureModal((m) => { capturedModal = m; });
+
+		try {
+			const callback = makeAskCallback(new App(), store, CONSENT_SCRIPT_ID, CONSENT_INFO, CONSENT_CHECKSUM, CONSENT_VERSION);
+			const callbackPromise = callback();
+
+			// Let getScripts resolve so the consent gate runs
+			await Promise.resolve();
+
+			expect(capturedModal).not.toBeNull();
+			clickButton(capturedModal!, "Disable");
+
+			const decision = await callbackPromise;
+
+			expect(decision).toBe("disable");
+			expect(store.setRecord).not.toHaveBeenCalled();
+		} finally {
+			restore();
+		}
+	});
+
+	it("shows modal when record has okayed:null; enable-session calls setRecord with okayed:{version,checksum}", async () => {
+		const store = makeStoreWithRecord(CONSENT_SCRIPT_ID, {
+			...BASE_RECORD,
+			enabled: true,
+			okayed: null,
+		});
+
+		let capturedModal: ScriptDisclosureModal | null = null;
+		const restore = captureModal((m) => { capturedModal = m; });
+
+		try {
+			const callback = makeAskCallback(new App(), store, CONSENT_SCRIPT_ID, CONSENT_INFO, CONSENT_CHECKSUM, CONSENT_VERSION);
+			const callbackPromise = callback();
+
+			await Promise.resolve();
+
+			expect(capturedModal).not.toBeNull();
+			clickButton(capturedModal!, "Enable");
+
+			const decision = await callbackPromise;
+
+			expect(decision).toBe("enable-session");
+			expect(store.setRecord).toHaveBeenCalledOnce();
+			expect(store.setRecord).toHaveBeenCalledWith(CONSENT_SCRIPT_ID, expect.objectContaining({
+				okayed: { version: CONSENT_VERSION, checksum: CONSENT_CHECKSUM },
+				enabled: true,
+			}));
 		} finally {
 			restore();
 		}

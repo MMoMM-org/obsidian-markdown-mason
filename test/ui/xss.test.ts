@@ -435,4 +435,57 @@ describe("XSS — disclosure modal: hostile vaultRelativePath rendered as text",
 		).toBeDefined();
 		expect(pathEl!.tagName).toBe("p");
 	});
+
+	// -------------------------------------------------------------------------
+	// W2 — Hostile checksum rendered as text (not injected as markup)
+	//
+	// The modal renders the checksum field via:
+	//   meta.createEl("p", { text: `Checksum: ${this._info.checksum}` })
+	//
+	// Assertion C1: _collectText() on contentEl contains the verbatim payload.
+	// Assertion C2: innerHTML is never set on contentEl (runtime sink guard).
+	// -------------------------------------------------------------------------
+
+	it("W2: hostile checksum payload appears as verbatim text in modal (C1)", () => {
+		// Build the modal inline with a hostile checksum; openDisclosureModal
+		// hardcodes a benign checksum so we construct directly here.
+		const app = new App();
+		const modal = new ScriptDisclosureModal(app, {
+			vaultRelativePath: "scripts/safe.cjs",
+			fileSizeBytes: 512,
+			version: 1,
+			checksum: PAYLOADS.imgOnerror,
+		});
+		modal.present();
+
+		const el = modal.contentEl as unknown as MockHTMLElement;
+		const text = el._collectText();
+
+		// C1: the full "Checksum: <payload>" label must appear verbatim in the DOM text.
+		expect(text).toContain(`Checksum: ${PAYLOADS.imgOnerror}`);
+	});
+
+	it("W2: hostile checksum payload does not trigger an innerHTML write on contentEl (C2)", () => {
+		const app = new App();
+		const modal = new ScriptDisclosureModal(app, {
+			vaultRelativePath: "scripts/safe.cjs",
+			fileSizeBytes: 512,
+			version: 1,
+			checksum: PAYLOADS.imgOnerror,
+		});
+
+		// Attach spy before onOpen fires.
+		const el = modal.contentEl as unknown as Record<string, unknown>;
+		const innerHTMLSpy = vi.fn();
+		Object.defineProperty(el, "innerHTML", {
+			set: innerHTMLSpy,
+			get: () => "",
+			configurable: true,
+		});
+
+		modal.present();
+
+		// C2: runtime guard — no innerHTML write triggered by hostile checksum.
+		expect(innerHTMLSpy).not.toHaveBeenCalled();
+	});
 });
