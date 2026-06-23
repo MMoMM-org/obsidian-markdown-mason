@@ -62,4 +62,16 @@ describe("sha256Bytes", () => {
 		// SHA-256 of empty input is deterministic — just verify format
 		expect(result).toMatch(/^sha256:[0-9a-f]{64}$/);
 	});
+
+	it("produces the canonical SHA-256 digest for a known input", () => {
+		// SHA-256("a") — RFC/NIST known-answer vector
+		expect(sha256Bytes(bytes(0x61)))
+			.toBe("sha256:ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb");
+	});
+
+	it("produces the canonical SHA-256 digest for empty input", () => {
+		// SHA-256("") — known-answer vector
+		expect(sha256Bytes(bytes()))
+			.toBe("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+	});
 });
