@@ -23,11 +23,12 @@
 // -----------
 // The requestUrl dependency is INJECTED via the RequestUrlFn constructor
 // parameter. This lets unit tests supply a fake without importing obsidian.
-// The production factory (createCatalogSource) is the only place that imports
-// from "obsidian" — it is never imported by tests.
+// The production factory (createCatalogSource) wires in Obsidian's requestUrl
+// at runtime; it is never called by unit tests (they inject a fake directly).
 
 import type { CatalogSource, CatalogIndex, CatalogEntry } from "./catalogSource";
 import { RAW_BASE, PINNED_REF } from "./pinnedRef";
+import { requestUrl } from "obsidian";
 
 // ---------------------------------------------------------------------------
 // Injected port types (minimal subset of Obsidian's requestUrl surface)
@@ -98,7 +99,7 @@ export class RequestUrlCatalogSource implements CatalogSource {
 
 	constructor(requestUrlFn: RequestUrlFn, options?: SourceOptions) {
 		this.requestUrlFn = requestUrlFn;
-		this.rawBase = options?.rawBase ?? RAW_BASE;
+		this.rawBase = (options?.rawBase ?? RAW_BASE).replace(/\/$/, "");
 		this.ref = options?.ref ?? PINNED_REF;
 	}
 
@@ -106,7 +107,7 @@ export class RequestUrlCatalogSource implements CatalogSource {
 	async fetchIndex(): Promise<CatalogIndex> {
 		const url = `${this.rawBase}/${this.ref}/index.json`;
 		const resp = await this.request(url);
-		const doc = this.parseJson(resp);
+		const doc = this.parseJson(resp, url);
 		return {
 			schemaVersion: (doc as { schemaVersion: number }).schemaVersion,
 			ref: this.ref,
@@ -140,11 +141,20 @@ export class RequestUrlCatalogSource implements CatalogSource {
 		return resp;
 	}
 
-	private parseJson(resp: RequestUrlResponseLike): unknown {
+	private parseJson(resp: RequestUrlResponseLike, url: string): unknown {
 		if (resp.json !== null && resp.json !== undefined) {
 			return resp.json;
 		}
-		return JSON.parse(resp.text);
+		try {
+			return JSON.parse(resp.text);
+		} catch (cause) {
+			throw new CatalogFetchError(
+				`Failed to parse catalog index JSON from ${url}`,
+				url,
+				resp.status,
+				{ cause: cause instanceof Error ? cause : undefined },
+			);
+		}
 	}
 }
 
@@ -158,11 +168,5 @@ export class RequestUrlCatalogSource implements CatalogSource {
  * RequestUrlCatalogSource directly.
  */
 export function createCatalogSource(): CatalogSource {
-	// Dynamic import is NOT used here — this factory runs inside Obsidian and
-	// "obsidian" is always available as an ambient module in that context.
-	// The import is at the function level to keep it out of the module's
-	// top-level scope (so tests can import the class without touching obsidian).
-	// eslint-disable-next-line @typescript-eslint/no-require-imports
-	const { requestUrl } = require("obsidian") as { requestUrl: RequestUrlFn };
-	return new RequestUrlCatalogSource(requestUrl);
+	return new RequestUrlCatalogSource(requestUrl as unknown as RequestUrlFn);
 }

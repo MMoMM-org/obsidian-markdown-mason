@@ -179,6 +179,30 @@ describe("RequestUrlCatalogSource.fetchIndex (T2.2, ADR-13)", () => {
 
 		expect(result.ref).toBe("test-sha-123");
 	});
+
+	it("throws CatalogFetchError when resp.json is null and resp.text is malformed JSON (W1)", async () => {
+		const resp: RequestUrlResponseLike = {
+			status: 200,
+			json: null,
+			text: "THIS IS NOT JSON",
+			arrayBuffer: new ArrayBuffer(0),
+		};
+		const source = new RequestUrlCatalogSource(makeOkFn(resp));
+
+		await expect(source.fetchIndex()).rejects.toBeInstanceOf(CatalogFetchError);
+	});
+
+	it("normalizes rawBase trailing slash to prevent double-slash URLs (S1)", async () => {
+		const { fn, lastUrl } = makeCapturingFn(makeJsonResponse(makeIndexDoc()));
+		const source = new RequestUrlCatalogSource(fn, {
+			rawBase: "https://example.com/",
+			ref: "test-sha-123",
+		});
+
+		await source.fetchIndex();
+
+		expect(lastUrl()).toBe("https://example.com/test-sha-123/index.json");
+	});
 });
 
 // ---------------------------------------------------------------------------
