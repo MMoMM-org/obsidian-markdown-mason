@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Module Envelope, Paste Chain & Disclosure"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 3
 ---
@@ -30,7 +30,7 @@ phase: 3
 
 This phase delivers the script contract, the data-driven paste autodetect, and the consent step — replacing the compiled-in detector.
 
-- [ ] **T3.1 Envelope loader (`loadScriptModule`)** `[activity: backend-api]`
+- [x] **T3.1 Envelope loader (`loadScriptModule`)** `[activity: backend-api]`
 
   1. Prime: Read `loadScriptFresh` (returns a function today) + the envelope contract `[ref: SDD/Internal API Changes; SDD/ADR-16]`.
   2. Test (RED): valid `{run, paste}` → returns both; `{run}` only → `paste` undefined; missing/`non-callable run` → **throws a load error**; prefix cache-evict behavior preserved (peer `.cjs` re-read).
@@ -38,7 +38,7 @@ This phase delivers the script contract, the data-driven paste autodetect, and t
   4. Validate: update `test/scripts/loader.test.ts`; lint; types.
   - Success: envelope-only enforced `[ref: SDD/ADR-16]`; `run` is the unchanged `ScriptFunction` `[ref: context.ts:73]`.
 
-- [ ] **T3.2 `buildPasteChain` ordering chokepoint** `[activity: domain-modeling]` `[parallel: true]`
+- [x] **T3.2 `buildPasteChain` ordering chokepoint** `[activity: domain-modeling]` `[parallel: true]`
 
   1. Prime: Read the buildPasteChain example + precedence rules `[ref: SDD/Implementation Examples/buildPasteChain; PRD/F10]`.
   2. Test (RED): only scripts with a `paste` block join; order = curated→imported, then priority desc, then id asc; a curated `canHandle:()=>true` is tried before any imported; command-only scripts never appear.
@@ -46,7 +46,7 @@ This phase delivers the script contract, the data-driven paste autodetect, and t
   4. Validate: unit tests cover ordering + shadowing; lint; types.
   - Success: imported catch-all cannot hijack a curated-claimed format `[ref: PRD/F10]`.
 
-- [ ] **T3.3 Rewire `pasteAndFormat` to the chain; retire detector** `[activity: backend-api]`
+- [x] **T3.3 Rewire `pasteAndFormat` to the chain; retire detector** `[activity: backend-api]`
 
   1. Prime: Read `main.ts` paste command (`:142-153`, hardcoded `perplexityAutoScript` `:326`, raw fallback `:343-348`) + `detect.ts` `[ref: SDD/Directory Map]`.
   2. Test (RED): paste builds the chain from **enabled** scripts and runs the first `canHandle` match via `ScriptRunner` with `source:"paste"`; no match → raw-paste + "no recognized format" notice (unchanged); blocked/disabled scripts excluded from the chain.
@@ -54,7 +54,7 @@ This phase delivers the script contract, the data-driven paste autodetect, and t
   4. Validate: update `test/main*.test.ts` and remove `test/parsers/detect.test.ts`; lint; types.
   - Success: autodetect is data-driven; `detect.ts`/`perplexity-auto` gone `[ref: PRD/F10, F11; SDD/ADR-16]`; raw fallback preserved `[ref: main.ts:343-348]`.
 
-- [ ] **T3.4 Disclosure for the `Disclosing` state** `[activity: backend-api]` `[parallel: true]`
+- [x] **T3.4 Disclosure for the `Disclosing` state** `[activity: backend-api]` `[parallel: true]`
 
   1. Prime: Read `disclosure.ts` (`ScriptDisclosureModal`, `makeAskCallback`) + enable-implies-consent `[ref: PRD/F2; SDD/Runtime View]`.
   2. Test (RED): first enable shows the modal with `{version, checksum}`; accept writes `okayed` and proceeds; cancel/Esc/close → no run, prior state kept; re-enable with unchanged `{v,c}` → no modal; changed `{v,c}` → modal again.
@@ -62,6 +62,16 @@ This phase delivers the script contract, the data-driven paste autodetect, and t
   4. Validate: update `test/scripts/disclosure.test.ts`; lint; types.
   - Success: disclosure on first-enable and every identity change only `[ref: PRD/F2]`.
 
-- [ ] **T3.5 Phase Validation** `[activity: validate]`
+- [x] **T3.5 Phase Validation** `[activity: validate]`
 
   - Run all Phase 3 tests; `npm run lint`; `npm run compliance`. Verify `detect.ts`/`perplexityAuto.ts` are deleted and no import references remain.
+
+---
+
+## Deviations (recorded per Deviation Protocol)
+
+- **Paste autodetect is dormant P3→P5 (user-approved).** T3.3 retired the hardcoded detector and wired the data-driven chain, but the curated Perplexity scripts don't enter the catalog until Phase 5 (F11). `_buildEnabledPasteScripts()` returns `[]` in P3 (TODO(P4/P5)), so production "Paste and format" raw-falls-back until P5. The chain mechanism + tests (injected `LoadedScript`s) are fully in place; the 3 concrete selection commands still work. No released users.
+- **T3.4 lighter-path reconciliation.** The plan said the already-ok path should "use evaluateState"; the okayed-`{version,checksum}`-match check IS the consent slice of evaluateState (rules 5-6 Active-vs-drift). Full evaluateState inputs (local checksum/catalog/online) don't exist at first-enable, so the match-check is kept and documented as the disclosure-layer equivalent.
+- **Invariant I5 deleted, I4 re-pointed.** The v0.1 `evaluateTrust` invariants in `invariants.test.ts`: I4 ("disabled when enabled:false") re-pointed to `makeAskCallback` returning "disable"; I5 ("drift hard-blocks") deleted as redundant — now covered by `lifecycle.test.ts` (Blocked("drift")) + `materializer.test.ts` (drift/checksum-mismatch never writes) + the active disclosure re-prompt suite.
+- **`loadScriptFresh` is now dead code** (no src callers; superseded by `loadScriptModule` per ADR-16). Left in place (with its tests) by additive T3.1; recommend removal in a Phase-5 cleanup once all paths are confirmed envelope-only.
+- **Skip ledger: 15 → 2.** All disclosure (10) + invariants (3) skips burned down this phase. Only the 2 `settingsTab` Scripts-section skips remain (T4.2).
