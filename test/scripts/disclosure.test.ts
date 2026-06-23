@@ -1,4 +1,4 @@
-// T5.3  ScriptDisclosureModal + makeAskCallback — unit tests (RED → GREEN)
+// T5.3  ScriptDisclosureModal + makeAskCallback — unit tests
 //
 // Exercises the consent modal through the mock Modal base class added to
 // test/__mocks__/obsidian.ts.  No real Obsidian runtime required.
@@ -8,31 +8,25 @@
 //   (a) present() resolves for each of the 3 decision buttons
 //   (b) Escape keydown → "disable" (safe-default)
 //   (c) onClose without a tracked signal → "disable" (safe-default)
-//   (d) Disclosure text, vault-relative path, and file size are rendered
+//   (d) Disclosure text, vault-relative path, file size, version, checksum are rendered
 //   (e) DOM is built via createEl/createDiv only — NO innerHTML/outerHTML
 //
-//   ADAPTER (makeAskCallback)
-//   (f) trust already "ok" → modal NOT shown, resolves "enable-session"
-//   (g) trust "needs-consent" → modal shown; "enable-session" records consent
-//   (h) trust "needs-consent" → modal shown; "disable" does NOT record consent
-//   (i) trust "drift-blocked" → re-prompts (modal shown); "disable" returns "disable"
-//   (j) changed checksum/version makes trust not "ok" → re-prompts
+//   ADAPTER (makeAskCallback) — T3.4 finalized
+//   (f) already consented (okayed matches {version,checksum}) → no modal, "enable-session"
+//   (g) no record → modal shown; "enable-session" records consent
+//   (h) no record → modal shown; "disable" does NOT record consent
+//   (i) okayed.version matches but checksum differs (drift) → re-prompts (modal shown)
+//   (j) okayed.version differs (stale) → re-prompts (modal shown)
+//   (k) SEC-001: "enable-once" does NOT call setRecord (ephemeral)
+//   (l) kill-switch: enabled===false → "disable" immediately, no modal
+//   (m) no record at all → modal shown (unknown → prompt path)
 
 import { describe, it, expect, vi } from "vitest";
 import { App } from "obsidian";
 import { MockHTMLElement } from "../__mocks__/obsidian";
 import { ScriptDisclosureModal, makeAskCallback } from "../../src/scripts/disclosure";
 import type { AskDecision } from "../../src/scripts/runner";
-import type { ScriptStore } from "../../src/scripts/store";
-
-// TODO(T3.4): the makeAskCallback suites below (describe.skip) assert removed
-// v0.1 trust semantics (evaluateTrust/recordConsent + TrustStatus). disclosure.ts
-// was migrated to the ScriptRecord store in T1.4 and is fully reworked onto
-// evaluateState in T3.4; those suites remain describe.skip until then. The
-// ScriptDisclosureModal-only suites remain ACTIVE (they don't touch the store).
-//
-// Local alias for the removed TrustStatus union so the skipped helper typechecks.
-type TrustStatus = "ok" | "needs-consent" | "drift-blocked" | "disabled" | "unknown";
+import type { ScriptRecord } from "../../src/scripts/store";
 
 /**
  * Cast the modal's contentEl to MockHTMLElement so tests can use test-only helpers
@@ -44,22 +38,34 @@ function mockEl(modal: ScriptDisclosureModal): MockHTMLElement {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers — fake ScriptStore
+// Helpers — fake ScriptStore (Pick<ScriptStore, "getScripts" | "setRecord">)
 // ---------------------------------------------------------------------------
 
-interface FakeStore {
-	evaluateTrust: ReturnType<typeof vi.fn>;
-	recordConsent: ReturnType<typeof vi.fn>;
-}
+type FakeStore = {
+	getScripts: ReturnType<typeof vi.fn>;
+	setRecord: ReturnType<typeof vi.fn>;
+};
 
-// Returns a loose FakeStore for the (skipped, T3.4) makeAskCallback suites that
-// assert removed v0.1 trust semantics. Cast to ScriptStore at the call site.
-function makeStore(status: TrustStatus): FakeStore {
+/** Build a fake store that returns the given record map (or empty map). */
+function makeStore(scripts: Record<string, ScriptRecord> = {}): FakeStore {
 	return {
-		evaluateTrust: vi.fn().mockResolvedValue({ status }),
-		recordConsent: vi.fn().mockResolvedValue(undefined),
+		getScripts: vi.fn().mockResolvedValue(scripts),
+		setRecord: vi.fn().mockResolvedValue(undefined),
 	};
 }
+
+/** Convenience: make a store with a single script record. */
+function makeStoreWithRecord(scriptId: string, record: ScriptRecord): FakeStore {
+	return makeStore({ [scriptId]: record });
+}
+
+const BASE_RECORD: ScriptRecord = {
+	provenance: "imported",
+	enabled: true,
+	okayed: null,
+	source: "",
+	command: false,
+};
 
 // ---------------------------------------------------------------------------
 // Helpers — click a button by its visible text
@@ -92,6 +98,8 @@ describe("ScriptDisclosureModal — button decisions", () => {
 		const modal = new ScriptDisclosureModal(app, {
 			vaultRelativePath: "scripts/my-script.cjs",
 			fileSizeBytes: 1024,
+			version: 1,
+			checksum: "sha256:test",
 		});
 
 		const promise = modal.present();
@@ -106,6 +114,8 @@ describe("ScriptDisclosureModal — button decisions", () => {
 		const modal = new ScriptDisclosureModal(app, {
 			vaultRelativePath: "scripts/my-script.cjs",
 			fileSizeBytes: 512,
+			version: 1,
+			checksum: "sha256:test",
 		});
 
 		const promise = modal.present();
@@ -120,6 +130,8 @@ describe("ScriptDisclosureModal — button decisions", () => {
 		const modal = new ScriptDisclosureModal(app, {
 			vaultRelativePath: "scripts/my-script.cjs",
 			fileSizeBytes: 2048,
+			version: 1,
+			checksum: "sha256:test",
 		});
 
 		const promise = modal.present();
@@ -134,6 +146,8 @@ describe("ScriptDisclosureModal — button decisions", () => {
 		const modal = new ScriptDisclosureModal(app, {
 			vaultRelativePath: "scripts/my-script.cjs",
 			fileSizeBytes: 128,
+			version: 1,
+			checksum: "sha256:test",
 		});
 
 		const promise = modal.present();
@@ -155,6 +169,8 @@ describe("ScriptDisclosureModal — Escape key safe-default", () => {
 		const modal = new ScriptDisclosureModal(app, {
 			vaultRelativePath: "scripts/dangerous.cjs",
 			fileSizeBytes: 4096,
+			version: 1,
+			checksum: "sha256:test",
 		});
 
 		const promise = modal.present();
@@ -175,6 +191,8 @@ describe("ScriptDisclosureModal — onClose safe-default", () => {
 		const modal = new ScriptDisclosureModal(app, {
 			vaultRelativePath: "scripts/my-script.cjs",
 			fileSizeBytes: 999,
+			version: 1,
+			checksum: "sha256:test",
 		});
 
 		const promise = modal.present();
@@ -197,6 +215,8 @@ describe("ScriptDisclosureModal — rendered content", () => {
 		const modal = new ScriptDisclosureModal(app, {
 			vaultRelativePath: "vault/scripts/hello.cjs",
 			fileSizeBytes: 256,
+			version: 1,
+			checksum: "sha256:test",
 		});
 
 		modal.present();
@@ -210,6 +230,8 @@ describe("ScriptDisclosureModal — rendered content", () => {
 		const modal = new ScriptDisclosureModal(app, {
 			vaultRelativePath: "scripts/hello.cjs",
 			fileSizeBytes: 3072,
+			version: 1,
+			checksum: "sha256:test",
 		});
 
 		modal.present();
@@ -223,12 +245,44 @@ describe("ScriptDisclosureModal — rendered content", () => {
 		const modal = new ScriptDisclosureModal(app, {
 			vaultRelativePath: "scripts/hello.cjs",
 			fileSizeBytes: 512,
+			version: 1,
+			checksum: "sha256:test",
 		});
 
 		modal.present();
 		const text = mockEl(modal)._collectText();
 
 		expect(text).toContain(DISCLOSURE_TEXT);
+	});
+
+	it("renders the version number in the modal (PRD F2: identity disclosure)", () => {
+		const app = new App();
+		const modal = new ScriptDisclosureModal(app, {
+			vaultRelativePath: "scripts/hello.cjs",
+			fileSizeBytes: 512,
+			version: 7,
+			checksum: "sha256:abc123",
+		});
+
+		modal.present();
+		const text = mockEl(modal)._collectText();
+
+		expect(text).toContain("7");
+	});
+
+	it("renders the checksum in the modal (PRD F2: identity disclosure)", () => {
+		const app = new App();
+		const modal = new ScriptDisclosureModal(app, {
+			vaultRelativePath: "scripts/hello.cjs",
+			fileSizeBytes: 512,
+			version: 1,
+			checksum: "sha256:deadbeef",
+		});
+
+		modal.present();
+		const text = mockEl(modal)._collectText();
+
+		expect(text).toContain("sha256:deadbeef");
 	});
 });
 
@@ -242,6 +296,8 @@ describe("ScriptDisclosureModal — XSS-safe DOM construction", () => {
 		const modal = new ScriptDisclosureModal(app, {
 			vaultRelativePath: "scripts/xss-test.cjs",
 			fileSizeBytes: 100,
+			version: 1,
+			checksum: "sha256:test",
 		});
 
 		// Spy on the content element to verify innerHTML is never set.
@@ -268,437 +324,271 @@ describe("ScriptDisclosureModal — XSS-safe DOM construction", () => {
 });
 
 // ---------------------------------------------------------------------------
-// makeAskCallback — transitional gate (T1.4)
+// makeAskCallback — consent gate (T3.4 finalized)
 //
-// Tests the three paths in the transitional makeAskCallback implementation
-// against Pick<ScriptStore,"getScripts"|"setRecord">. The old suites asserting
-// evaluateTrust/recordConsent remain describe.skip below (see TODO T3.4).
+// Tests all three decision paths against Pick<ScriptStore,"getScripts"|"setRecord">.
 // ---------------------------------------------------------------------------
 
-describe("makeAskCallback — transitional gate (T1.4)", () => {
-	const VERSION = 3;
-	const CHECKSUM = "sha256:abc123";
-	const SCRIPT_ID = "test-script";
-	const INFO = { vaultRelativePath: "scripts/test-script.cjs", fileSizeBytes: 512 };
+const CONSENT_VERSION = 3;
+const CONSENT_CHECKSUM = "sha256:abc123";
+const CONSENT_SCRIPT_ID = "test-script";
+const CONSENT_INFO = {
+	vaultRelativePath: "scripts/test-script.cjs",
+	fileSizeBytes: 512,
+	version: CONSENT_VERSION,
+	checksum: CONSENT_CHECKSUM,
+};
 
-	it("kill-switch: enabled===false returns 'disable' immediately, modal NOT shown, setRecord NOT called", async () => {
-		const scripts: Record<string, import("../../src/scripts/store").ScriptRecord> = {
-			[SCRIPT_ID]: {
-				provenance: "imported",
-				enabled: false,
-				okayed: null,
-				source: "",
-				command: false,
-			},
-		};
-		const store = {
-			getScripts: vi.fn().mockResolvedValue(scripts),
-			setRecord: vi.fn().mockResolvedValue(undefined),
-		};
+/** Intercept present() to capture the modal without changing behavior. */
+function captureModal(handler: (modal: ScriptDisclosureModal) => void): () => void {
+	const origPresent = ScriptDisclosureModal.prototype.present;
+	ScriptDisclosureModal.prototype.present = function (this: ScriptDisclosureModal) {
+		handler(this);
+		return origPresent.call(this);
+	};
+	return () => { ScriptDisclosureModal.prototype.present = origPresent; };
+}
 
-		let modalOpened = false;
-		const origPresent = ScriptDisclosureModal.prototype.present;
-		ScriptDisclosureModal.prototype.present = function (this: ScriptDisclosureModal) {
-			modalOpened = true;
-			return origPresent.call(this);
-		};
+// ---------------------------------------------------------------------------
+// (f) already consented (okayed matches {version,checksum}) → no modal, "enable-session"
+// ---------------------------------------------------------------------------
 
-		try {
-			const callback = makeAskCallback(new App(), store, SCRIPT_ID, INFO, CHECKSUM, VERSION);
-			const decision = await callback();
-
-			expect(decision).toBe("disable");
-			expect(modalOpened).toBe(false);
-			expect(store.setRecord).not.toHaveBeenCalled();
-		} finally {
-			ScriptDisclosureModal.prototype.present = origPresent;
-		}
-	});
-
-	it("already-consented: okayed matches version+checksum → returns 'enable-session', modal NOT shown, setRecord NOT called", async () => {
-		const scripts: Record<string, import("../../src/scripts/store").ScriptRecord> = {
-			[SCRIPT_ID]: {
-				provenance: "curated",
-				enabled: true,
-				okayed: { version: VERSION, checksum: CHECKSUM },
-				source: "vault/test.cjs",
-				command: false,
-			},
-		};
-		const store = {
-			getScripts: vi.fn().mockResolvedValue(scripts),
-			setRecord: vi.fn().mockResolvedValue(undefined),
-		};
+describe("makeAskCallback — trust ok → skip modal", () => {
+	it("returns 'enable-session' without showing modal when okayed matches version+checksum", async () => {
+		const store = makeStoreWithRecord(CONSENT_SCRIPT_ID, {
+			...BASE_RECORD,
+			okayed: { version: CONSENT_VERSION, checksum: CONSENT_CHECKSUM },
+		});
 
 		let modalOpened = false;
-		const origPresent = ScriptDisclosureModal.prototype.present;
-		ScriptDisclosureModal.prototype.present = function (this: ScriptDisclosureModal) {
-			modalOpened = true;
-			return origPresent.call(this);
-		};
+		const restore = captureModal(() => { modalOpened = true; });
 
 		try {
-			const callback = makeAskCallback(new App(), store, SCRIPT_ID, INFO, CHECKSUM, VERSION);
+			const callback = makeAskCallback(new App(), store, CONSENT_SCRIPT_ID, CONSENT_INFO, CONSENT_CHECKSUM, CONSENT_VERSION);
 			const decision = await callback();
 
 			expect(decision).toBe("enable-session");
 			expect(modalOpened).toBe(false);
 			expect(store.setRecord).not.toHaveBeenCalled();
 		} finally {
-			ScriptDisclosureModal.prototype.present = origPresent;
+			restore();
 		}
 	});
+});
 
-	it("new/needs-consent: no record → modal shown; 'enable-session' → setRecord called with okayed+enabled:true", async () => {
-		const store = {
-			getScripts: vi.fn().mockResolvedValue({}),
-			setRecord: vi.fn().mockResolvedValue(undefined),
-		};
+// ---------------------------------------------------------------------------
+// (g) no record → modal shown; "enable-session" records consent
+// ---------------------------------------------------------------------------
+
+describe("makeAskCallback — needs-consent + enable", () => {
+	it("shows modal; enable-session calls setRecord with okayed+enabled:true", async () => {
+		const store = makeStore();
 
 		let capturedModal: ScriptDisclosureModal | null = null;
-		const origPresent = ScriptDisclosureModal.prototype.present;
-		ScriptDisclosureModal.prototype.present = function (this: ScriptDisclosureModal) {
-			capturedModal = this;
-			return origPresent.call(this);
-		};
+		const restore = captureModal((m) => { capturedModal = m; });
 
 		try {
-			const callback = makeAskCallback(new App(), store, SCRIPT_ID, INFO, CHECKSUM, VERSION);
+			const callback = makeAskCallback(new App(), store, CONSENT_SCRIPT_ID, CONSENT_INFO, CONSENT_CHECKSUM, CONSENT_VERSION);
 			const callbackPromise = callback();
 
-			// Drain the microtask queue so getScripts resolves and present() fires
+			// Drain microtask queue so getScripts resolves and present() fires
 			await Promise.resolve();
 
 			expect(capturedModal).not.toBeNull();
-
-			// Click Enable on the captured modal
-			const el = capturedModal!.contentEl as unknown as import("../__mocks__/obsidian").MockHTMLElement;
-			const enableBtn = el._findButtonByText("Enable");
-			if (!enableBtn) throw new Error("Enable button not found in modal");
-			enableBtn._click();
+			clickButton(capturedModal!, "Enable");
 
 			const decision = await callbackPromise;
 
 			expect(decision).toBe("enable-session");
 			expect(store.setRecord).toHaveBeenCalledOnce();
-			expect(store.setRecord).toHaveBeenCalledWith(SCRIPT_ID, expect.objectContaining({
-				okayed: { version: VERSION, checksum: CHECKSUM },
+			expect(store.setRecord).toHaveBeenCalledWith(CONSENT_SCRIPT_ID, expect.objectContaining({
+				okayed: { version: CONSENT_VERSION, checksum: CONSENT_CHECKSUM },
 				enabled: true,
 			}));
 		} finally {
-			ScriptDisclosureModal.prototype.present = origPresent;
+			restore();
 		}
 	});
 });
 
 // ---------------------------------------------------------------------------
-// (f) makeAskCallback — trust already "ok" → no modal shown
+// (h) no record → modal shown; "disable" does NOT record consent
 // ---------------------------------------------------------------------------
 
-describe.skip("makeAskCallback — trust ok → skip modal", () => {
-	it("returns 'enable-session' without showing modal when trust is ok", async () => {
-		const app = new App();
-		const store = makeStore("ok");
+describe("makeAskCallback — needs-consent + disable", () => {
+	it("shows modal; disable returns 'disable' and does not call setRecord", async () => {
+		const store = makeStore();
 
-		const callback = makeAskCallback(
-			app,
-			store as unknown as ScriptStore,
-			"script-id",
-			{ vaultRelativePath: "scripts/hello.cjs", fileSizeBytes: 512 },
-			"checksum-abc",
-			1,
-		);
+		let capturedModal: ScriptDisclosureModal | null = null;
+		const restore = captureModal((m) => { capturedModal = m; });
 
-		const decision = await callback();
+		try {
+			const callback = makeAskCallback(new App(), store, CONSENT_SCRIPT_ID, CONSENT_INFO, CONSENT_CHECKSUM, CONSENT_VERSION);
+			const callbackPromise = callback();
 
-		expect(decision).toBe("enable-session");
-		// Store was consulted
-		expect(store.evaluateTrust).toHaveBeenCalledWith("script-id");
-		// Consent was NOT recorded (already ok)
-		expect(store.recordConsent).not.toHaveBeenCalled();
+			await Promise.resolve();
+
+			expect(capturedModal).not.toBeNull();
+			clickButton(capturedModal!, "Disable");
+
+			const decision = await callbackPromise;
+
+			expect(decision).toBe("disable");
+			expect(store.setRecord).not.toHaveBeenCalled();
+		} finally {
+			restore();
+		}
 	});
 });
 
 // ---------------------------------------------------------------------------
-// (g) makeAskCallback — trust "needs-consent" + "enable-session" records consent
+// (i) drift: okayed.version matches but checksum differs → re-prompts (modal shown)
 // ---------------------------------------------------------------------------
 
-describe.skip("makeAskCallback — needs-consent + enable", () => {
-	it("shows modal; enable-session records consent and returns 'enable-session'", async () => {
-		const app = new App();
-		const store = makeStore("needs-consent");
+describe("makeAskCallback — drift-blocked re-prompts", () => {
+	it("shows modal when same version but different checksum (drift); disable returns 'disable'", async () => {
+		// okayed version matches but checksum is stale → drift → re-prompt
+		const store = makeStoreWithRecord(CONSENT_SCRIPT_ID, {
+			...BASE_RECORD,
+			okayed: { version: CONSENT_VERSION, checksum: "sha256:OLD" },
+		});
 
-		const callback = makeAskCallback(
-			app,
-			store as unknown as ScriptStore,
-			"script-needs-consent",
-			{ vaultRelativePath: "scripts/hello.cjs", fileSizeBytes: 512 },
-			"checksum-xyz",
-			2,
-		);
-
-		// Intercept present() to capture the modal and click a button.
-		// evaluateTrust resolves as a microtask, so we await the store call
-		// before present() is invoked. We patch prototype before calling callback().
 		let capturedModal: ScriptDisclosureModal | null = null;
-		const origPresent = ScriptDisclosureModal.prototype.present;
-		ScriptDisclosureModal.prototype.present = function (this: ScriptDisclosureModal) {
-			capturedModal = this;
-			// Call original so onOpen fires and buttons are rendered
-			return origPresent.call(this);
-		};
+		const restore = captureModal((m) => { capturedModal = m; });
 
-		const callbackPromise = callback();
+		try {
+			const callback = makeAskCallback(new App(), store, CONSENT_SCRIPT_ID, CONSENT_INFO, CONSENT_CHECKSUM, CONSENT_VERSION);
+			const callbackPromise = callback();
 
-		// Drain the microtask queue so evaluateTrust resolves and present() fires
-		await Promise.resolve();
+			await Promise.resolve();
 
-		expect(capturedModal).not.toBeNull();
+			expect(capturedModal).not.toBeNull();
+			clickButton(capturedModal!, "Disable");
 
-		// Click Enable on the captured modal
-		clickButton(capturedModal!, "Enable");
+			const decision = await callbackPromise;
+			expect(decision).toBe("disable");
+			expect(store.setRecord).not.toHaveBeenCalled();
+		} finally {
+			restore();
+		}
+	});
 
-		const decision = await callbackPromise;
+	it("drift + enable-session calls setRecord with new okayed and returns 'enable-session'", async () => {
+		const store = makeStoreWithRecord(CONSENT_SCRIPT_ID, {
+			...BASE_RECORD,
+			okayed: { version: CONSENT_VERSION, checksum: "sha256:OLD" },
+		});
 
-		expect(decision).toBe("enable-session");
-		expect(store.recordConsent).toHaveBeenCalledWith("script-needs-consent", "checksum-xyz", 2);
+		let capturedModal: ScriptDisclosureModal | null = null;
+		const restore = captureModal((m) => { capturedModal = m; });
 
-		// Restore
-		ScriptDisclosureModal.prototype.present = origPresent;
+		try {
+			const callback = makeAskCallback(new App(), store, CONSENT_SCRIPT_ID, CONSENT_INFO, CONSENT_CHECKSUM, CONSENT_VERSION);
+			const callbackPromise = callback();
+
+			await Promise.resolve();
+
+			expect(capturedModal).not.toBeNull();
+			clickButton(capturedModal!, "Enable");
+
+			const decision = await callbackPromise;
+			expect(decision).toBe("enable-session");
+			expect(store.setRecord).toHaveBeenCalledOnce();
+			expect(store.setRecord).toHaveBeenCalledWith(CONSENT_SCRIPT_ID, expect.objectContaining({
+				okayed: { version: CONSENT_VERSION, checksum: CONSENT_CHECKSUM },
+				enabled: true,
+			}));
+		} finally {
+			restore();
+		}
 	});
 });
 
 // ---------------------------------------------------------------------------
-// (h) makeAskCallback — needs-consent + "disable" does NOT record consent
+// (j) changed fingerprint: version differs → re-prompts (modal shown)
 // ---------------------------------------------------------------------------
 
-describe.skip("makeAskCallback — needs-consent + disable", () => {
-	it("shows modal; disable returns 'disable' and does not record consent", async () => {
-		const app = new App();
-		const store = makeStore("needs-consent");
-
-		const callback = makeAskCallback(
-			app,
-			store as unknown as ScriptStore,
-			"script-disable",
-			{ vaultRelativePath: "scripts/hello.cjs", fileSizeBytes: 512 },
-			"checksum-def",
-			3,
-		);
+describe("makeAskCallback — changed fingerprint → re-prompts", () => {
+	it("re-prompts when okayed.version differs (version bump); enable-once does not call setRecord", async () => {
+		// okayed version is lower than current → fingerprint changed → re-prompt
+		const store = makeStoreWithRecord(CONSENT_SCRIPT_ID, {
+			...BASE_RECORD,
+			okayed: { version: CONSENT_VERSION - 1, checksum: CONSENT_CHECKSUM },
+		});
 
 		let capturedModal: ScriptDisclosureModal | null = null;
-		const origPresent = ScriptDisclosureModal.prototype.present;
-		ScriptDisclosureModal.prototype.present = function (this: ScriptDisclosureModal) {
-			capturedModal = this;
-			return origPresent.call(this);
-		};
+		const restore = captureModal((m) => { capturedModal = m; });
 
-		const callbackPromise = callback();
+		try {
+			const callback = makeAskCallback(new App(), store, CONSENT_SCRIPT_ID, CONSENT_INFO, CONSENT_CHECKSUM, CONSENT_VERSION);
+			const callbackPromise = callback();
 
-		// Drain microtask queue so evaluateTrust resolves and present() fires
-		await Promise.resolve();
+			await Promise.resolve();
 
-		clickButton(capturedModal!, "Disable");
+			expect(capturedModal).not.toBeNull();
+			clickButton(capturedModal!, "Enable once");
 
-		const decision = await callbackPromise;
-
-		expect(decision).toBe("disable");
-		expect(store.recordConsent).not.toHaveBeenCalled();
-
-		ScriptDisclosureModal.prototype.present = origPresent;
+			const decision = await callbackPromise;
+			expect(decision).toBe("enable-once");
+			// SEC-001: enable-once is ephemeral — no consent stored; next call re-prompts
+			expect(store.setRecord).not.toHaveBeenCalled();
+		} finally {
+			restore();
+		}
 	});
 });
 
 // ---------------------------------------------------------------------------
-// (i) makeAskCallback — drift-blocked → modal shown (re-prompts)
+// (k) SEC-001 — enable-once does not persist consent
 // ---------------------------------------------------------------------------
 
-describe.skip("makeAskCallback — drift-blocked re-prompts", () => {
-	it("shows modal when drift-blocked; disable returns 'disable'", async () => {
-		const app = new App();
-		const store = makeStore("drift-blocked");
-
-		const callback = makeAskCallback(
-			app,
-			store as unknown as ScriptStore,
-			"script-drift",
-			{ vaultRelativePath: "scripts/hello.cjs", fileSizeBytes: 512 },
-			"checksum-new",
-			3,
-		);
+describe("makeAskCallback — SEC-001: enable-once does not persist consent", () => {
+	it("enable-once does NOT call setRecord (so next invocation re-prompts)", async () => {
+		const store = makeStore();
 
 		let capturedModal: ScriptDisclosureModal | null = null;
-		const origPresent = ScriptDisclosureModal.prototype.present;
-		ScriptDisclosureModal.prototype.present = function (this: ScriptDisclosureModal) {
-			capturedModal = this;
-			return origPresent.call(this);
-		};
+		const restore = captureModal((m) => { capturedModal = m; });
 
-		const callbackPromise = callback();
+		try {
+			const callback = makeAskCallback(new App(), store, CONSENT_SCRIPT_ID, CONSENT_INFO, CONSENT_CHECKSUM, CONSENT_VERSION);
+			const callbackPromise = callback();
+			await Promise.resolve();
 
-		// Drain microtask queue so evaluateTrust resolves and present() fires
-		await Promise.resolve();
+			expect(capturedModal).not.toBeNull();
+			clickButton(capturedModal!, "Enable once");
 
-		expect(capturedModal).not.toBeNull();
-		clickButton(capturedModal!, "Disable");
-
-		const decision = await callbackPromise;
-		expect(decision).toBe("disable");
-
-		ScriptDisclosureModal.prototype.present = origPresent;
+			const decision = await callbackPromise;
+			expect(decision).toBe("enable-once");
+			// setRecord must NOT be called — enable-once is ephemeral
+			expect(store.setRecord).not.toHaveBeenCalled();
+		} finally {
+			restore();
+		}
 	});
 
-	it("drift-blocked + enable-session records consent and returns 'enable-session'", async () => {
-		const app = new App();
-		const store = makeStore("drift-blocked");
-
-		const callback = makeAskCallback(
-			app,
-			store as unknown as ScriptStore,
-			"script-drift-2",
-			{ vaultRelativePath: "scripts/hello.cjs", fileSizeBytes: 512 },
-			"checksum-new-2",
-			4,
-		);
+	it("enable-session DOES call setRecord (persists for this checksum/version)", async () => {
+		const store = makeStore();
 
 		let capturedModal: ScriptDisclosureModal | null = null;
-		const origPresent = ScriptDisclosureModal.prototype.present;
-		ScriptDisclosureModal.prototype.present = function (this: ScriptDisclosureModal) {
-			capturedModal = this;
-			return origPresent.call(this);
-		};
+		const restore = captureModal((m) => { capturedModal = m; });
 
-		const callbackPromise = callback();
+		try {
+			const callback = makeAskCallback(new App(), store, CONSENT_SCRIPT_ID, CONSENT_INFO, CONSENT_CHECKSUM, CONSENT_VERSION);
+			const callbackPromise = callback();
+			await Promise.resolve();
 
-		// Drain microtask queue so evaluateTrust resolves and present() fires
-		await Promise.resolve();
+			expect(capturedModal).not.toBeNull();
+			clickButton(capturedModal!, "Enable");
 
-		clickButton(capturedModal!, "Enable");
-
-		const decision = await callbackPromise;
-		expect(decision).toBe("enable-session");
-		expect(store.recordConsent).toHaveBeenCalledWith("script-drift-2", "checksum-new-2", 4);
-
-		ScriptDisclosureModal.prototype.present = origPresent;
-	});
-});
-
-// ---------------------------------------------------------------------------
-// (j) makeAskCallback — changed checksum/version → re-prompts
-// ---------------------------------------------------------------------------
-
-describe.skip("makeAskCallback — changed fingerprint → re-prompts", () => {
-	it("re-prompts when store returns needs-consent (from version bump)", async () => {
-		const app = new App();
-		// Simulate evaluateTrust returning needs-consent because version bumped
-		const store = makeStore("needs-consent");
-
-		const callback = makeAskCallback(
-			app,
-			store as unknown as ScriptStore,
-			"script-version-bump",
-			{ vaultRelativePath: "scripts/bumped.cjs", fileSizeBytes: 2048 },
-			"new-checksum",
-			5,
-		);
-
-		let capturedModal: ScriptDisclosureModal | null = null;
-		const origPresent = ScriptDisclosureModal.prototype.present;
-		ScriptDisclosureModal.prototype.present = function (this: ScriptDisclosureModal) {
-			capturedModal = this;
-			return origPresent.call(this);
-		};
-
-		const callbackPromise = callback();
-
-		// Drain microtask queue so evaluateTrust resolves and present() fires
-		await Promise.resolve();
-
-		// Modal must have been shown (re-prompt)
-		expect(capturedModal).not.toBeNull();
-		clickButton(capturedModal!, "Enable once");
-
-		const decision = await callbackPromise;
-		expect(decision).toBe("enable-once");
-		// SEC-001: enable-once must NOT record consent — it is ephemeral.
-		// The next invocation will re-prompt (does not take the "ok" lighter path).
-		expect(store.recordConsent).not.toHaveBeenCalled();
-
-		ScriptDisclosureModal.prototype.present = origPresent;
-	});
-});
-
-// ---------------------------------------------------------------------------
-// SEC-001 — enable-once is ephemeral: no consent stored, modal re-prompts next time
-// ---------------------------------------------------------------------------
-
-describe.skip("makeAskCallback — SEC-001: enable-once does not persist consent", () => {
-	it("enable-once does NOT call recordConsent (so next invocation re-prompts)", async () => {
-		const app = new App();
-		const store = makeStore("needs-consent");
-
-		const callback = makeAskCallback(
-			app,
-			store as unknown as ScriptStore,
-			"script-enable-once",
-			{ vaultRelativePath: "scripts/once.cjs", fileSizeBytes: 256 },
-			"checksum-once",
-			1,
-		);
-
-		let capturedModal: ScriptDisclosureModal | null = null;
-		const origPresent = ScriptDisclosureModal.prototype.present;
-		ScriptDisclosureModal.prototype.present = function (this: ScriptDisclosureModal) {
-			capturedModal = this;
-			return origPresent.call(this);
-		};
-
-		const callbackPromise = callback();
-		await Promise.resolve();
-
-		expect(capturedModal).not.toBeNull();
-		clickButton(capturedModal!, "Enable once");
-
-		const decision = await callbackPromise;
-		expect(decision).toBe("enable-once");
-		// recordConsent must NOT have been called — enable-once is run-once, no storage
-		expect(store.recordConsent).not.toHaveBeenCalled();
-
-		ScriptDisclosureModal.prototype.present = origPresent;
-	});
-
-	it("enable-session DOES call recordConsent (persists for this checksum/version)", async () => {
-		const app = new App();
-		const store = makeStore("needs-consent");
-
-		const callback = makeAskCallback(
-			app,
-			store as unknown as ScriptStore,
-			"script-enable-session",
-			{ vaultRelativePath: "scripts/session.cjs", fileSizeBytes: 512 },
-			"checksum-session",
-			2,
-		);
-
-		let capturedModal: ScriptDisclosureModal | null = null;
-		const origPresent = ScriptDisclosureModal.prototype.present;
-		ScriptDisclosureModal.prototype.present = function (this: ScriptDisclosureModal) {
-			capturedModal = this;
-			return origPresent.call(this);
-		};
-
-		const callbackPromise = callback();
-		await Promise.resolve();
-
-		expect(capturedModal).not.toBeNull();
-		clickButton(capturedModal!, "Enable");
-
-		const decision = await callbackPromise;
-		expect(decision).toBe("enable-session");
-		// recordConsent MUST have been called for enable-session
-		expect(store.recordConsent).toHaveBeenCalledWith("script-enable-session", "checksum-session", 2);
-
-		ScriptDisclosureModal.prototype.present = origPresent;
+			const decision = await callbackPromise;
+			expect(decision).toBe("enable-session");
+			expect(store.setRecord).toHaveBeenCalledOnce();
+			expect(store.setRecord).toHaveBeenCalledWith(CONSENT_SCRIPT_ID, expect.objectContaining({
+				okayed: { version: CONSENT_VERSION, checksum: CONSENT_CHECKSUM },
+			}));
+		} finally {
+			restore();
+		}
 	});
 });
 
@@ -712,6 +602,8 @@ describe("ScriptDisclosureModal — Disable is first button (safe default)", () 
 		const modal = new ScriptDisclosureModal(app, {
 			vaultRelativePath: "scripts/order-test.cjs",
 			fileSizeBytes: 100,
+			version: 1,
+			checksum: "sha256:test",
 		});
 
 		modal.present();
@@ -739,6 +631,8 @@ describe("ScriptDisclosureModal — Disable button is auto-focused", () => {
 		const modal = new ScriptDisclosureModal(app, {
 			vaultRelativePath: "scripts/focus-test.cjs",
 			fileSizeBytes: 256,
+			version: 1,
+			checksum: "sha256:test",
 		});
 
 		modal.present();
@@ -752,80 +646,77 @@ describe("ScriptDisclosureModal — Disable button is auto-focused", () => {
 });
 
 // ---------------------------------------------------------------------------
-// M3 — makeAskCallback: "disabled" kill-switch → resolve "disable" immediately,
-//       no modal shown, no consent recorded
+// (l) makeAskCallback — kill-switch: enabled===false → "disable" immediately, no modal
 // ---------------------------------------------------------------------------
 
-describe.skip("makeAskCallback — disabled kill-switch", () => {
-	it("returns 'disable' without showing modal or recording consent when trust is disabled", async () => {
-		const app = new App();
-		const store = makeStore("disabled");
+describe("makeAskCallback — disabled kill-switch", () => {
+	it("returns 'disable' without showing modal or calling setRecord when enabled===false", async () => {
+		const store = makeStoreWithRecord(CONSENT_SCRIPT_ID, {
+			...BASE_RECORD,
+			enabled: false,
+			okayed: null,
+		});
 
 		let modalOpened = false;
-		const origPresent = ScriptDisclosureModal.prototype.present;
-		ScriptDisclosureModal.prototype.present = function (this: ScriptDisclosureModal) {
-			modalOpened = true;
-			return origPresent.call(this);
-		};
+		const restore = captureModal(() => { modalOpened = true; });
 
-		const callback = makeAskCallback(
-			app,
-			store as unknown as ScriptStore,
-			"script-kill-switch",
-			{ vaultRelativePath: "scripts/disabled.cjs", fileSizeBytes: 512 },
-			"checksum-disabled",
-			1,
-		);
+		try {
+			const callback = makeAskCallback(
+				new App(),
+				store,
+				CONSENT_SCRIPT_ID,
+				CONSENT_INFO,
+				CONSENT_CHECKSUM,
+				CONSENT_VERSION,
+			);
 
-		const decision = await callback();
+			const decision = await callback();
 
-		expect(decision).toBe("disable");
-		expect(modalOpened).toBe(false);
-		expect(store.recordConsent).not.toHaveBeenCalled();
-
-		ScriptDisclosureModal.prototype.present = origPresent;
+			expect(decision).toBe("disable");
+			expect(modalOpened).toBe(false);
+			expect(store.setRecord).not.toHaveBeenCalled();
+		} finally {
+			restore();
+		}
 	});
 });
 
 // ---------------------------------------------------------------------------
-// (W1) makeAskCallback — "unknown" trust status → modal IS shown
+// (m) makeAskCallback — no record at all → modal IS shown
 // ---------------------------------------------------------------------------
 
-describe.skip("makeAskCallback — unknown trust → modal shown", () => {
-	it("shows modal when trust is unknown; Disable resolves 'disable' without recording consent", async () => {
-		const app = new App();
-		const store = makeStore("unknown");
-
-		const callback = makeAskCallback(
-			app,
-			store as unknown as ScriptStore,
-			"script-unknown",
-			{ vaultRelativePath: "scripts/unlisted.cjs", fileSizeBytes: 512 },
-			"checksum-unknown",
-			1,
-		);
+describe("makeAskCallback — unknown trust → modal shown", () => {
+	it("shows modal when no record exists; Disable resolves 'disable' without calling setRecord", async () => {
+		// Empty store: no record for this script at all
+		const store = makeStore();
 
 		let capturedModal: ScriptDisclosureModal | null = null;
-		const origPresent = ScriptDisclosureModal.prototype.present;
-		ScriptDisclosureModal.prototype.present = function (this: ScriptDisclosureModal) {
-			capturedModal = this;
-			return origPresent.call(this);
-		};
+		const restore = captureModal((m) => { capturedModal = m; });
 
-		const callbackPromise = callback();
+		try {
+			const callback = makeAskCallback(
+				new App(),
+				store,
+				CONSENT_SCRIPT_ID,
+				CONSENT_INFO,
+				CONSENT_CHECKSUM,
+				CONSENT_VERSION,
+			);
 
-		// Drain the microtask queue so evaluateTrust resolves and present() fires
-		await Promise.resolve();
+			const callbackPromise = callback();
 
-		expect(capturedModal).not.toBeNull();
-		clickButton(capturedModal!, "Disable");
+			await Promise.resolve();
 
-		const decision = await callbackPromise;
+			expect(capturedModal).not.toBeNull();
+			clickButton(capturedModal!, "Disable");
 
-		expect(decision).toBe("disable");
-		expect(store.recordConsent).not.toHaveBeenCalled();
+			const decision = await callbackPromise;
 
-		ScriptDisclosureModal.prototype.present = origPresent;
+			expect(decision).toBe("disable");
+			expect(store.setRecord).not.toHaveBeenCalled();
+		} finally {
+			restore();
+		}
 	});
 });
 
@@ -839,6 +730,8 @@ describe("ScriptDisclosureModal — Disable button has mod-cta class", () => {
 		const modal = new ScriptDisclosureModal(app, {
 			vaultRelativePath: "scripts/class-test.cjs",
 			fileSizeBytes: 100,
+			version: 1,
+			checksum: "sha256:test",
 		});
 
 		modal.present();

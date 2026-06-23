@@ -28,7 +28,11 @@
 //   otherwise        → show modal; on "enable-session" call setRecord with
 //                      okayed:{version,checksum} and enabled:true
 //
-// TRANSITIONAL (T1.4): full evaluateState-based disclosure lands in T3.4.
+// The okayed {version,checksum} match check here implements the same consent-gate
+// semantics as evaluateState rules 5–6 (Active vs. drift distinction), but is
+// intentionally a lighter path: at first-enable the script code is not yet
+// materialized, so full evaluateState inputs (local-checksum, catalog, online)
+// are unavailable. Full state evaluation happens in the lifecycle/UI layer.
 
 import { Modal } from "obsidian";
 import type { App } from "obsidian";
@@ -49,6 +53,8 @@ const DISCLOSURE_TEXT =
 export interface ScriptInfo {
 	vaultRelativePath: string;
 	fileSizeBytes: number;
+	version: number;
+	checksum: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -100,10 +106,12 @@ export class ScriptDisclosureModal extends Modal {
 		// Title
 		contentEl.createEl("h2", { text: "Run script?" });
 
-		// Meta: path + size
+		// Meta: path, size, version, checksum
 		const meta = contentEl.createDiv({ cls: "mason-script-meta" });
 		meta.createEl("p", { text: this._info.vaultRelativePath });
 		meta.createEl("p", { text: `${this._info.fileSizeBytes} bytes` });
+		meta.createEl("p", { text: `Version: ${this._info.version}` });
+		meta.createEl("p", { text: `Checksum: ${this._info.checksum}` });
 
 		// Disclosure paragraph
 		const disclosure = contentEl.createEl("p", {
@@ -187,7 +195,6 @@ export class ScriptDisclosureModal extends Modal {
  *   "enable-session" → setRecord called (persists approval for this checksum+version)
  *   "enable-once"    → setRecord NOT called (ephemeral; next call re-prompts)
  *
- * // TRANSITIONAL (T1.4): full evaluateState-based disclosure lands in T3.4.
  */
 export function makeAskCallback(
 	app: App,
@@ -197,7 +204,6 @@ export function makeAskCallback(
 	checksum: string,
 	version: number,
 ): AskCallback {
-	// TRANSITIONAL (T1.4): full evaluateState-based disclosure lands in T3.4.
 	return async (): Promise<AskDecision> => {
 		const rec = (await store.getScripts())[scriptId];
 
@@ -206,7 +212,9 @@ export function makeAskCallback(
 			return "disable";
 		}
 
-		// Lighter path: already consented for this exact checksum+version
+		// Lighter path: already consented for this exact {version,checksum}.
+		// Uses the same match semantics as evaluateState's Active-vs-drift distinction
+		// (rules 5–6). Full evaluateState evaluation happens in the lifecycle/UI layer.
 		if (rec?.okayed?.version === version && rec?.okayed?.checksum === checksum) {
 			return "enable-session";
 		}

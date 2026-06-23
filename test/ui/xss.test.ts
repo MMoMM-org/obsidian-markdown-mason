@@ -170,6 +170,8 @@ function openDisclosureModal(vaultRelativePath: string): {
 	const modal = new ScriptDisclosureModal(app, {
 		vaultRelativePath,
 		fileSizeBytes: 512,
+		version: 1,
+		checksum: "sha256:test",
 	});
 	modal.present();
 	return { modal, el: mockEl(modal) };
@@ -382,6 +384,8 @@ describe("XSS — disclosure modal: hostile vaultRelativePath rendered as text",
 		const modal = new ScriptDisclosureModal(app, {
 			vaultRelativePath: PAYLOADS.imgOnerror,
 			fileSizeBytes: 512,
+			version: 1,
+			checksum: "sha256:test",
 		});
 
 		// Attach a spy on innerHTML setter before onOpen fires.

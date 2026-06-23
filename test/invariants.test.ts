@@ -53,7 +53,7 @@ import { perplexityAppScript } from "../src/scripts/library/perplexityApp";
 import { applyToString } from "../src/core/applyToString";
 import { ScriptStore } from "../src/scripts/store";
 import type { PluginDataPort } from "../src/scripts/store";
-import type { VaultAdapterPort } from "../src/scripts/runtime";
+
 import type { OperationContext, MasonSettings, EditPlan } from "../src/core/types";
 import { loadFixture } from "./fixtures";
 
@@ -129,25 +129,6 @@ function makePluginDataPort(initial: unknown = {}): PluginDataPort {
 		save: async (data: unknown): Promise<void> => { stored = data; },
 	};
 }
-
-function makeVaultAdapterPort(): VaultAdapterPort & { _files: Map<string, string> } {
-	const files = new Map<string, string>();
-	return {
-		_files: files,
-		read: async (path: string): Promise<string> => {
-			const content = files.get(path);
-			if (content === undefined) throw new Error(`File not found: ${path}`);
-			return content;
-		},
-		write: async (path: string, data: string): Promise<void> => { files.set(path, data); },
-		readBinary: async (_path: string): Promise<ArrayBuffer> => new ArrayBuffer(0),
-		writeBinary: async (_path: string, _data: ArrayBuffer): Promise<void> => { /* no-op */ },
-		exists: async (path: string): Promise<boolean> => files.has(path),
-		mkdir: async (_path: string): Promise<void> => { /* no-op */ },
-	};
-}
-
-const DEVICE_PATH = ".obsidian/plugins/markdown-mason/device.json";
 
 // ---------------------------------------------------------------------------
 // Plugin command-test infrastructure (mirrors integration.test.ts)
@@ -761,79 +742,63 @@ describe("I4 — `disabled` script never runs", () => {
 		expect(effects.fallbackCount).toBe(0);
 	});
 
-	// TODO(T3.4): re-enable after evaluateTrust replaced by evaluateState/okayed
-	// (disclosure.ts migrated in T3.4; T1.4 removed evaluateTrust + the 3-arg ctor).
-	it.skip("evaluateTrust returns 'disabled' when the script's enabled flag is false", async () => {
+	// I4 (disclosure layer) — re-pointed from removed evaluateTrust to makeAskCallback.
+	// makeAskCallback is the entry point that enforces the kill-switch at consent time;
+	// evaluateState (lifecycle layer) is covered separately in lifecycle.test.ts.
+	it("makeAskCallback returns 'disable' immediately (no modal) when record.enabled===false", async () => {
+		const { makeAskCallback, ScriptDisclosureModal } = await import("../src/scripts/disclosure");
 		const pluginData = makePluginDataPort({
-			scripts: { "my-script": { source: "my-script.cjs", checksum: "abc", version: 1 } },
+			scripts: {
+				"my-script": {
+					provenance: "imported",
+					enabled: false,
+					okayed: null,
+					source: "my-script.cjs",
+					command: false,
+				},
+			},
 		});
-		const vault = makeVaultAdapterPort();
-		vault._files.set(DEVICE_PATH, JSON.stringify({ enabled: { "my-script": false }, consent: {} }));
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const store = new ScriptStore(pluginData) as any;
+		const store = new ScriptStore(pluginData);
 
-		const result = await store.evaluateTrust("my-script");
-		expect(result.status).toBe("disabled");
+		let modalOpened = false;
+		const origPresent = ScriptDisclosureModal.prototype.present;
+		ScriptDisclosureModal.prototype.present = function (this: InstanceType<typeof ScriptDisclosureModal>) {
+			modalOpened = true;
+			return origPresent.call(this);
+		};
+
+		try {
+			const callback = makeAskCallback(
+				new App(),
+				store,
+				"my-script",
+				{ vaultRelativePath: "my-script.cjs", fileSizeBytes: 512, version: 1, checksum: "sha256:abc" },
+				"sha256:abc",
+				1,
+			);
+
+			const result = await callback();
+			expect(result).toBe("disable");
+			expect(modalOpened).toBe(false);
+		} finally {
+			ScriptDisclosureModal.prototype.present = origPresent;
+		}
 	});
 });
 
 // ---------------------------------------------------------------------------
 // I5. Drift hard-blocks
-//     (Re-asserted from store.test.ts evaluateTrust drift-blocked suite)
+//
+// DELETED (T3.4): these tests asserted the removed evaluateTrust "drift-blocked"
+// semantics and the removed 3-arg ScriptStore ctor + device.json consent shape
+// (T1.4 rewrite). The invariant is now covered by:
+//   - lifecycle.test.ts: "same version + checksum mismatch → Blocked(drift)"
+//     and "drift wins over offline" — evaluateState is the authoritative drift gate.
+//   - disclosure.test.ts: "makeAskCallback — drift-blocked re-prompts" — asserts
+//     that a mismatched okayed checksum causes the modal to re-show.
+//   - materializer.test.ts: curated drift and checksum-mismatch → {ok:false,reason:…},
+//     never writes — preserves the fail-closed guarantee.
 // ---------------------------------------------------------------------------
-
-// TODO(T3.4): re-enable after drift surfacing migrated to evaluateState/okayed.
-// These assert the removed evaluateTrust "drift-blocked" semantics and the
-// removed 3-arg ScriptStore ctor + device.json consent shape (T1.4 rewrite).
-describe.skip("I5 — Drift hard-blocks", () => {
-	it("evaluateTrust returns 'drift-blocked' when same version has different checksum", async () => {
-		const pluginData = makePluginDataPort({
-			scripts: { "drift-script": { source: "drift.cjs", checksum: "new-hash", version: 5 } },
-		});
-		const vault = makeVaultAdapterPort();
-		vault._files.set(
-			DEVICE_PATH,
-			JSON.stringify({
-				enabled: { "drift-script": true },
-				consent: { "drift-script": { checksum: "old-hash", version: 5 } },
-			}),
-		);
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const store = new ScriptStore(pluginData) as any;
-
-		const result = await store.evaluateTrust("drift-script");
-		expect(result.status).toBe("drift-blocked");
-	});
-
-	it("drift-blocked is NOT a transient warning — status is exactly 'drift-blocked' not 'needs-consent'", async () => {
-		const pluginData = makePluginDataPort({
-			scripts: { "strict-drift": { source: "strict.cjs", checksum: "checksum-B", version: 3 } },
-		});
-		const vault = makeVaultAdapterPort();
-		vault._files.set(
-			DEVICE_PATH,
-			JSON.stringify({
-				enabled: { "strict-drift": true },
-				consent: { "strict-drift": { checksum: "checksum-A", version: 3 } },
-			}),
-		);
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const store = new ScriptStore(pluginData) as any;
-
-		const result = await store.evaluateTrust("strict-drift");
-		expect(result.status).toBe("drift-blocked");
-		expect(result.status).not.toBe("needs-consent");
-	});
-
-	// Note: the store-level assertions above (evaluateTrust → "drift-blocked") are the
-	// canonical I5 coverage. The ScriptRunner unit contract for policy:"disabled" ⇒ kind:"blocked"
-	// (neither applyPlan nor rawFallback called) is asserted exhaustively in I4 above.
-	// The real drift-blocked surfacing path is: evaluateTrust returns "drift-blocked" →
-	// makeAskCallback (disclosure.ts) shows the re-consent modal — NOT policy:"disabled".
-	// First-party scripts run with policy:"enabled" (SEC-006). policy:"disabled" is the
-	// explicit kill-switch (enabled flag === false). Drift surfacing and policy:"disabled"
-	// are separate mechanisms; their integration is tested in store.test.ts / disclosure.test.ts.
-});
 
 // ---------------------------------------------------------------------------
 // I6. Throwing script → raw fallback
