@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: Storage & Lifecycle Core"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 1
 ---
@@ -32,7 +32,7 @@ phase: 1
 
 This phase delivers the synced storage model and the derived lifecycle state machine — the trust core all other phases depend on.
 
-- [ ] **T1.1 Byte-exact checksum helper** `[activity: domain-modeling]` `[parallel: true]`
+- [x] **T1.1 Byte-exact checksum helper** `[activity: domain-modeling]` `[parallel: true]`
 
   1. Prime: Read the byte-exact materialization example and ADR-14 `[ref: SDD/Implementation Examples; ADR-14]`; review current `runtime.ts:96` decoded-string hashing.
   2. Test (RED): `sha256:` prefix preserved; identical bytes → identical digest; CRLF vs LF byte sequences produce **different** digests (proves byte-exactness); accepts `Uint8Array` and `ArrayBuffer`.
