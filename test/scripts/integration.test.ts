@@ -2,8 +2,9 @@
 //
 // Tests cover three behaviours:
 //
-//   B. importScript: reads vault text, computes sha256 checksum, writes .cjs to
-//      plugin scripts dir, records manifest entry via ScriptStore.
+//   B. importScript (T2.3): reads vault bytes via readBinary, computes byte-exact
+//      sha256 checksum, writes via writeBinary VERBATIM (CRLF bytes survive),
+//      records ScriptRecord with okayed:null; returns { version, checksum }.
 //
 //   C. Paste-and-format command: reads clipboard, builds pasteContext, runs
 //      perplexityAutoScript via ScriptRunner; on success calls applyPlan; on
@@ -17,33 +18,67 @@
 //   - rawFallback calls editor.replaceSelection(rawText); tests spy on _replaced.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createHash } from "node:crypto";
 import { ScriptStore } from "../../src/scripts/store";
-import type { PluginDataPort } from "../../src/scripts/store";
 import { importScript } from "../../src/scripts/runtime";
-import type { ImportScriptArgs, VaultAdapterPort } from "../../src/scripts/runtime";
+import type { VaultAdapterPort } from "../../src/scripts/runtime";
+import { sha256Bytes } from "../../src/scripts/checksum";
 
 // ---------------------------------------------------------------------------
-// Part B: importScript — vault import flow
+// Part B: importScript — vault import flow (T2.3 binary contract)
 //
 // importScript(args) must:
-//   1. Read text from vaultAdapter.read(vaultPath)
-//   2. Compute checksum = "sha256:" + sha256hex(text)
-//   3. Write text to <destPath> via vaultAdapter.write (mkdir-safe)
-//   4. Record manifest entry via store.setManifestEntry(id, {source, checksum, version})
+//   1. Read bytes from vaultAdapter.readBinary(vaultPath) → ArrayBuffer
+//   2. Compute checksum = sha256Bytes(bytes) (byte-exact; CRLF ≠ LF)
+//   3. Mkdir-safe: call vaultAdapter.mkdir(destDir) if available
+//   4. Write VERBATIM via vaultAdapter.writeBinary(destPath, buf)
+//   5. Record ScriptRecord: { provenance:"imported", enabled:false, okayed:null,
+//      source:vaultPath, command:false }
+//   6. Return { version, checksum }
 // ---------------------------------------------------------------------------
 
 // --- in-memory adapter factories ---
 
-function makePluginDataPort(initial: unknown = {}): PluginDataPort & { _data: () => unknown } {
-	let stored: unknown = initial;
+/** Binary-capable vault adapter for T2.3 import-flow tests. */
+function makeBinaryVaultAdapter(): VaultAdapterPort & {
+	_binaryFiles: Map<string, ArrayBuffer>;
+	_dirs: Set<string>;
+	readBinaryCalls: string[];
+	writeBinaryCalls: Array<{ path: string; data: ArrayBuffer }>;
+	writeCalls: string[];
+} {
+	const binaryFiles = new Map<string, ArrayBuffer>();
+	const dirs = new Set<string>();
+	const readBinaryCalls: string[] = [];
+	const writeBinaryCalls: Array<{ path: string; data: ArrayBuffer }> = [];
+	const writeCalls: string[] = [];
 	return {
-		_data: () => stored,
-		load: async (): Promise<unknown> => stored,
-		save: async (data: unknown): Promise<void> => { stored = data; },
+		_binaryFiles: binaryFiles,
+		_dirs: dirs,
+		readBinaryCalls,
+		writeBinaryCalls,
+		writeCalls,
+		read: async (path: string): Promise<string> => {
+			throw new Error(`read() must not be called on the import path; called with: ${path}`);
+		},
+		write: async (path: string, _data: string): Promise<void> => {
+			writeCalls.push(path);
+		},
+		readBinary: async (path: string): Promise<ArrayBuffer> => {
+			readBinaryCalls.push(path);
+			const buf = binaryFiles.get(path);
+			if (buf === undefined) throw new Error(`VaultAdapter: file not found: ${path}`);
+			return buf;
+		},
+		writeBinary: async (path: string, data: ArrayBuffer): Promise<void> => {
+			writeBinaryCalls.push({ path, data });
+			binaryFiles.set(path, data);
+		},
+		exists: async (path: string): Promise<boolean> => binaryFiles.has(path),
+		mkdir: async (path: string): Promise<void> => { dirs.add(path); },
 	};
 }
 
+/** String-only vault adapter kept for the path-guard tests (guards fire before I/O). */
 function makeVaultAdapter(): VaultAdapterPort & {
 	_files: Map<string, string>;
 	_dirs: Set<string>;
@@ -61,14 +96,13 @@ function makeVaultAdapter(): VaultAdapterPort & {
 		write: async (path: string, data: string): Promise<void> => {
 			files.set(path, data);
 		},
+		readBinary: async (_path: string): Promise<ArrayBuffer> => {
+			return new ArrayBuffer(0);
+		},
+		writeBinary: async (_path: string, _data: ArrayBuffer): Promise<void> => { /* no-op */ },
 		exists: async (path: string): Promise<boolean> => files.has(path),
 		mkdir: async (path: string): Promise<void> => { dirs.add(path); },
 	};
-}
-
-// Helper: compute expected checksum the same way importScript should
-function sha256Checksum(text: string): string {
-	return "sha256:" + createHash("sha256").update(text).digest("hex");
 }
 
 // ---------------------------------------------------------------------------
@@ -152,248 +186,163 @@ describe("importScript — path guards", () => {
 	});
 });
 
-// TODO(T2.3): re-enable after importScript migrated to binary hashing + okayed
-// recording (ScriptRecord store). These assert the removed v0.1 manifest shape
-// (store.getManifest(), { checksum, source, version }) and the removed 3-arg
-// ScriptStore ctor (T1.4 store rewrite).
-describe.skip("T5.5B importScript — vault import flow", () => {
-	let pluginData: ReturnType<typeof makePluginDataPort>;
-	let vaultAdapter: ReturnType<typeof makeVaultAdapter>;
-	// Loose type: this suite asserts the removed v0.1 manifest API; cast keeps the
-	// skipped block type-valid until T2.3 rewrites it against the new store.
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	let store: any;
+// ---------------------------------------------------------------------------
+// T5.5B importScript — vault import flow (T2.3: binary contract)
+//
+// Asserts the new binary I/O contract (ADR-14):
+//   - reads via readBinary (not string read)
+//   - writes via writeBinary VERBATIM (no string round-trip)
+//   - CRLF bytes survive the round-trip; checksum differs from LF variant
+//   - ScriptRecord recorded with okayed:null (consent belongs to disclosure, PRD F2)
+//   - returns { version, checksum } for the disclosure flow (T3.4)
+//   - mkdir-safe behavior preserved
+// ---------------------------------------------------------------------------
 
-	beforeEach(() => {
-		pluginData = makePluginDataPort();
-		vaultAdapter = makeVaultAdapter();
-		store = new ScriptStore(pluginData);
+describe("T5.5B importScript — vault import flow", () => {
+	const vaultPath = "vault/scripts/my-script.cjs";
+	const destPath = ".obsidian/plugins/markdown-mason/scripts/my-script.cjs";
+	const scriptId = "my-script";
+	const scriptVersion = 1;
+
+	function makeStore(): {
+		setRecord: ReturnType<typeof vi.fn>;
+	} {
+		return { setRecord: vi.fn().mockResolvedValue(undefined) };
+	}
+
+	it("reads source via readBinary (not string read) and write is NOT called", async () => {
+		const vaultAdapter = makeBinaryVaultAdapter();
+		const bytes = new TextEncoder().encode("module.exports = () => {};\n");
+		vaultAdapter._binaryFiles.set(vaultPath, bytes.buffer);
+		const store = makeStore();
+
+		await importScript({ id: scriptId, vaultPath, destPath, version: scriptVersion, store, vaultAdapter });
+
+		expect(vaultAdapter.readBinaryCalls).toContain(vaultPath);
+		// string write() must NOT be called on the import path (ADR-14)
+		expect(vaultAdapter.writeCalls).toHaveLength(0);
 	});
 
-	it("records a manifest entry with the correct sha256 checksum for known text", async () => {
-		const scriptText = 'module.exports = function() { return []; };\n';
-		const vaultPath = "scripts/my-script.cjs";
-		const destPath = ".obsidian/plugins/markdown-mason/scripts/my-script.cjs";
-		vaultAdapter._files.set(vaultPath, scriptText);
+	it("writes via writeBinary VERBATIM — same ArrayBuffer read from source", async () => {
+		const vaultAdapter = makeBinaryVaultAdapter();
+		const bytes = new TextEncoder().encode("// script content\n");
+		const sourceBuf = bytes.buffer;
+		vaultAdapter._binaryFiles.set(vaultPath, sourceBuf);
+		const store = makeStore();
 
-		const args: ImportScriptArgs = {
-			id: "my-script",
-			vaultPath,
-			destPath,
-			version: 1,
-			store,
-			vaultAdapter,
-		};
+		await importScript({ id: scriptId, vaultPath, destPath, version: scriptVersion, store, vaultAdapter });
 
-		await importScript(args);
-
-		const manifest = await store.getManifest();
-		expect(manifest["my-script"]).toBeDefined();
-		expect(manifest["my-script"]!.checksum).toBe(sha256Checksum(scriptText));
+		expect(vaultAdapter.writeBinaryCalls).toHaveLength(1);
+		const writeCall = vaultAdapter.writeBinaryCalls[0]!;
+		expect(writeCall.path).toBe(destPath);
+		// Written bytes must equal the source bytes byte-for-byte
+		const writtenBytes = new Uint8Array(writeCall.data);
+		expect(writtenBytes).toEqual(bytes);
 	});
 
-	it("checksum matches the exact sha256 of the script text byte-for-byte", async () => {
-		// Use known text to verify the checksum format and value
-		const knownText = "hello mason\n";
-		const expectedHex = createHash("sha256").update(knownText).digest("hex");
-		const expectedChecksum = `sha256:${expectedHex}`;
+	it("BYTE-EXACTNESS: CRLF bytes survive round-trip; checksum differs from LF variant", async () => {
+		const crlfBytes = new TextEncoder().encode("line1\r\nline2");
+		const lfBytes = new TextEncoder().encode("line1\nline2");
 
-		const vaultPath = "scripts/known.cjs";
-		const destPath = ".obsidian/plugins/markdown-mason/scripts/known.cjs";
-		vaultAdapter._files.set(vaultPath, knownText);
+		const vaultAdapter = makeBinaryVaultAdapter();
+		vaultAdapter._binaryFiles.set(vaultPath, crlfBytes.buffer);
+		const store = makeStore();
 
-		await importScript({
-			id: "known",
-			vaultPath,
-			destPath,
-			version: 2,
-			store,
-			vaultAdapter,
+		const result = await importScript({ id: scriptId, vaultPath, destPath, version: scriptVersion, store, vaultAdapter });
+
+		// Written bytes must be CRLF — not normalized to LF
+		const writeCall = vaultAdapter.writeBinaryCalls[0]!;
+		expect(new Uint8Array(writeCall.data)).toEqual(crlfBytes);
+
+		// Checksum over CRLF bytes must equal sha256Bytes of those exact bytes
+		const expectedCrlfChecksum = sha256Bytes(crlfBytes);
+		expect(result.checksum).toBe(expectedCrlfChecksum);
+
+		// Checksum must differ from the LF variant (ADR-14: CRLF ≠ LF)
+		const lfChecksum = sha256Bytes(lfBytes);
+		expect(result.checksum).not.toBe(lfChecksum);
+	});
+
+	it("records ScriptRecord with okayed:null, provenance:'imported', source:vaultPath, enabled:false, command:false", async () => {
+		const vaultAdapter = makeBinaryVaultAdapter();
+		const bytes = new TextEncoder().encode("// script");
+		vaultAdapter._binaryFiles.set(vaultPath, bytes.buffer);
+		const store = makeStore();
+
+		await importScript({ id: scriptId, vaultPath, destPath, version: scriptVersion, store, vaultAdapter });
+
+		expect(store.setRecord).toHaveBeenCalledOnce();
+		expect(store.setRecord).toHaveBeenCalledWith(scriptId, {
+			provenance: "imported",
+			enabled: false,
+			okayed: null,
+			source: vaultPath,
+			command: false,
 		});
-
-		const manifest = await store.getManifest();
-		expect(manifest["known"]!.checksum).toBe(expectedChecksum);
 	});
 
-	it("writes the script text to the destination path via vaultAdapter", async () => {
-		const scriptText = "// my imported script\nmodule.exports = () => undefined;\n";
-		const vaultPath = "vault/scripts/imported.cjs";
-		const destPath = ".obsidian/plugins/markdown-mason/scripts/imported.cjs";
-		vaultAdapter._files.set(vaultPath, scriptText);
+	it("does NOT set okayed on the ScriptRecord (consent is recorded by disclosure, PRD F2)", async () => {
+		const vaultAdapter = makeBinaryVaultAdapter();
+		const bytes = new TextEncoder().encode("// script");
+		vaultAdapter._binaryFiles.set(vaultPath, bytes.buffer);
+		const store = makeStore();
 
-		await importScript({
-			id: "imported",
-			vaultPath,
-			destPath,
-			version: 1,
-			store,
-			vaultAdapter,
-		});
+		await importScript({ id: scriptId, vaultPath, destPath, version: 3, store, vaultAdapter });
 
-		// The script content must be written to destPath
-		expect(vaultAdapter._files.get(destPath)).toBe(scriptText);
+		const recordArg = store.setRecord.mock.calls[0]?.[1] as Record<string, unknown>;
+		expect(recordArg).toBeDefined();
+		expect(recordArg["okayed"]).toBeNull();
 	});
 
-	it("records the manifest source as the original vaultPath", async () => {
-		const vaultPath = "vault/scripts/my-script.cjs";
-		const destPath = ".obsidian/plugins/markdown-mason/scripts/my-script.cjs";
-		vaultAdapter._files.set(vaultPath, "// script");
+	it("returns { version, checksum } matching sha256Bytes of the imported bytes", async () => {
+		const vaultAdapter = makeBinaryVaultAdapter();
+		const bytes = new TextEncoder().encode("module.exports = () => 'hello';\n");
+		vaultAdapter._binaryFiles.set(vaultPath, bytes.buffer);
+		const store = makeStore();
 
-		await importScript({
-			id: "my-script",
-			vaultPath,
-			destPath,
-			version: 3,
-			store,
-			vaultAdapter,
-		});
+		const result = await importScript({ id: scriptId, vaultPath, destPath, version: 7, store, vaultAdapter });
 
-		const manifest = await store.getManifest();
-		expect(manifest["my-script"]!.source).toBe(vaultPath);
+		expect(result.checksum).toBe(sha256Bytes(bytes));
+		expect(result.version).toBe(7);
 	});
 
-	it("records the manifest version as supplied", async () => {
-		const vaultPath = "vault/scripts/versioned.cjs";
-		const destPath = ".obsidian/plugins/markdown-mason/scripts/versioned.cjs";
-		vaultAdapter._files.set(vaultPath, "// versioned script");
+	it("mkdir called for nested destDir before writing (mkdir-safe)", async () => {
+		const vaultAdapter = makeBinaryVaultAdapter();
+		const bytes = new TextEncoder().encode("// deep script");
+		vaultAdapter._binaryFiles.set(vaultPath, bytes.buffer);
+		const store = makeStore();
 
-		await importScript({
-			id: "versioned",
-			vaultPath,
-			destPath,
-			version: 7,
-			store,
-			vaultAdapter,
-		});
+		await importScript({ id: scriptId, vaultPath, destPath, version: scriptVersion, store, vaultAdapter });
 
-		const manifest = await store.getManifest();
-		expect(manifest["versioned"]!.version).toBe(7);
-	});
-
-	it("calls mkdir on the directory containing destPath before writing", async () => {
-		const vaultPath = "vault/scripts/deep.cjs";
-		const destPath = ".obsidian/plugins/markdown-mason/scripts/deep.cjs";
-		vaultAdapter._files.set(vaultPath, "// deep script");
-
-		await importScript({
-			id: "deep",
-			vaultPath,
-			destPath,
-			version: 1,
-			store,
-			vaultAdapter,
-		});
-
-		// The parent directory must have been created
 		expect(vaultAdapter._dirs.has(".obsidian/plugins/markdown-mason/scripts")).toBe(true);
 	});
 
-	it("two different scripts produce different checksums", async () => {
-		const text1 = "// script one\nmodule.exports = () => 'one';\n";
-		const text2 = "// script two\nmodule.exports = () => 'two';\n";
-		const vaultPath1 = "scripts/one.cjs";
-		const vaultPath2 = "scripts/two.cjs";
-		vaultAdapter._files.set(vaultPath1, text1);
-		vaultAdapter._files.set(vaultPath2, text2);
+	it("two scripts with different content produce different checksums", async () => {
+		const vaultAdapter = makeBinaryVaultAdapter();
+		const bytes1 = new TextEncoder().encode("// script one");
+		const bytes2 = new TextEncoder().encode("// script two");
+		vaultAdapter._binaryFiles.set("scripts/one.cjs", bytes1.buffer);
+		vaultAdapter._binaryFiles.set("scripts/two.cjs", bytes2.buffer);
+		const store = makeStore();
 
-		await importScript({
+		const result1 = await importScript({
 			id: "script-one",
-			vaultPath: vaultPath1,
+			vaultPath: "scripts/one.cjs",
 			destPath: ".obsidian/plugins/markdown-mason/scripts/one.cjs",
 			version: 1,
 			store,
 			vaultAdapter,
 		});
-		await importScript({
+		const result2 = await importScript({
 			id: "script-two",
-			vaultPath: vaultPath2,
+			vaultPath: "scripts/two.cjs",
 			destPath: ".obsidian/plugins/markdown-mason/scripts/two.cjs",
 			version: 1,
 			store,
 			vaultAdapter,
 		});
 
-		const manifest = await store.getManifest();
-		expect(manifest["script-one"]!.checksum).not.toBe(manifest["script-two"]!.checksum);
-	});
-
-	it("rejects a destPath containing a '..' traversal segment", async () => {
-		const vaultPath = "scripts/safe.cjs";
-		vaultAdapter._files.set(vaultPath, "// safe");
-
-		const traversalDestPath = ".obsidian/plugins/markdown-mason/scripts/../../../evil.cjs";
-
-		await expect(
-			importScript({
-				id: "evil",
-				vaultPath,
-				destPath: traversalDestPath,
-				version: 1,
-				store,
-				vaultAdapter,
-			}),
-		).rejects.toThrow("importScript: path traversal rejected:");
-	});
-
-	it("rejects a vaultPath containing a '..' traversal segment", async () => {
-		await expect(
-			importScript({
-				id: "evil",
-				vaultPath: "../../../etc/passwd",
-				destPath: ".obsidian/plugins/markdown-mason/scripts/safe.cjs",
-				version: 1,
-				store,
-				vaultAdapter,
-			}),
-		).rejects.toThrow("importScript: path traversal rejected:");
-	});
-
-	// SEC-004: Windows-style backslash traversal in destPath
-	it("SEC-004: rejects a destPath with Windows backslash traversal (..\\..\\evil.cjs)", async () => {
-		const vaultPath = "scripts/safe.cjs";
-		vaultAdapter._files.set(vaultPath, "// safe");
-
-		await expect(
-			importScript({
-				id: "evil-win",
-				vaultPath,
-				destPath: "..\\..\\evil.cjs",
-				version: 1,
-				store,
-				vaultAdapter,
-			}),
-		).rejects.toThrow("importScript: path traversal rejected:");
-	});
-
-	// SEC-005: absolute destPath is rejected
-	it("SEC-005: rejects an absolute destPath (/etc/evil.cjs)", async () => {
-		const vaultPath = "scripts/safe.cjs";
-		vaultAdapter._files.set(vaultPath, "// safe");
-
-		await expect(
-			importScript({
-				id: "evil-abs-dest",
-				vaultPath,
-				destPath: "/etc/evil.cjs",
-				version: 1,
-				store,
-				vaultAdapter,
-			}),
-		).rejects.toThrow("importScript: absolute path rejected:");
-	});
-
-	// SEC-005: absolute vaultPath is rejected
-	it("SEC-005: rejects an absolute vaultPath (/etc/passwd)", async () => {
-		await expect(
-			importScript({
-				id: "evil-abs-vault",
-				vaultPath: "/etc/passwd",
-				destPath: ".obsidian/plugins/markdown-mason/scripts/safe.cjs",
-				version: 1,
-				store,
-				vaultAdapter,
-			}),
-		).rejects.toThrow("importScript: absolute path rejected:");
+		expect(result1.checksum).not.toBe(result2.checksum);
 	});
 });
 

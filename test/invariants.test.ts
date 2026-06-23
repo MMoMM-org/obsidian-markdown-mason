@@ -140,6 +140,8 @@ function makeVaultAdapterPort(): VaultAdapterPort & { _files: Map<string, string
 			return content;
 		},
 		write: async (path: string, data: string): Promise<void> => { files.set(path, data); },
+		readBinary: async (_path: string): Promise<ArrayBuffer> => new ArrayBuffer(0),
+		writeBinary: async (_path: string, _data: ArrayBuffer): Promise<void> => { /* no-op */ },
 		exists: async (path: string): Promise<boolean> => files.has(path),
 		mkdir: async (_path: string): Promise<void> => { /* no-op */ },
 	};
