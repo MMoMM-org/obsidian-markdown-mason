@@ -52,3 +52,6 @@ begin-code.sh
 
 # Local Obsidian dev test vault (manual plugin testing; not tracked)
 test/mason/
+
+# Visual companion brainstorm scratch (tcs-workflow)
+.brainstorm/
