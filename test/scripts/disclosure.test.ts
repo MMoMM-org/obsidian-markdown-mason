@@ -25,10 +25,10 @@ import { ScriptDisclosureModal, makeAskCallback } from "../../src/scripts/disclo
 import type { AskDecision } from "../../src/scripts/runner";
 import type { ScriptStore } from "../../src/scripts/store";
 
-// TODO(T3.4): the makeAskCallback suites below assert removed v0.1 trust
-// semantics (evaluateTrust/recordConsent + TrustStatus). disclosure.ts was
-// migrated to the ScriptRecord store in T1.4 and is fully reworked onto
-// evaluateState in T3.4; those suites are describe.skip until then. The
+// TODO(T3.4): the makeAskCallback suites below (describe.skip) assert removed
+// v0.1 trust semantics (evaluateTrust/recordConsent + TrustStatus). disclosure.ts
+// was migrated to the ScriptRecord store in T1.4 and is fully reworked onto
+// evaluateState in T3.4; those suites remain describe.skip until then. The
 // ScriptDisclosureModal-only suites remain ACTIVE (they don't touch the store).
 //
 // Local alias for the removed TrustStatus union so the skipped helper typechecks.
@@ -264,6 +264,130 @@ describe("ScriptDisclosureModal — XSS-safe DOM construction", () => {
 
 		expect(innerHTMLSpy).not.toHaveBeenCalled();
 		expect(outerHTMLSpy).not.toHaveBeenCalled();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// makeAskCallback — transitional gate (T1.4)
+//
+// Tests the three paths in the transitional makeAskCallback implementation
+// against Pick<ScriptStore,"getScripts"|"setRecord">. The old suites asserting
+// evaluateTrust/recordConsent remain describe.skip below (see TODO T3.4).
+// ---------------------------------------------------------------------------
+
+describe("makeAskCallback — transitional gate (T1.4)", () => {
+	const VERSION = 3;
+	const CHECKSUM = "sha256:abc123";
+	const SCRIPT_ID = "test-script";
+	const INFO = { vaultRelativePath: "scripts/test-script.cjs", fileSizeBytes: 512 };
+
+	it("kill-switch: enabled===false returns 'disable' immediately, modal NOT shown, setRecord NOT called", async () => {
+		const scripts: Record<string, import("../../src/scripts/store").ScriptRecord> = {
+			[SCRIPT_ID]: {
+				provenance: "imported",
+				enabled: false,
+				okayed: null,
+				source: "",
+				command: false,
+			},
+		};
+		const store = {
+			getScripts: vi.fn().mockResolvedValue(scripts),
+			setRecord: vi.fn().mockResolvedValue(undefined),
+		};
+
+		let modalOpened = false;
+		const origPresent = ScriptDisclosureModal.prototype.present;
+		ScriptDisclosureModal.prototype.present = function (this: ScriptDisclosureModal) {
+			modalOpened = true;
+			return origPresent.call(this);
+		};
+
+		try {
+			const callback = makeAskCallback(new App(), store, SCRIPT_ID, INFO, CHECKSUM, VERSION);
+			const decision = await callback();
+
+			expect(decision).toBe("disable");
+			expect(modalOpened).toBe(false);
+			expect(store.setRecord).not.toHaveBeenCalled();
+		} finally {
+			ScriptDisclosureModal.prototype.present = origPresent;
+		}
+	});
+
+	it("already-consented: okayed matches version+checksum → returns 'enable-session', modal NOT shown, setRecord NOT called", async () => {
+		const scripts: Record<string, import("../../src/scripts/store").ScriptRecord> = {
+			[SCRIPT_ID]: {
+				provenance: "curated",
+				enabled: true,
+				okayed: { version: VERSION, checksum: CHECKSUM },
+				source: "vault/test.cjs",
+				command: false,
+			},
+		};
+		const store = {
+			getScripts: vi.fn().mockResolvedValue(scripts),
+			setRecord: vi.fn().mockResolvedValue(undefined),
+		};
+
+		let modalOpened = false;
+		const origPresent = ScriptDisclosureModal.prototype.present;
+		ScriptDisclosureModal.prototype.present = function (this: ScriptDisclosureModal) {
+			modalOpened = true;
+			return origPresent.call(this);
+		};
+
+		try {
+			const callback = makeAskCallback(new App(), store, SCRIPT_ID, INFO, CHECKSUM, VERSION);
+			const decision = await callback();
+
+			expect(decision).toBe("enable-session");
+			expect(modalOpened).toBe(false);
+			expect(store.setRecord).not.toHaveBeenCalled();
+		} finally {
+			ScriptDisclosureModal.prototype.present = origPresent;
+		}
+	});
+
+	it("new/needs-consent: no record → modal shown; 'enable-session' → setRecord called with okayed+enabled:true", async () => {
+		const store = {
+			getScripts: vi.fn().mockResolvedValue({}),
+			setRecord: vi.fn().mockResolvedValue(undefined),
+		};
+
+		let capturedModal: ScriptDisclosureModal | null = null;
+		const origPresent = ScriptDisclosureModal.prototype.present;
+		ScriptDisclosureModal.prototype.present = function (this: ScriptDisclosureModal) {
+			capturedModal = this;
+			return origPresent.call(this);
+		};
+
+		try {
+			const callback = makeAskCallback(new App(), store, SCRIPT_ID, INFO, CHECKSUM, VERSION);
+			const callbackPromise = callback();
+
+			// Drain the microtask queue so getScripts resolves and present() fires
+			await Promise.resolve();
+
+			expect(capturedModal).not.toBeNull();
+
+			// Click Enable on the captured modal
+			const el = capturedModal!.contentEl as unknown as import("../__mocks__/obsidian").MockHTMLElement;
+			const enableBtn = el._findButtonByText("Enable");
+			if (!enableBtn) throw new Error("Enable button not found in modal");
+			enableBtn._click();
+
+			const decision = await callbackPromise;
+
+			expect(decision).toBe("enable-session");
+			expect(store.setRecord).toHaveBeenCalledOnce();
+			expect(store.setRecord).toHaveBeenCalledWith(SCRIPT_ID, expect.objectContaining({
+				okayed: { version: VERSION, checksum: CHECKSUM },
+				enabled: true,
+			}));
+		} finally {
+			ScriptDisclosureModal.prototype.present = origPresent;
+		}
 	});
 });
 

@@ -254,14 +254,12 @@ describe("MasonSettingTab — General section", () => {
 });
 
 // ---------------------------------------------------------------------------
-// SCRIPTS SECTION
+// SCRIPTS SECTION (transitional — store-agnostic cases active)
 // ---------------------------------------------------------------------------
 
-// TODO(T4.2): re-enable after settingsTab.ts Scripts section rebuilt onto the
-// ScriptRecord store (store.setRecord, getScripts). These assert the removed
-// store.setEnabled + getManifest.mockResolvedValue({}) v0.1 API (T1.4 rewrite).
-describe.skip("MasonSettingTab — Scripts section", () => {
-	it("lists each installed script from the store manifest", async () => {
+// Three cases that work against the migrated getScripts/ScriptRecord store double.
+describe("MasonSettingTab — Scripts section (transitional)", () => {
+	it("lists each installed script from the store", async () => {
 		const plugin = makePlugin();
 		const allSettings = await renderTab(plugin);
 
@@ -287,6 +285,23 @@ describe.skip("MasonSettingTab — Scripts section", () => {
 		expect(toggleRows.length).toBeGreaterThanOrEqual(2);
 	});
 
+	it("each script row has an import control (button)", async () => {
+		const plugin = makePlugin();
+		const allSettings = await renderTab(plugin);
+
+		const scriptsHeadingIdx = allSettings.findIndex((s) => s.isHeading && s.name === "Scripts");
+		const advancedHeadingIdx = allSettings.findIndex((s) => s.isHeading && s.name === "Advanced");
+		const scriptSection = allSettings.slice(scriptsHeadingIdx + 1, advancedHeadingIdx);
+
+		const buttonRows = scriptSection.filter((s) => s.buttonControls.length > 0);
+		expect(buttonRows.length).toBeGreaterThanOrEqual(2);
+	});
+});
+
+// TODO(T4.2): re-enable after settingsTab.ts Scripts section rebuilt onto the
+// ScriptRecord store (store.setRecord, getScripts). These assert the removed
+// store.setEnabled + getManifest.mockResolvedValue({}) v0.1 API (T1.4 rewrite).
+describe.skip("MasonSettingTab — Scripts section (obsolete v0.1 assertions)", () => {
 	it("enable toggle calls store.setEnabled with the script id and new value", async () => {
 		const plugin = makePlugin();
 		const allSettings = await renderTab(plugin);
@@ -327,18 +342,6 @@ describe.skip("MasonSettingTab — Scripts section", () => {
 		// No toggles or buttons should be rendered in the empty state.
 		expect(scriptSection[0].toggleControls).toHaveLength(0);
 		expect(scriptSection[0].buttonControls).toHaveLength(0);
-	});
-
-	it("each script row has an import control (button)", async () => {
-		const plugin = makePlugin();
-		const allSettings = await renderTab(plugin);
-
-		const scriptsHeadingIdx = allSettings.findIndex((s) => s.isHeading && s.name === "Scripts");
-		const advancedHeadingIdx = allSettings.findIndex((s) => s.isHeading && s.name === "Advanced");
-		const scriptSection = allSettings.slice(scriptsHeadingIdx + 1, advancedHeadingIdx);
-
-		const buttonRows = scriptSection.filter((s) => s.buttonControls.length > 0);
-		expect(buttonRows.length).toBeGreaterThanOrEqual(2);
 	});
 });
 

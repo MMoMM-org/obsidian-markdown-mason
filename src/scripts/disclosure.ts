@@ -17,23 +17,18 @@
 // ADAPTER DESIGN (makeAskCallback)
 // ─────────────────────────────────
 // The adapter bridges the runner's AskCallback contract with:
-//   1. ScriptStore.evaluateTrust() — lighter path: skip modal if already "ok"
-//   2. ScriptDisclosureModal — shown for needs-consent, drift-blocked, or unknown
-//   3. ScriptStore.recordConsent() — called on enable-session ONLY
-//      Enable       = approve & remember (persists per checksum/version)
-//      Enable once  = run this time only, no persistence → next call re-prompts
+//   1. ScriptStore.getScripts() + ScriptRecord — lighter paths that bypass the modal
+//   2. ScriptDisclosureModal — shown when consent is needed
+//   3. ScriptStore.setRecord() — called on enable-session to persist consent
 //
-// DRIFT-BLOCKED CHOICE (documented)
-// ────────────────────────────────
-// When evaluateTrust returns "drift-blocked" the adapter SHOWS the modal
-// (re-prompts) rather than silently blocking.  Rationale: drift is a trust
-// violation requiring explicit re-approval; surfacing the modal lets the
-// user confirm they trust the updated script.  A user who clicks Disable
-// gets "disable"; one who clicks Enable records new consent and proceeds.
+// Three decision paths (checked in order):
+//   enabled===false  → return "disable" immediately (kill-switch; no modal)
+//   okayed.version===version && okayed.checksum===checksum
+//                    → return "enable-session" (already consented; no modal)
+//   otherwise        → show modal; on "enable-session" call setRecord with
+//                      okayed:{version,checksum} and enabled:true
 //
-// "unknown" (script not in manifest) is treated as needs-consent and also
-// shows the modal so the user can choose before any execution.
-// "disabled" (kill-switch) → "disable" immediately without showing the modal.
+// TRANSITIONAL (T1.4): full evaluateState-based disclosure lands in T3.4.
 
 import { Modal } from "obsidian";
 import type { App } from "obsidian";
@@ -174,22 +169,25 @@ export class ScriptDisclosureModal extends Modal {
  * Builds an AskCallback for the runner's "ask" policy.
  *
  * Parameters:
- *   app           — Obsidian App (passed to the modal constructor)
- *   store         — ScriptStore (evaluateTrust + recordConsent)
- *   scriptId      — the script's unique identifier
- *   info          — path + size shown in the modal
- *   checksum      — current script checksum (for consent recording)
- *   version       — current script version (for consent recording)
+ *   app       — Obsidian App (passed to the modal constructor)
+ *   store     — Pick<ScriptStore, "getScripts" | "setRecord">
+ *   scriptId  — the script's unique identifier
+ *   info      — path + size shown in the modal
+ *   checksum  — current script checksum (for consent matching and recording)
+ *   version   — current script version (for consent matching and recording)
  *
- * Lighter path: if evaluateTrust returns "ok", the callback returns
- * "enable-session" immediately without showing any UI.
- *
- * All other statuses (needs-consent, drift-blocked, unknown) show the modal.
- * "disabled" (explicit kill-switch) returns "disable" without the modal.
+ * Decision paths (checked in order):
+ *   1. record.enabled===false  → returns "disable" immediately (no modal).
+ *   2. record.okayed matches {version, checksum}
+ *                              → returns "enable-session" (no modal).
+ *   3. otherwise               → shows the modal; on "enable-session" calls
+ *      setRecord to persist consent (okayed:{version,checksum}, enabled:true).
  *
  * Consent persistence:
- *   "enable-session" → recordConsent is called (persists approval for this checksum/version)
- *   "enable-once"    → recordConsent is NOT called (run this time only; next call re-prompts)
+ *   "enable-session" → setRecord called (persists approval for this checksum+version)
+ *   "enable-once"    → setRecord NOT called (ephemeral; next call re-prompts)
+ *
+ * // TRANSITIONAL (T1.4): full evaluateState-based disclosure lands in T3.4.
  */
 export function makeAskCallback(
 	app: App,

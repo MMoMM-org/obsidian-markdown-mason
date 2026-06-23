@@ -71,12 +71,91 @@ function sha256Checksum(text: string): string {
 	return "sha256:" + createHash("sha256").update(text).digest("hex");
 }
 
+// ---------------------------------------------------------------------------
+// importScript — path guards (active; guards throw before store is touched)
+//
+// These four cases assert security invariants in importScript that are
+// independent of the v0.1/v0.2 store shape: the guards throw before any
+// store call is made, so they work against any setRecord-compatible stub.
+// ---------------------------------------------------------------------------
+
+describe("importScript — path guards", () => {
+	// Minimal stub: setRecord must never be reached by the guard cases.
+	const stubStore: Pick<typeof ScriptStore.prototype, "setRecord"> = {
+		setRecord: async () => {},
+	};
+
+	it("rejects a destPath containing a '..' traversal segment", async () => {
+		const vaultAdapter = makeVaultAdapter();
+		vaultAdapter._files.set("scripts/safe.cjs", "// safe");
+
+		await expect(
+			importScript({
+				id: "evil",
+				vaultPath: "scripts/safe.cjs",
+				destPath: ".obsidian/plugins/markdown-mason/scripts/../../../evil.cjs",
+				version: 1,
+				store: stubStore,
+				vaultAdapter,
+			}),
+		).rejects.toThrow("importScript: path traversal rejected:");
+	});
+
+	// SEC-004: Windows-style backslash traversal in destPath
+	it("SEC-004: rejects a destPath with Windows backslash traversal (..\\..\\evil.cjs)", async () => {
+		const vaultAdapter = makeVaultAdapter();
+		vaultAdapter._files.set("scripts/safe.cjs", "// safe");
+
+		await expect(
+			importScript({
+				id: "evil-win",
+				vaultPath: "scripts/safe.cjs",
+				destPath: "..\\..\\evil.cjs",
+				version: 1,
+				store: stubStore,
+				vaultAdapter,
+			}),
+		).rejects.toThrow("importScript: path traversal rejected:");
+	});
+
+	// SEC-005: absolute destPath is rejected
+	it("SEC-005: rejects an absolute destPath (/etc/evil.cjs)", async () => {
+		const vaultAdapter = makeVaultAdapter();
+		vaultAdapter._files.set("scripts/safe.cjs", "// safe");
+
+		await expect(
+			importScript({
+				id: "evil-abs-dest",
+				vaultPath: "scripts/safe.cjs",
+				destPath: "/etc/evil.cjs",
+				version: 1,
+				store: stubStore,
+				vaultAdapter,
+			}),
+		).rejects.toThrow("importScript: absolute path rejected:");
+	});
+
+	// SEC-005: absolute vaultPath is rejected
+	it("SEC-005: rejects an absolute vaultPath (/etc/passwd)", async () => {
+		const vaultAdapter = makeVaultAdapter();
+
+		await expect(
+			importScript({
+				id: "evil-abs-vault",
+				vaultPath: "/etc/passwd",
+				destPath: ".obsidian/plugins/markdown-mason/scripts/safe.cjs",
+				version: 1,
+				store: stubStore,
+				vaultAdapter,
+			}),
+		).rejects.toThrow("importScript: absolute path rejected:");
+	});
+});
+
 // TODO(T2.3): re-enable after importScript migrated to binary hashing + okayed
 // recording (ScriptRecord store). These assert the removed v0.1 manifest shape
 // (store.getManifest(), { checksum, source, version }) and the removed 3-arg
-// ScriptStore ctor (T1.4 store rewrite). The path-traversal/absolute-path guards
-// are unchanged, but they are exercised through importScript here, so the whole
-// suite moves together and re-greens in T2.3.
+// ScriptStore ctor (T1.4 store rewrite).
 describe.skip("T5.5B importScript — vault import flow", () => {
 	let pluginData: ReturnType<typeof makePluginDataPort>;
 	let vaultAdapter: ReturnType<typeof makeVaultAdapter>;
