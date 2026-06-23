@@ -386,6 +386,15 @@ describe("loadScriptModule — LOAD ERROR: missing run", () => {
 		const requireFn = makeRequireFn(scriptsDir);
 		expect(() => loadScriptModule(mainPath, requireFn)).toThrow(/run|envelope/i);
 	});
+
+	it("throws a descriptive error (no crash) when module.exports is null (C2)", () => {
+		const scriptsDir = makeTempDir("mason-env-");
+		const mainPath = path.join(scriptsDir, "null-exports.cjs");
+		fs.writeFileSync(mainPath, "module.exports = null;");
+
+		const requireFn = makeRequireFn(scriptsDir);
+		expect(() => loadScriptModule(mainPath, requireFn)).toThrow(/run|envelope/i);
+	});
 });
 
 describe("loadScriptModule — LOAD ERROR: non-callable run", () => {
@@ -396,6 +405,38 @@ describe("loadScriptModule — LOAD ERROR: non-callable run", () => {
 
 		const requireFn = makeRequireFn(scriptsDir);
 		expect(() => loadScriptModule(mainPath, requireFn)).toThrow(/run/);
+	});
+});
+
+describe("loadScriptModule — null/undefined paste = command-only (C1)", () => {
+	it("returns { run } with paste undefined when paste is null (null treated as absent)", () => {
+		const scriptsDir = makeTempDir("mason-env-");
+		const mainPath = path.join(scriptsDir, "null-paste.cjs");
+		fs.writeFileSync(
+			mainPath,
+			"module.exports = { run: function() {}, paste: null };",
+		);
+
+		const requireFn = makeRequireFn(scriptsDir);
+		const result: ScriptModule = loadScriptModule(mainPath, requireFn);
+
+		expect(typeof result.run).toBe("function");
+		expect(result.paste).toBeUndefined();
+	});
+
+	it("returns { run } with paste undefined when paste is undefined (paste key absent)", () => {
+		const scriptsDir = makeTempDir("mason-env-");
+		const mainPath = path.join(scriptsDir, "undef-paste.cjs");
+		fs.writeFileSync(
+			mainPath,
+			"module.exports = { run: function() {}, paste: undefined };",
+		);
+
+		const requireFn = makeRequireFn(scriptsDir);
+		const result: ScriptModule = loadScriptModule(mainPath, requireFn);
+
+		expect(typeof result.run).toBe("function");
+		expect(result.paste).toBeUndefined();
 	});
 });
 

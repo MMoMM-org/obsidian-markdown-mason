@@ -249,17 +249,22 @@ export function loadScriptModule(absolutePath: string, requireFn: RequireFn): Sc
 
 	const mod = requireFn(absolutePath);
 
-	// Resolve the envelope object: use mod directly when it has a "run" key,
-	// otherwise fall back to mod.default for ESM→CJS interop (e.g. a script
-	// compiled with `export default { run, paste }`).
-	const maybeDefault = isEnvelopeCandidate(mod)
-		? (mod as Record<string, unknown>)["default"]
-		: undefined;
-	const envelope = (isEnvelopeCandidate(mod) && "run" in (mod as Record<string, unknown>))
-		? mod
-		: isEnvelopeCandidate(maybeDefault)
-			? maybeDefault
-			: mod;
+	// Resolve the envelope object: top-level run wins; fall back to mod.default
+	// for ESM→CJS interop (e.g. a script compiled with `export default { run, paste }`).
+	let envelope: unknown;
+	if (isEnvelopeCandidate(mod) && "run" in mod) {
+		envelope = mod;
+	} else if (isEnvelopeCandidate(mod) && isEnvelopeCandidate((mod as Record<string, unknown>)["default"])) {
+		envelope = (mod as Record<string, unknown>)["default"];
+	} else {
+		envelope = mod;
+	}
+
+	if (envelope === null || envelope === undefined) {
+		throw new Error(
+			`mason: script "${absolutePath}" has no callable run() export (envelope-only, ADR-16)`,
+		);
+	}
 
 	const env = envelope as Record<string, unknown>;
 
@@ -269,7 +274,7 @@ export function loadScriptModule(absolutePath: string, requireFn: RequireFn): Sc
 		);
 	}
 
-	if (env["paste"] !== undefined) {
+	if (env["paste"] != null) {
 		const paste = env["paste"] as Record<string, unknown>;
 		if (typeof paste["canHandle"] !== "function" || typeof paste["priority"] !== "number") {
 			throw new Error(
