@@ -12,7 +12,7 @@
 //    an imported catch-all cannot hijack a curated-claimed format.
 // 2. Priority DESC within the same provenance. Higher number = tried first.
 //    Perplexity scripts preserve their detect.ts order: app=300, web-download=200, web=100.
-// 3. Id ASC (localeCompare) as a stable tiebreak when provenance + priority match.
+// 3. Id ASC (ordinal id compare, locale-independent, deterministic across devices) as a stable tiebreak when provenance + priority match.
 //
 // EXCLUSIONS
 // ----------
@@ -88,7 +88,7 @@ export function buildPasteChain(enabled: LoadedScript[]): PasteHandler[] {
 		.sort((a, b) =>
 			rank(a.record.provenance) - rank(b.record.provenance)
 			|| b.module.paste.priority - a.module.paste.priority
-			|| a.id.localeCompare(b.id),
+			|| (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
 		)
 		.map(s => ({
 			id: s.id,

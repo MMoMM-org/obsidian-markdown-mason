@@ -155,6 +155,20 @@ describe("buildPasteChain", () => {
 			const result = buildPasteChain(scripts);
 			expect(result.map(h => h.id)).toEqual(["a-imp", "z-imp"]);
 		});
+
+		it("ordinal id compare guards against locale-dependent collation (e.g. Turkish i/I)", () => {
+			// This test would FAIL under bare localeCompare (which respects system locale)
+			// but PASS under ordinal comparison (deterministic across all devices).
+			// In ASCII ordinal order, uppercase letters sort before lowercase:
+			// S (0x53) < s (0x73), so "Script-I" < "script-a"
+			const scripts = [
+				mk("script-a", "curated", 100),
+				mk("Script-I", "curated", 100),
+			];
+			const result = buildPasteChain(scripts);
+			// Assert exact ordinal ascending order: uppercase S before lowercase s
+			expect(result.map(h => h.id)).toEqual(["Script-I", "script-a"]);
+		});
 	});
 
 	describe("shadowing guarantee (PRD F10 key invariant)", () => {
