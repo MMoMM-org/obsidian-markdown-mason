@@ -323,6 +323,15 @@ export class LifecycleController {
 		}
 
 		const id = deriveId(picked);
+
+		// Collision guard: refuse to silently overwrite an existing record.
+		const existing = (await this._d.store.getScripts())[id];
+		if (existing !== undefined) {
+			new Notice(`Mason: a script named "${id}" already exists — rename the file or remove the existing one first.`);
+			this._d.rerender();
+			return;
+		}
+
 		const rec: ScriptRecord = {
 			provenance: "imported",
 			enabled: false,
@@ -454,7 +463,7 @@ export class LifecycleController {
 
 	private _openUrl(url: string): void {
 		if (this._d.openUrl !== undefined) { this._d.openUrl(url); return; }
-		window.open(url);
+		window.open(url, "_blank", "noopener,noreferrer");
 	}
 
 	private _listCjs(): Promise<string[]> {

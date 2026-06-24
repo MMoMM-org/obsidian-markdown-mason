@@ -259,6 +259,29 @@ describe("LifecycleController.enable", () => {
 		expect(persisted.okayed).toBeNull();
 		expect(h.rerender).toHaveBeenCalled();
 	});
+
+	it("enable-once decision: does NOT persist okayed, does NOT materialize, does NOT fingerprint, but re-renders", async () => {
+		const store = makeStore({
+			"perplexity-app": { provenance: "curated", enabled: false, okayed: null, source: "", command: false },
+		});
+		const vault = makeVault();
+		const catalog = makeCatalog({ "perplexity-app": curatedEntry() }, { "scripts/perplexity-app.cjs": CURATED_BYTES });
+		const fingerprints = { setVersion: vi.fn(async () => {}), remove: vi.fn(async () => {}) };
+		const h = makeController({ store, vault, catalog, fingerprints, decision: "enable-once" });
+
+		await h.controller.enable("perplexity-app");
+
+		// vault write never fires — enable-once is ephemeral, not materialized
+		expect(vault.writeCalls).toHaveLength(0);
+		// fingerprint must not be set
+		expect(fingerprints.setVersion).not.toHaveBeenCalled();
+		// the persisted record keeps its initial state (no okayed, not enabled)
+		const persisted = store.scripts["perplexity-app"];
+		expect(persisted.okayed).toBeNull();
+		expect(persisted.enabled).toBe(false);
+		// the tab still re-renders so the UI reflects the current state
+		expect(h.rerender).toHaveBeenCalled();
+	});
 });
 
 // ===========================================================================
@@ -543,5 +566,36 @@ describe("LifecycleController.importFromVault", () => {
 		expect(Object.keys(store.scripts)).toHaveLength(0);
 		expect(vault.writeCalls).toHaveLength(0);
 		expect(noticeLog().join(" ")).not.toContain("coming soon");
+	});
+
+	it("id collision: does NOT overwrite an existing record, fires a sentence-case Notice, re-renders", async () => {
+		const existingRecord: ScriptRecord = {
+			provenance: "curated", enabled: true,
+			okayed: { version: 1, checksum: CURATED_CHECKSUM }, source: "", command: false,
+		};
+		// pre-existing curated "perplexity-app" record
+		const store = makeStore({ "perplexity-app": existingRecord });
+		const importedBytes = new TextEncoder().encode("module.exports = { evil: true };");
+		const vault = makeVault({ "vault/perplexity-app.cjs": importedBytes });
+		const catalog = makeCatalog({ "perplexity-app": curatedEntry() }, { "scripts/perplexity-app.cjs": CURATED_BYTES });
+		const fingerprints = { setVersion: vi.fn(async () => {}), remove: vi.fn(async () => {}) };
+		const h = makeController({
+			store, vault, catalog, fingerprints,
+			decision: "enable-session",
+			listCjs: async () => ["vault/perplexity-app.cjs"],
+			pick: async (paths) => paths[0] ?? null,
+		});
+
+		await h.controller.importFromVault();
+
+		// Existing record must be intact — no overwrite
+		expect(store.scripts["perplexity-app"]).toEqual(existingRecord);
+		// Nothing materialized
+		expect(vault.writeCalls).toHaveLength(0);
+		// A Notice was fired mentioning the id
+		const log = noticeLog().join(" ");
+		expect(log).toContain("perplexity-app");
+		// Re-rendered so the UI stays consistent
+		expect(h.rerender).toHaveBeenCalled();
 	});
 });
