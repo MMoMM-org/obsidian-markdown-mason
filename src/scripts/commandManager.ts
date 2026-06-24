@@ -177,6 +177,24 @@ export class CommandManager {
 		await this._cleanupScript(id);
 	}
 
+	/**
+	 * Run a script directly — reuses the private _invokeScript effects path.
+	 *
+	 * Used by RunScriptModal (T4.4) so the launcher does not duplicate the
+	 * effects wiring (applyPlan/rawFallback/notify). Delegates entirely to
+	 * _invokeScript, which re-derives state at call time via getState and
+	 * fail-safes if the script is not Active.
+	 */
+	async runScript(
+		id: string,
+		name: string,
+		script: ScriptFunction,
+		getState: StateResolver,
+		editor: Editor,
+	): Promise<void> {
+		await this._invokeScript(id, name, script, getState, editor);
+	}
+
 	// -------------------------------------------------------------------------
 	// Private helpers
 	// -------------------------------------------------------------------------

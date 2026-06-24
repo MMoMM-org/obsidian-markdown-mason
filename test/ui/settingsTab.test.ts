@@ -125,7 +125,14 @@ function makePlugin(overrides?: {
 		isDesktopOnly: true,
 	};
 
-	return { app, settings, saveSettings, store, manifest: pluginManifest } as const;
+	// Minimal CommandManager double for T4.4 Commands tab wiring.
+	const commandManager = {
+		register: vi.fn(),
+		unregister: vi.fn(),
+		disableScript: vi.fn().mockResolvedValue(undefined),
+	};
+
+	return { app, settings, saveSettings, store, manifest: pluginManifest, commandManager } as const;
 }
 
 /**
@@ -344,14 +351,16 @@ describe("MasonSettingTab — section headings", () => {
 
 		// Check each segment produces setHeading()-marked headings.
 		// Drain microtasks after each click so _rendering is false before the next click.
-		// The Scripts segment has a 3-level async chain (click → _selectSegment →
-		// _renderSegment → _renderScriptsSection → getScripts), requiring three
-		// Promise.resolve() ticks to fully flush; one tick suffices for sync segments.
+		// Scripts and Commands both have async chains that need at least 5 ticks to fully
+		// flush (click → _selectSegment → _renderSegment → section renderer → getScripts).
+		// Using 5 ticks uniformly covers both async segments and all sync segments.
 		const allHeadings: string[] = [];
 		for (const label of ["General", "Scripts", "Commands", "Advanced"]) {
 			clearCapturedSettings();
 			const btn = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText(label);
 			btn!._click();
+			await Promise.resolve();
+			await Promise.resolve();
 			await Promise.resolve();
 			await Promise.resolve();
 			await Promise.resolve();

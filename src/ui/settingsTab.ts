@@ -6,6 +6,8 @@ import { evaluateState } from "../scripts/lifecycle";
 import { HeaderSection } from "./HeaderSection";
 import { renderScriptsTab } from "./scriptsTab";
 import type { ScriptItem, LifecycleOps } from "./scriptsTab";
+import { renderCommandsTab } from "./commandsTab";
+import type { CommandsTabCommandManager, ScriptFnResolver, StateResolver } from "./commandsTab";
 
 // ---------------------------------------------------------------------------
 // Minimal plugin interface — avoids a hard import cycle with main.ts
@@ -20,6 +22,7 @@ export interface MasonPlugin extends Plugin {
 	settings: MasonSettings;
 	saveSettings(): Promise<void>;
 	store: Pick<ScriptStore, "getScripts" | "setRecord">;
+	commandManager: CommandsTabCommandManager;
 }
 
 // ---------------------------------------------------------------------------
@@ -136,7 +139,7 @@ export class MasonSettingTab extends PluginSettingTab {
 				await this._renderScriptsSection(containerEl);
 				break;
 			case "Commands":
-				this._renderCommandsSection(containerEl);
+				await this._renderCommandsSection(containerEl);
 				break;
 			case "Advanced":
 				this._renderAdvancedSection(containerEl);
@@ -292,12 +295,36 @@ export class MasonSettingTab extends PluginSettingTab {
 	}
 
 	// -------------------------------------------------------------------------
-	// Commands section — T4.4 seam
+	// Commands section — T4.4
 	// -------------------------------------------------------------------------
 
-	/** Render the Commands section placeholder heading (T4.4 seam). */
-	private _renderCommandsSection(containerEl: HTMLElement): void {
+	/**
+	 * Render the Commands section heading and the Commands tab.
+	 *
+	 * P5 seam: resolveScriptFn and getState are placeholder adapters here.
+	 * The real script-function loader and live lifecycle resolver plug in at P5.
+	 */
+	private async _renderCommandsSection(containerEl: HTMLElement): Promise<void> {
 		new Setting(containerEl).setName("Commands").setHeading();
+
+		// P5: placeholder resolvers — real module loader and live lifecycle wire in at P5.
+		// Parameters intentionally unnamed: resolvers are stubs until P5 wires in live logic.
+		const resolveScriptFn: ScriptFnResolver = () => {
+			// P5: return the loaded module's run function for the given id
+			return (): undefined => undefined;
+		};
+		const getState: StateResolver = () => {
+			// P5: derive from live catalog/materializer; fail-closed to Disabled until then
+			return { kind: "Disabled" };
+		};
+
+		await renderCommandsTab(
+			containerEl,
+			this._plugin.store,
+			this._plugin.commandManager,
+			resolveScriptFn,
+			getState,
+		);
 	}
 
 	// -------------------------------------------------------------------------

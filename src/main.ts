@@ -20,6 +20,7 @@ import { buildPasteChain } from "./scripts/paste/buildPasteChain";
 import type { LoadedScript } from "./scripts/paste/buildPasteChain";
 import { MasonSettingTab } from "./ui/settingsTab";
 import { CommandManager } from "./scripts/commandManager";
+import { RunScriptModal } from "./ui/runScriptModal";
 
 // Re-export so consumers that import from "src/main" still resolve.
 export { DEFAULT_SETTINGS, type MasonSettings };
@@ -130,6 +131,7 @@ export class MarkdownMasonPlugin extends Plugin {
 		registerCommands(this);
 		this._registerPasteCommand();
 		this._registerScriptCommands();
+		this._registerRunScriptLauncher();
 	}
 
 	override onunload(): void {
@@ -230,6 +232,45 @@ export class MarkdownMasonPlugin extends Plugin {
 				},
 			});
 		}
+	}
+
+	// -------------------------------------------------------------------------
+	// Mason: Run script… — built-in launcher (T4.4 ADR-17)
+	//
+	// Opens RunScriptModal listing only Active scripts.
+	// No default hotkey (ADR-17). The editor is available via editorCallback.
+	//
+	// P5 seam: resolveScriptFn and getState return placeholder values until
+	// the live module loader and lifecycle resolver wire in (P5).
+	// -------------------------------------------------------------------------
+
+	private _registerRunScriptLauncher(): void {
+		this.addCommand({
+			id: "mason.runScript",
+			name: "Run script…",
+			editorCallback: (editor: Editor): void => {
+				// P5: getState fails closed to Disabled until live lifecycle wires in.
+				// Parameter unnamed: stub returns same value regardless of id.
+				const getState = (): import("./scripts/lifecycle").LifecycleState => ({
+					kind: "Disabled",
+				});
+				// P5: resolveScriptFn returns a placeholder until real module loader exists.
+				// Parameter unnamed: stub returns same fn regardless of id.
+				const resolveScriptFn = (): import("./scripts/context").ScriptFunction => {
+					return (): undefined => undefined;
+				};
+
+				const modal = new RunScriptModal(
+					this.app,
+					this.store,
+					this.commandManager,
+					getState,
+					resolveScriptFn,
+					editor,
+				);
+				modal.open();
+			},
+		});
 	}
 
 	/**
