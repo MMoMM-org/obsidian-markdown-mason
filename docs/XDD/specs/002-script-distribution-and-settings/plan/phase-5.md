@@ -1,6 +1,6 @@
 ---
 title: "Phase 5: Dev Override, Catalog Migration & E2E"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 5
 ---
@@ -61,7 +61,7 @@ This phase delivers the developer loop, the production-safety build guarantee, t
   4. Validate: `npm test` (full suite green); `npm run compliance`; lint; types.
   - Success: all headline PRD flows proven end-to-end `[ref: PRD/F1-F6, F10, F11]`.
 
-- [ ] **T5.4 Release & docs** `[activity: document]` `[parallel: true]`
+- [x] **T5.4 Release & docs** `[activity: document]` `[parallel: true]`
 
   1. Prime: Read the deployment/rollback flow + community-compliance constraints `[ref: SDD/Deployment View; SDD/CON-2]`.
   2. Test (RED): `npm run check:manifest` passes; `npm run build` produces a lean `main.js` (no curated bodies / no `detect.ts`); release-asset attestation step documented.
@@ -69,6 +69,8 @@ This phase delivers the developer loop, the production-safety build guarantee, t
   4. Validate: manifest check + build; docs reviewed.
   - Success: reproducible release flow; `main.js` leaner `[ref: PRD value prop; SDD/Deployment View]`.
 
-- [ ] **T5.5 Final Validation** `[activity: validate]`
+- [x] **T5.5 Final Validation** `[activity: validate]`
 
   - Run the **entire** suite (`npm test`), `npm run lint`, `npm run compliance`, `npm run build`. Walk the PRD→Phase coverage map and confirm every acceptance criterion is exercised by a test. Record any deviations.
+  - **Result (2026-06-24):** 951 tests / lint / compliance / build all green; every PRD feature (F1–F11 + Should) maps to covering tests.
+  - **DEVIATION RECORDED:** the production GUI is not wired to the live catalog/materializer/loader — Phase 4 deferred these resolvers to "P5" but no Phase-5 task scheduled the wiring (T5.3 added composed-unit e2e tests with "no production glue"). The lifecycle is proven by tests and all services + the catalog + the dev loop exist, but an end user cannot yet drive enable→materialize→run through the real settings UI (`settingsTab._buildScriptItems` hardcodes `online:false`/`local:null`/`catalogVersion:undefined`; `_buildLifecycleOps` ops are `_comingSoon` stubs; `commandsTab`/`runScriptModal` resolvers are placeholders; `main._buildEnabledPasteScripts` returns `[]`; `buildCatalogSource()` is defined but never called). **Resolution (user decision 2026-06-24): add Phase 6 to wire the live GUI.**

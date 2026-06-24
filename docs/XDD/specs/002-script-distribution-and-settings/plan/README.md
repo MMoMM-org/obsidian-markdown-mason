@@ -121,7 +121,8 @@ Each phase is defined in a separate file. Tasks follow red-green-refactor: **Pri
 - [x] [Phase 2: Distribution & Materialization](phase-2.md)
 - [x] [Phase 3: Module Envelope, Paste Chain & Disclosure](phase-3.md)
 - [x] [Phase 4: Settings UI & Command Management](phase-4.md)
-- [ ] [Phase 5: Dev Override, Catalog Migration & E2E](phase-5.md)
+- [x] [Phase 5: Dev Override, Catalog Migration & E2E](phase-5.md)
+- [ ] [Phase 6: Live GUI Wiring](phase-6.md)
 
 ---
 

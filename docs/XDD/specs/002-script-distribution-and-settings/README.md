@@ -32,6 +32,9 @@
 | 2026-06-23 | SDD: byte-exact checksum & verbatim materialization (ADR-14) | Fixes latent CRLF/encoding false-drift from decoded-string hashing (runtime.ts:96) |
 | 2026-06-23 | All 7 SDD ADRs (11-17) confirmed | User confirmed the full set |
 | 2026-06-23 | PLAN authored: 5 phases, 22 tasks | Dependency-ordered: storage/lifecycle → distribution/materialization → envelope/chain/disclosure → settings/commands UI → dev-override/migration/E2E. All SDD components + PRD ACs covered; 3 known drift points owned by explicit tasks |
+| 2026-06-24 | Implement Phases 4–5 via Agent Team (TDD + dual-review gates) | All tasks gated tdd-guardian → implementer → spec-compliance → code-quality; gates caught and fixed real defects (concurrent-render races, a silent edit-plan data-loss, a semantic mis-wire). 951 tests green after Phase 5 |
+| 2026-06-24 | T5.5 recorded deviation: production GUI not wired to the live engine | Phase 4 deferred the UI resolvers to "P5"; no Phase-5 task scheduled the wiring (T5.3 added composed-unit e2e with "no production glue"). Lifecycle proven by tests, but the live settings UI cannot drive enable→materialize→run (online:false / _comingSoon / empty paste chain / buildCatalogSource unused) |
+| 2026-06-24 | Added Phase 6 (Live GUI Wiring) | User decision: close the deviation now. 4 tasks (T6.1 resolver+catalog, T6.2 lifecycle ops, T6.3 module-load/chain/launcher, T6.4 wired-e2e + final validation) replacing every `// P5:` seam with a real implementation |
 
 ## Context
 
