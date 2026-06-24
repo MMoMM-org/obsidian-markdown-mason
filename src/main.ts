@@ -1,4 +1,4 @@
-import { Notice, Plugin } from "obsidian";
+import { Notice, Plugin, FileSystemAdapter } from "obsidian";
 import type { Editor } from "obsidian";
 import { DEFAULT_SETTINGS, type MasonSettings } from "./core/types";
 import type { EditPlan } from "./core/types";
@@ -196,7 +196,6 @@ export class MarkdownMasonPlugin extends Plugin {
 			// path applies on mobile (which is expected: dev builds are desktop-only).
 			let pluginDir: string | undefined;
 			if (__MASON_DEV__) {
-				const { FileSystemAdapter } = await import("obsidian");
 				if (this.app.vault.adapter instanceof FileSystemAdapter) {
 					pluginDir = `${this.app.vault.adapter.getBasePath()}/${this.manifest.dir}`;
 				}

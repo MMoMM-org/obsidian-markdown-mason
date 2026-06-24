@@ -107,3 +107,33 @@ describe("Prod-bundle DCE: DevDirAdapter marker absent in prod (T5.1, ADR-15)", 
 		expect(bundle).toContain(DEV_ADAPTER_MARKER);
 	}, 60_000);
 });
+
+// ---------------------------------------------------------------------------
+// Suite: no dynamic import of the 'obsidian' external in any bundle (ADR-15)
+//
+// A dynamic import("obsidian") emitted into the bundle crashes Obsidian's
+// renderer because bare ESM specifiers cannot be resolved there at runtime
+// (only static require("obsidian") works).  This suite asserts neither the
+// prod nor the dev bundle contains such a dynamic import, catching the whole
+// class of "dynamic import of an external breaks in the renderer" regressions.
+// ---------------------------------------------------------------------------
+
+const DYNAMIC_IMPORT_OBSIDIAN_RE = /import\s*\(\s*["']obsidian["']/;
+
+describe("No dynamic import('obsidian') in either bundle (ADR-15)", () => {
+	it("prod bundle does NOT contain a dynamic import of 'obsidian'", async () => {
+		const outfile = makeTempOutfile();
+		await buildBundle({ outfile, devFlag: false });
+
+		const bundle = readFileSync(outfile, "utf-8");
+		expect(bundle).not.toMatch(DYNAMIC_IMPORT_OBSIDIAN_RE);
+	}, 60_000);
+
+	it("dev bundle does NOT contain a dynamic import of 'obsidian'", async () => {
+		const outfile = makeTempOutfile();
+		await buildBundle({ outfile, devFlag: true });
+
+		const bundle = readFileSync(outfile, "utf-8");
+		expect(bundle).not.toMatch(DYNAMIC_IMPORT_OBSIDIAN_RE);
+	}, 60_000);
+});
