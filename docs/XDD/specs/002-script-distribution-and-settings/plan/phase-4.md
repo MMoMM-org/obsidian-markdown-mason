@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: Settings UI & Command Management"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 4
 ---
@@ -54,7 +54,7 @@ This phase delivers the user-facing surface: the segmented settings, script card
   4. Validate: new `test/scripts/commandManager.test.ts`; lint; types.
   - Success: command lifecycle decoupled from enable + cleaned up `[ref: PRD/F9]`; stale command fails safe `[ref: PRD/F9]`.
 
-- [ ] **T4.4 Commands tab + "Run script…" launcher** `[activity: frontend-ui]` `[parallel: true]`
+- [x] **T4.4 Commands tab + "Run script…" launcher** `[activity: frontend-ui]` `[parallel: true]`
 
   1. Prime: Read the Commands-tab wireframe + launcher rule `[ref: SDD/User Interface & UX]`.
   2. Test (RED): Commands tab lists each **enabled** script with a "Create command" toggle (bound to CommandManager); built-in "Mason: Run script…" opens a modal listing **only Active** scripts; selecting one runs it via `ScriptRunner` with `source:"command"`; disabled/blocked never listed.
@@ -62,6 +62,6 @@ This phase delivers the user-facing surface: the segmented settings, script card
   4. Validate: new UI tests; `npm run compliance`; lint; types.
   - Success: opt-in commands + launcher lists Active only `[ref: PRD/F9]`.
 
-- [ ] **T4.5 Phase Validation** `[activity: validate]`
+- [x] **T4.5 Phase Validation** `[activity: validate]`
 
   - Run all Phase 4 tests; `npm run lint`; `npm run compliance`. Manually verify (dev vault) the four tabs render and a Blocked card shows reason+recovery.
