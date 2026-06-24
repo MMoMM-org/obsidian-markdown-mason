@@ -38,7 +38,8 @@ immutable set of scripts. No moving branches, no background polling.
      `DevDirAdapter` import and all `if (__MASON_DEV__)` branches (ADR-15).
    - The curated script bodies in `catalog/dist/*.cjs` are NOT compiled into
      `main.js`. They are distributed via the catalog and materialized into the
-     vault at runtime.
+     vault at runtime. The old paste autodetect `parsers/detect.ts` was retired
+     in T5.2 (ADR-16) and is not compiled into `main.js`.
    - The resulting `main.js` is minified with no inline sourcemaps.
 
 5. **Run checks.** Confirm all of the following pass before tagging:
@@ -76,9 +77,11 @@ export const PINNED_REF = "0000000000000000000000000000000000000000"; // placeho
 
 At release time, `PINNED_REF` is replaced with the real 40-char catalog
 commit SHA and the plugin is rebuilt. The SHA is compiled into the production
-bundle as a string literal. The `requestUrlAdapter` constructs all catalog
-fetch URLs as `${RAW_BASE}/${PINNED_REF}/dist/…` — pointing at immutable
-content, never a moving branch.
+bundle as a string literal. The `requestUrlAdapter` constructs catalog fetch
+URLs as `${RAW_BASE}/${PINNED_REF}/index.json` for the index and
+`${RAW_BASE}/${PINNED_REF}/<entry.path>` for scripts (where `entry.path` is the
+script filename, e.g. `perplexity-app.cjs`), pointing at immutable content
+published to the vetted repo root, never a moving branch.
 
 The `catalog/build-catalog.mjs` build script has a parallel constant
 `PINNED_REF_PLACEHOLDER` that is written into `catalog/dist/index.json`'s
