@@ -806,6 +806,56 @@ describe("MasonSettingTab — T6.1 live resolver state map (Commands tab)", () =
 		expect(capturedGetState("perplexity-auto")).toEqual({ kind: "Active" });
 	});
 
+	it("W4 — renders Scripts then clicks Commands and calls clearCache before each resolveItems", async () => {
+		// This test asserts that switching from Scripts to Commands tab triggers
+		// resolver.clearCache() before each resolveItems call — preventing stale-cache
+		// state from the Scripts pass leaking into the Commands pass.
+		const resolver = makeFakeResolver({
+			"perplexity-auto": { kind: "Active" },
+			"perplexity-web": { kind: "Disabled" },
+		});
+
+		const plugin = makePlugin({ lifecycleResolver: resolver });
+		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
+		clearCapturedSettings();
+		await tab.display();
+
+		// Navigate to Scripts segment (triggers first resolveItems call via _renderScriptsSection).
+		// Use 5 ticks to ensure the async render chain completes and _rendering is cleared.
+		const scriptsButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Scripts");
+		clearCapturedSettings();
+		scriptsButton!._click();
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+
+		// At this point: clearCache called once, resolveItems called once (Scripts pass).
+		expect(resolver.clearCache).toHaveBeenCalledTimes(1);
+		expect(resolver.resolveItems).toHaveBeenCalledTimes(1);
+
+		// Navigate to Commands segment. Re-find button from the live (re-rendered) DOM.
+		const commandsButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Commands");
+		clearCapturedSettings();
+		commandsButton!._click();
+
+		// Drain microtasks for the async Commands render (5 ticks, matching heading-test pattern).
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+
+		// resolveItems must have been called twice (once for Scripts, once for Commands).
+		expect(resolver.resolveItems).toHaveBeenCalledTimes(2);
+
+		// clearCache must have been called twice — once before each resolveItems.
+		// Pre-W3-fix: clearCache is only called in _renderScriptsSection (count stays 1).
+		// Post-W3-fix: clearCache is also called in _renderCommandsSection (count reaches 2).
+		expect(resolver.clearCache).toHaveBeenCalledTimes(2);
+	});
+
 	it("getState falls back to Disabled for scripts not in the resolver's Active map", async () => {
 		const resolver = makeFakeResolver({
 			"perplexity-auto": { kind: "Active" },

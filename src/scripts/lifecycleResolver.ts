@@ -30,8 +30,8 @@
 // checksum check (step 6) determines Active vs Blocked(drift).
 // Document: "If manifest has no entry but file exists, version = okayed.version"
 //
-// INREFERENCE TO inCatalog WHEN OFFLINE
-// ---------------------------------------
+// inCatalog OFFLINE FALLBACK
+// --------------------------
 // We cannot know the true catalog contents when offline. As a display fallback,
 // inCatalog = (record.provenance === "curated"). This means:
 //   - curated scripts will continue to appear as "Available" or stay at their
@@ -139,27 +139,14 @@ export class LifecycleResolver {
 	 * Returns one ScriptItem per entry in records.
 	 */
 	async resolveItems(records: Record<string, ScriptRecord>): Promise<ScriptItem[]> {
-		// Pre-fetch catalog once
-		const catalogResult = await this._fetchIndexCached();
-		const online = catalogResult.ok;
+		// Pre-fetch catalog once so the cache is warm before per-entry delegation.
+		await this._fetchIndexCached();
 
 		const items: ScriptItem[] = [];
 
 		for (const [id, record] of Object.entries(records)) {
-			// Derive inCatalog and catalogVersion from already-cached result
-			let inCatalog: boolean;
-			let catalogVersion: number | undefined;
-
-			if (online) {
-				inCatalog = id in catalogResult.index.scripts;
-				catalogVersion = catalogResult.index.scripts[id]?.version;
-			} else {
-				inCatalog = record.provenance === "curated";
-				catalogVersion = undefined;
-			}
-
-			const local = await this._resolveLocal(id, record);
-			const input: EvaluateStateInput = { record, inCatalog, local, catalogVersion, online };
+			// Delegate to resolveInput — uses the already-cached index (no extra fetch).
+			const input = await this.resolveInput(id, record);
 			const state = evaluateState(input);
 
 			items.push({
@@ -170,7 +157,7 @@ export class LifecycleResolver {
 				state,
 				version: record.okayed?.version ?? 0,
 				provenance: record.provenance,
-				catalogVersion,
+				catalogVersion: input.catalogVersion,
 			});
 		}
 

@@ -338,6 +338,7 @@ export class MasonSettingTab extends PluginSettingTab {
 		let getState: StateResolver;
 
 		if (resolver !== undefined) {
+			resolver.clearCache();
 			const scripts = await this._plugin.store.getScripts();
 			const items = await resolver.resolveItems(scripts);
 			const stateMap = new Map(items.map((item) => [item.id, item.state]));

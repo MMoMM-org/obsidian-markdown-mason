@@ -185,6 +185,57 @@ describe("MaterializedFingerprintStore — remove", () => {
 });
 
 // ---------------------------------------------------------------------------
+// W2 — mkdir called before writeBinary when parent dir is absent (first write)
+// ---------------------------------------------------------------------------
+
+describe("MaterializedFingerprintStore — mkdir before writeBinary on first write", () => {
+	it("calls vault.mkdir with the parent dir BEFORE vault.writeBinary on the first setVersion", async () => {
+		const { vault } = makeFakeVault();
+
+		// Track call order so we can assert mkdir precedes writeBinary.
+		const callOrder: string[] = [];
+		(vault.mkdir as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+			callOrder.push("mkdir");
+		});
+		(vault.writeBinary as ReturnType<typeof vi.fn>).mockImplementation(async (path: string, data: ArrayBuffer) => {
+			callOrder.push("writeBinary");
+			// Actually store so subsequent getVersion works.
+			const store = (vault as unknown as { _store?: Map<string, string> })._store;
+			if (store) store.set(path, new TextDecoder().decode(data));
+		});
+
+		const fp = new MaterializedFingerprintStore(vault, MANIFEST_PATH);
+		await fp.setVersion("my-script", 1);
+
+		// mkdir must have been called.
+		expect(vault.mkdir).toHaveBeenCalledOnce();
+		// The directory passed to mkdir must be the parent of MANIFEST_PATH.
+		const expectedDir = MANIFEST_PATH.substring(0, MANIFEST_PATH.lastIndexOf("/"));
+		expect(vault.mkdir).toHaveBeenCalledWith(expectedDir);
+
+		// mkdir must appear BEFORE writeBinary in the call order.
+		const mkdirIdx = callOrder.indexOf("mkdir");
+		const writeIdx = callOrder.indexOf("writeBinary");
+		expect(mkdirIdx).toBeGreaterThanOrEqual(0);
+		expect(writeIdx).toBeGreaterThanOrEqual(0);
+		expect(mkdirIdx).toBeLessThan(writeIdx);
+	});
+
+	it("subsequent setVersion calls still do not throw even if mkdir is a no-op", async () => {
+		const { vault } = makeFakeVault();
+		const fp = new MaterializedFingerprintStore(vault, MANIFEST_PATH);
+
+		// First write: dir absent — mkdir creates it.
+		await fp.setVersion("script-a", 1);
+		// Second write: dir already exists — mkdir is a no-op; should not throw.
+		await expect(fp.setVersion("script-a", 2)).resolves.toBeUndefined();
+
+		const version = await fp.getVersion("script-a");
+		expect(version).toBe(2);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // Isolation: store path is the scripts dir, NEVER data.json
 // ---------------------------------------------------------------------------
 

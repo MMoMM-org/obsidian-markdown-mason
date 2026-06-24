@@ -96,6 +96,8 @@ export class MaterializedFingerprintStore implements FingerprintStore {
 	}
 
 	private async _writeManifest(manifest: Record<string, number>): Promise<void> {
+		const parentDir = this._manifestPath.substring(0, this._manifestPath.lastIndexOf("/"));
+		await this._vault.mkdir?.(parentDir);
 		const text = JSON.stringify(manifest);
 		const buf = new TextEncoder().encode(text).buffer;
 		await this._vault.writeBinary(this._manifestPath, buf);
