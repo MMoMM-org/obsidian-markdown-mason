@@ -54,6 +54,7 @@ const SEGMENTS: readonly Segment[] = ["General", "Scripts", "Commands", "Advance
 export class MasonSettingTab extends PluginSettingTab {
 	private readonly _plugin: MasonPlugin;
 	private _activeSegment: Segment = "General";
+	private _rendering: boolean = false;
 
 	constructor(app: App, plugin: MasonPlugin) {
 		super(app, plugin);
@@ -100,17 +101,24 @@ export class MasonSettingTab extends PluginSettingTab {
 
 	/**
 	 * Switch the active segment, re-render the content area.
-	 * Preserves the header and nav (only the section content is replaced).
+	 * Ignores clicks that arrive while a render is already in flight (early-return
+	 * guard — the in-flight render wins; the duplicate click is dropped).
 	 */
 	private async _selectSegment(containerEl: HTMLElement, segment: Segment): Promise<void> {
-		this._activeSegment = segment;
-		// Remove old content: everything after the nav (header + nav = first two children).
-		// We rebuild the content area by re-rendering the entire tab — this keeps the
-		// idempotency contract and keeps the implementation simple.
-		containerEl.empty();
-		new HeaderSection({ manifest: this._plugin.manifest }).render(containerEl);
-		this._renderSegmentNav(containerEl);
-		await this._renderSegment(containerEl, segment);
+		if (this._rendering) return;
+		this._rendering = true;
+		try {
+			this._activeSegment = segment;
+			// Full re-render: clear the container and rebuild header, nav, and the
+			// selected section. Simpler than partial DOM patching and preserves the
+			// idempotency contract.
+			containerEl.empty();
+			new HeaderSection({ manifest: this._plugin.manifest }).render(containerEl);
+			this._renderSegmentNav(containerEl);
+			await this._renderSegment(containerEl, segment);
+		} finally {
+			this._rendering = false;
+		}
 	}
 
 	/**

@@ -230,13 +230,20 @@ describe("MasonSettingTab — segment navigation", () => {
 		await tab.display();
 
 		// Navigate to Advanced first, then back to General.
+		// Drain microtasks between clicks so _rendering is cleared before the next click fires.
 		const advancedButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Advanced");
 		clearCapturedSettings();
 		advancedButton!._click();
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
 
 		const generalButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("General");
 		clearCapturedSettings();
 		generalButton!._click();
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
 
 		const settings = capturedSettings() as unknown as CapturedSetting[];
 
@@ -343,16 +350,18 @@ describe("MasonSettingTab — section headings", () => {
 		await tab.display();
 
 		// Check each segment produces setHeading()-marked headings.
+		// Drain microtasks after each click so _rendering is false before the next click.
+		// The Scripts segment has a 3-level async chain (click → _selectSegment →
+		// _renderSegment → _renderScriptsSection → getScripts), requiring three
+		// Promise.resolve() ticks to fully flush; one tick suffices for sync segments.
 		const allHeadings: string[] = [];
 		for (const label of ["General", "Scripts", "Commands", "Advanced"]) {
 			clearCapturedSettings();
 			const btn = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText(label);
-			if (label === "Scripts") {
-				btn!._click();
-				await Promise.resolve();
-			} else {
-				btn!._click();
-			}
+			btn!._click();
+			await Promise.resolve();
+			await Promise.resolve();
+			await Promise.resolve();
 			const captured = capturedSettings() as unknown as CapturedSetting[];
 			const headings = captured.filter((s) => s.isHeading);
 			for (const h of headings) {
@@ -634,6 +643,42 @@ describe("MasonSettings — numericOnly in OperationContext", () => {
 			settings: { ...DEFAULT_SETTINGS },
 		};
 		expect(ctx.settings.numericOnly).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// CONCURRENT RENDER GUARD — double-click on Scripts must not produce a torn tab
+// ---------------------------------------------------------------------------
+
+describe("MasonSettingTab — concurrent render guard", () => {
+	it("two synchronous clicks on Scripts produce exactly one valid Scripts view", async () => {
+		const plugin = makePlugin();
+		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
+		clearCapturedSettings();
+		await tab.display();
+
+		const scriptsButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Scripts");
+		expect(scriptsButton).toBeDefined();
+
+		// Fire two clicks synchronously — no await between them.
+		// Without a guard, the second click calls containerEl.empty() while the
+		// first render is suspended awaiting getScripts(), leaving a blank tab.
+		clearCapturedSettings();
+		scriptsButton!._click();
+		scriptsButton!._click();
+
+		// Drain microtasks — let both async renders complete.
+		await Promise.resolve();
+		await Promise.resolve();
+
+		const settings = capturedSettings() as unknown as CapturedSetting[];
+
+		// The Scripts heading must appear exactly once (no duplication, no blank).
+		const scriptsHeadings = settings.filter((s) => s.isHeading && s.name === "Scripts");
+		expect(scriptsHeadings).toHaveLength(1);
+
+		// The container must be non-empty: at least one setting must be rendered.
+		expect(settings.length).toBeGreaterThan(0);
 	});
 });
 
