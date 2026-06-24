@@ -357,13 +357,19 @@ export class Workspace {
 
 export class Plugin {
 	app: App;
+	manifest: { id: string; [key: string]: unknown };
 	private _registeredCleanups: Array<() => void> = [];
 	private _registeredEventRefs: EventRef[] = [];
 	private _savedData: unknown = undefined;
 	private _capturedCommands: CommandSpec[] = [];
 
-	constructor(app: App, _manifest?: unknown) {
+	constructor(app: App, manifest?: { id?: string; [key: string]: unknown }) {
 		this.app = app;
+		// Provide a stable manifest with a default id so tests that need manifest.id
+		// (e.g. CommandManager which calls removeCommand with the full prefixed id)
+		// work without needing to supply a real manifest. Callers may override after
+		// construction: plugin.manifest.id = "my-plugin".
+		this.manifest = { id: "markdown-mason", ...manifest };
 	}
 
 	async loadData(): Promise<unknown> {
@@ -382,9 +388,24 @@ export class Plugin {
 		this._registeredCleanups.push(cb);
 	}
 
-	/** Captures the command descriptor for test inspection. */
-	addCommand(cmd: CommandSpec): void {
+	/** Captures the command descriptor for test inspection. Returns the registered command. */
+	addCommand(cmd: CommandSpec): CommandSpec {
 		this._capturedCommands.push(cmd);
+		return cmd;
+	}
+
+	/**
+	 * Removes a previously-registered command by its FULL prefixed id
+	 * (e.g. "markdown-mason:my-command"). Matches on either the prefixed id OR
+	 * the raw id to stay forward-compatible with both calling conventions.
+	 */
+	removeCommand(fullId: string): void {
+		const idx = this._capturedCommands.findIndex(
+			c => `${this.manifest.id}:${c.id}` === fullId || c.id === fullId,
+		);
+		if (idx !== -1) {
+			this._capturedCommands.splice(idx, 1);
+		}
 	}
 
 	/** Test helper: all commands registered via addCommand(). */

@@ -30,7 +30,7 @@ phase: 4
 
 This phase delivers the user-facing surface: the segmented settings, script cards with contextual actions, command management, and the run launcher.
 
-- [ ] **T4.1 Segmented settings shell** `[activity: frontend-ui]`
+- [x] **T4.1 Segmented settings shell** `[activity: frontend-ui]`
 
   1. Prime: Read the IA + segmented-nav decision `[ref: SDD/User Interface & UX; SDD/ADR-17]`; current `settingsTab.ts` render flow.
   2. Test (RED): renders exactly four segments (General · Scripts · Commands · Advanced); selecting a segment shows only that section; General/Advanced retain v0.1 controls; sentence-case; no `innerHTML`.

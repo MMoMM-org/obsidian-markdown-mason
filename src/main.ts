@@ -19,6 +19,7 @@ import { ScriptStore } from "./scripts/store";
 import { buildPasteChain } from "./scripts/paste/buildPasteChain";
 import type { LoadedScript } from "./scripts/paste/buildPasteChain";
 import { MasonSettingTab } from "./ui/settingsTab";
+import { CommandManager } from "./scripts/commandManager";
 
 // Re-export so consumers that import from "src/main" still resolve.
 export { DEFAULT_SETTINGS, type MasonSettings };
@@ -74,6 +75,14 @@ export class MarkdownMasonPlugin extends Plugin {
 	declare store: ScriptStore;
 
 	/**
+	 * Command manager — owns per-script Obsidian command registration and cleanup.
+	 * Exposed so the Scripts settings tab (T4.2) and Commands tab (T4.4) can call
+	 * register/unregister without importing Plugin directly.
+	 * Initialised in _initStore(); safe to call after onLayoutReady.
+	 */
+	declare commandManager: CommandManager;
+
+	/**
 	 * Test seam for paste AND selection commands.
 	 * Set this property before triggering a command in tests.
 	 * Undefined in production — all defaults apply.
@@ -89,7 +98,7 @@ export class MarkdownMasonPlugin extends Plugin {
 	}
 
 	/**
-	 * Initialise the ScriptStore with the synced data.json port.
+	 * Initialise the ScriptStore and CommandManager with the synced data.json port.
 	 * Called once during onload, after settings are loaded.
 	 */
 	private _initStore(): void {
@@ -98,6 +107,15 @@ export class MarkdownMasonPlugin extends Plugin {
 			save: (data: unknown): Promise<void> => this.saveData(data),
 		};
 		this.store = new ScriptStore(pluginDataPort);
+		this.commandManager = new CommandManager(
+			{
+				addCommand: (spec) => this.addCommand(spec as Parameters<typeof this.addCommand>[0]),
+				removeCommand: (fullId: string) => this.removeCommand(fullId),
+				pluginId: this.manifest.id,
+			},
+			this.store,
+			this.settings,
+		);
 	}
 
 	/**
