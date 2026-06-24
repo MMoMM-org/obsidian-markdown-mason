@@ -154,6 +154,7 @@ describe("Scripts tab — status pills", () => {
 		{ state: { kind: "Available" }, pill: "Available" },
 		{ state: { kind: "Materializing" }, pill: "Materializing" },
 		{ state: { kind: "Blocked", reason: "drift" }, pill: "Blocked" },
+		{ state: { kind: "Absent" }, pill: "Not installed" },
 	];
 
 	for (const { state, pill } of cases) {
@@ -203,7 +204,7 @@ describe("Scripts tab — enable/disable toggle", () => {
 // ---------------------------------------------------------------------------
 
 describe("Scripts tab — Blocked cards", () => {
-	it("source-missing shows a human reason and a re-import recovery that drives viewSource", () => {
+	it("source-missing shows a human reason and a re-import recovery that drives importFromVault", () => {
 		const ops = makeOps();
 		const container = render(
 			[
@@ -223,7 +224,7 @@ describe("Scripts tab — Blocked cards", () => {
 		const recovery = container._findButtonByText("Re-import");
 		expect(recovery).toBeDefined();
 		recovery!._click();
-		expect(ops.viewSource).toHaveBeenCalledWith("old");
+		expect(ops.importFromVault).toHaveBeenCalled();
 	});
 
 	it("drift shows a reason and a Retry fetch recovery that drives ops.retry", () => {
@@ -246,6 +247,18 @@ describe("Scripts tab — Blocked cards", () => {
 		);
 		container._findButtonByText("Retry fetch")!._click();
 		expect(ops.retry).toHaveBeenCalledWith("o");
+	});
+
+	it("checksum-mismatch shows a Retry fetch recovery that drives ops.retry", () => {
+		const ops = makeOps();
+		const container = render(
+			[makeItem({ id: "cs", state: { kind: "Blocked", reason: "checksum-mismatch" } })],
+			ops,
+		);
+		const recovery = container._findButtonByText("Retry fetch");
+		expect(recovery).toBeDefined();
+		recovery!._click();
+		expect(ops.retry).toHaveBeenCalledWith("cs");
 	});
 });
 

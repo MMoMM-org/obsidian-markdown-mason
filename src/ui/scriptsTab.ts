@@ -258,8 +258,8 @@ function blockedRecovery(
 	reason: BlockedReason,
 ): { label: string; action: (id: string, ops: LifecycleOps) => void | Promise<void> } {
 	if (reason === "source-missing") {
-		// "Re-import" reveals the (missing) vault source so the user can fix it.
-		return { label: "Re-import", action: (id, ops) => ops.viewSource(id) };
+		// "Re-import" re-supplies the missing vault source via the import flow.
+		return { label: "Re-import", action: (_id, ops) => ops.importFromVault() };
 	}
 	// drift / offline / checksum-mismatch → re-fetch from the catalog.
 	return { label: "Retry fetch", action: (id, ops) => ops.retry(id) };
