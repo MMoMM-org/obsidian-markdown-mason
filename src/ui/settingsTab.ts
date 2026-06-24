@@ -20,6 +20,14 @@ export interface MasonPlugin extends Plugin {
 }
 
 // ---------------------------------------------------------------------------
+// Segment labels — the four tabs in the segmented control.
+// ---------------------------------------------------------------------------
+
+type Segment = "General" | "Scripts" | "Commands" | "Advanced";
+
+const SEGMENTS: readonly Segment[] = ["General", "Scripts", "Commands", "Advanced"];
+
+// ---------------------------------------------------------------------------
 // MasonSettingTab
 //
 // COMMUNITY COMPLIANCE
@@ -34,13 +42,18 @@ export interface MasonPlugin extends Plugin {
 /**
  * Settings tab for Markdown Mason.
  *
- * Renders three sections:
+ * Renders a four-segment control (General · Scripts · Commands · Advanced)
+ * in a single PluginSettingTab. Only the active segment's controls are shown.
+ *
+ * Segments:
  *   1. General  — resourcesName text field, numericOnly toggle
- *   2. Scripts  — per-script enable toggle + import button
- *   3. Advanced — debugLogging toggle
+ *   2. Scripts  — per-script enable toggle + import button (transitional)
+ *   3. Commands — placeholder heading (T4.4 seam)
+ *   4. Advanced — debugLogging toggle
  */
 export class MasonSettingTab extends PluginSettingTab {
 	private readonly _plugin: MasonPlugin;
+	private _activeSegment: Segment = "General";
 
 	constructor(app: App, plugin: MasonPlugin) {
 		super(app, plugin);
@@ -50,16 +63,74 @@ export class MasonSettingTab extends PluginSettingTab {
 	/**
 	 * Build (or rebuild) the settings UI.
 	 * Clears containerEl first so repeated calls do not duplicate controls.
-	 * Async because the Scripts section reads from the store.
+	 * Renders the header, segment nav, then the active segment's content.
 	 */
 	override async display(): Promise<void> {
 		const { containerEl } = this;
 		containerEl.empty();
 
 		new HeaderSection({ manifest: this._plugin.manifest }).render(containerEl);
-		this._renderGeneralSection(containerEl);
-		await this._renderScriptsSection(containerEl);
-		this._renderAdvancedSection(containerEl);
+		this._renderSegmentNav(containerEl);
+		await this._renderSegment(containerEl, this._activeSegment);
+	}
+
+	// -------------------------------------------------------------------------
+	// Segment navigation
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Render the segmented control nav bar.
+	 * Each segment label becomes a <button> element with a click handler
+	 * that switches the active section and re-renders the content area.
+	 */
+	private _renderSegmentNav(containerEl: HTMLElement): void {
+		const nav = containerEl.createEl("div", { cls: "mason-segment-nav" });
+
+		for (const segment of SEGMENTS) {
+			const btn = nav.createEl("button");
+			btn.setText(segment);
+			if (segment === this._activeSegment) {
+				btn.addClass("mason-segment-active");
+			}
+			btn.addEventListener("click", () => {
+				void this._selectSegment(containerEl, segment);
+			});
+		}
+	}
+
+	/**
+	 * Switch the active segment, re-render the content area.
+	 * Preserves the header and nav (only the section content is replaced).
+	 */
+	private async _selectSegment(containerEl: HTMLElement, segment: Segment): Promise<void> {
+		this._activeSegment = segment;
+		// Remove old content: everything after the nav (header + nav = first two children).
+		// We rebuild the content area by re-rendering the entire tab — this keeps the
+		// idempotency contract and keeps the implementation simple.
+		containerEl.empty();
+		new HeaderSection({ manifest: this._plugin.manifest }).render(containerEl);
+		this._renderSegmentNav(containerEl);
+		await this._renderSegment(containerEl, segment);
+	}
+
+	/**
+	 * Dispatch to the correct section renderer for the given segment.
+	 */
+	private async _renderSegment(containerEl: HTMLElement, segment: Segment): Promise<void> {
+		switch (segment) {
+			case "General":
+				this._renderGeneralSection(containerEl);
+				break;
+			case "Scripts":
+				await this._renderScriptsSection(containerEl);
+				break;
+			case "Commands":
+				this._renderCommandsSection(containerEl);
+				break;
+			case "Advanced":
+				this._renderAdvancedSection(containerEl);
+				break;
+		}
 	}
 
 	// -------------------------------------------------------------------------
@@ -151,6 +222,15 @@ export class MasonSettingTab extends PluginSettingTab {
 						});
 				});
 		}
+	}
+
+	// -------------------------------------------------------------------------
+	// Commands section — T4.4 seam
+	// -------------------------------------------------------------------------
+
+	/** Render the Commands section placeholder heading (T4.4 seam). */
+	private _renderCommandsSection(containerEl: HTMLElement): void {
+		new Setting(containerEl).setName("Commands").setHeading();
 	}
 
 	// -------------------------------------------------------------------------

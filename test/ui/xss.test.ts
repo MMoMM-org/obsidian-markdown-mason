@@ -46,8 +46,8 @@ import type { ScriptRecord } from "../../src/scripts/store";
 import {
 	capturedSettings,
 	clearCapturedSettings,
+	MockHTMLElement,
 } from "../__mocks__/obsidian";
-import { MockHTMLElement } from "../__mocks__/obsidian";
 
 // ---------------------------------------------------------------------------
 // Imports resolved after module alias is set up by vitest
@@ -135,7 +135,8 @@ function makePluginWithPayload(sourcePayload: string, idPayload: string = "safe-
 }
 
 /**
- * Render the settings tab with the given plugin double.
+ * Render the settings tab with the given plugin double and navigate to the
+ * Scripts segment, so per-script rows are captured.
  * Returns the captured settings list (one entry per Setting() call).
  */
 async function renderTabWithPlugin(
@@ -144,6 +145,12 @@ async function renderTabWithPlugin(
 	clearCapturedSettings();
 	const tab = new MasonSettingTab(plugin.app as never, plugin as never);
 	await tab.display();
+	// Navigate to the Scripts segment so script rows are captured.
+	const containerEl = tab.containerEl as unknown as MockHTMLElement;
+	const scriptsButton = containerEl._findButtonByText("Scripts");
+	clearCapturedSettings();
+	scriptsButton!._click();
+	await Promise.resolve();
 	return capturedSettings() as Array<{ name: string; desc: string; isHeading: boolean }>;
 }
 
@@ -268,11 +275,10 @@ describe("XSS — settings tab: hostile source field rendered as text", () => {
 			const plugin = makePluginWithPayload(payload);
 			const settings = await renderTabWithPlugin(plugin);
 
-			// Find the script row in the Scripts section: it appears between the
-			// "Scripts" heading and the "Advanced" heading, and has toggle + button controls.
+			// Find the script row in the Scripts section. Since renderTabWithPlugin
+			// now navigates to the Scripts segment, only Scripts settings are captured.
 			const scriptsIdx = settings.findIndex((s) => s.isHeading && s.name === "Scripts");
-			const advancedIdx = settings.findIndex((s) => s.isHeading && s.name === "Advanced");
-			const scriptSection = settings.slice(scriptsIdx + 1, advancedIdx);
+			const scriptSection = settings.slice(scriptsIdx + 1);
 
 			// The script row for the hostile manifest entry: it has a non-empty desc
 			// (set to `Source: ${source}  ·  v${version}`).
@@ -309,6 +315,13 @@ describe("XSS — settings tab: hostile source field rendered as text", () => {
 		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
 		await tab.display();
 
+		// Navigate to the Scripts segment to render script rows.
+		const containerEl = tab.containerEl as unknown as MockHTMLElement;
+		const scriptsButton = containerEl._findButtonByText("Scripts");
+		clearCapturedSettings();
+		scriptsButton!._click();
+		await Promise.resolve();
+
 		// The containerEl in the mock is a MockHTMLElement.
 		// _collectText() recursively collects all text set via setText / createEl({text}).
 		// Because Setting.setDesc stores the string verbatim (and the mock stores it as
@@ -316,10 +329,9 @@ describe("XSS — settings tab: hostile source field rendered as text", () => {
 		// desc field holds the payload literally.
 		const settings = capturedSettings() as Array<{ name: string; desc: string; isHeading: boolean }>;
 
-		// Locate the script row: between the Scripts and Advanced headings.
+		// Locate the script row: after the Scripts heading.
 		const scriptsIdx = settings.findIndex((s) => s.isHeading && s.name === "Scripts");
-		const advancedIdx = settings.findIndex((s) => s.isHeading && s.name === "Advanced");
-		const scriptSection = settings.slice(scriptsIdx + 1, advancedIdx);
+		const scriptSection = settings.slice(scriptsIdx + 1);
 		const scriptRow = scriptSection.find((s) => s.desc.length > 0);
 		expect(scriptRow).toBeDefined();
 

@@ -1,8 +1,17 @@
 /**
- * T6.1 — MasonSettingTab unit tests (RED → GREEN).
+ * T4.1 — MasonSettingTab segmented shell tests (RED → GREEN).
  *
- * Exercises the public display() surface via the mock Setting builder.
- * All assertions target OBSERVABLE BEHAVIOUR, not implementation internals.
+ * Verifies the four-segment settings tab introduced in T4.1.
+ *
+ * Observable behaviour contracts:
+ *   1. Four segment buttons rendered: General · Scripts · Commands · Advanced
+ *   2. Default segment (General) renders its controls on display()
+ *   3. Selecting a segment re-renders and shows ONLY that section's Settings
+ *   4. General retains v0.1 controls (resourcesName text + numericOnly toggle)
+ *   5. Advanced retains debugLogging toggle
+ *   6. All setName strings follow sentence case
+ *   7. No innerHTML / outerHTML / insertAdjacentHTML usage
+ *   8. display() is idempotent (calling twice yields same count for default segment)
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -25,6 +34,7 @@ import type { ScriptRecord } from "../../src/scripts/store";
 import {
 	capturedSettings,
 	clearCapturedSettings,
+	MockHTMLElement,
 } from "../__mocks__/obsidian";
 
 // ---------------------------------------------------------------------------
@@ -137,30 +147,223 @@ async function renderTab(plugin: ReturnType<typeof makePlugin>): Promise<Capture
 }
 
 // ---------------------------------------------------------------------------
+// SEGMENT NAVIGATION
+// ---------------------------------------------------------------------------
+
+describe("MasonSettingTab — segment navigation", () => {
+	it("renders exactly four segment buttons: General, Scripts, Commands, Advanced", async () => {
+		const plugin = makePlugin();
+		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
+		clearCapturedSettings();
+		await tab.display();
+
+		// The segment buttons are rendered as <button> elements on containerEl.
+		const buttons = (tab.containerEl as unknown as MockHTMLElement)._findAllButtons();
+		const labels = buttons.map((b) => b._text);
+
+		expect(labels).toContain("General");
+		expect(labels).toContain("Scripts");
+		expect(labels).toContain("Commands");
+		expect(labels).toContain("Advanced");
+	});
+
+	it("default segment (General) shows General controls after display()", async () => {
+		const plugin = makePlugin();
+		const settings = await renderTab(plugin);
+
+		// General section must have a text control for resourcesName.
+		const resourcesSetting = settings.find(
+			(s) => !s.isHeading && s.textControls.length > 0 && s.name.toLowerCase().includes("resources"),
+		);
+		expect(resourcesSetting).toBeDefined();
+
+		// General section must have a toggle for numericOnly.
+		const numericSetting = settings.find(
+			(s) => !s.isHeading && s.toggleControls.length > 0 && s.name.toLowerCase().includes("numeric"),
+		);
+		expect(numericSetting).toBeDefined();
+	});
+
+	it("default segment (General) does NOT show debugLogging toggle", async () => {
+		const plugin = makePlugin();
+		const settings = await renderTab(plugin);
+
+		// Advanced's debugLogging control must not be present in the default General view.
+		const debugSetting = settings.find(
+			(s) => !s.isHeading && s.toggleControls.length > 0 && s.name.toLowerCase().includes("debug"),
+		);
+		expect(debugSetting).toBeUndefined();
+	});
+
+	it("selecting the Advanced segment shows only debugLogging toggle, not resourcesName", async () => {
+		const plugin = makePlugin();
+		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
+		clearCapturedSettings();
+		await tab.display();
+
+		// Click the "Advanced" segment button.
+		const advancedButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Advanced");
+		expect(advancedButton).toBeDefined();
+
+		clearCapturedSettings();
+		advancedButton!._click();
+
+		const settings = capturedSettings() as unknown as CapturedSetting[];
+
+		// debugLogging toggle must appear.
+		const debugSetting = settings.find(
+			(s) => !s.isHeading && s.toggleControls.length > 0 && s.name.toLowerCase().includes("debug"),
+		);
+		expect(debugSetting).toBeDefined();
+
+		// resourcesName text control must NOT appear.
+		const resourcesSetting = settings.find(
+			(s) => !s.isHeading && s.textControls.length > 0 && s.name.toLowerCase().includes("resources"),
+		);
+		expect(resourcesSetting).toBeUndefined();
+	});
+
+	it("selecting the General segment shows resourcesName, not debugLogging", async () => {
+		const plugin = makePlugin();
+		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
+		clearCapturedSettings();
+		await tab.display();
+
+		// Navigate to Advanced first, then back to General.
+		const advancedButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Advanced");
+		clearCapturedSettings();
+		advancedButton!._click();
+
+		const generalButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("General");
+		clearCapturedSettings();
+		generalButton!._click();
+
+		const settings = capturedSettings() as unknown as CapturedSetting[];
+
+		// resourcesName text control must appear.
+		const resourcesSetting = settings.find(
+			(s) => !s.isHeading && s.textControls.length > 0 && s.name.toLowerCase().includes("resources"),
+		);
+		expect(resourcesSetting).toBeDefined();
+
+		// debugLogging must NOT appear.
+		const debugSetting = settings.find(
+			(s) => !s.isHeading && s.toggleControls.length > 0 && s.name.toLowerCase().includes("debug"),
+		);
+		expect(debugSetting).toBeUndefined();
+	});
+
+	it("selecting the Commands segment shows a Commands heading and no General or Advanced controls", async () => {
+		const plugin = makePlugin();
+		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
+		clearCapturedSettings();
+		await tab.display();
+
+		const commandsButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Commands");
+		expect(commandsButton).toBeDefined();
+
+		clearCapturedSettings();
+		commandsButton!._click();
+
+		const settings = capturedSettings() as unknown as CapturedSetting[];
+
+		// Commands heading must appear.
+		const commandsHeading = settings.find((s) => s.isHeading && s.name === "Commands");
+		expect(commandsHeading).toBeDefined();
+
+		// resourcesName must NOT appear.
+		const resourcesSetting = settings.find(
+			(s) => !s.isHeading && s.textControls.length > 0 && s.name.toLowerCase().includes("resources"),
+		);
+		expect(resourcesSetting).toBeUndefined();
+
+		// debugLogging must NOT appear.
+		const debugSetting = settings.find(
+			(s) => !s.isHeading && s.toggleControls.length > 0 && s.name.toLowerCase().includes("debug"),
+		);
+		expect(debugSetting).toBeUndefined();
+	});
+
+	it("selecting the Scripts segment shows script rows, not General or Advanced controls", async () => {
+		const plugin = makePlugin();
+		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
+		clearCapturedSettings();
+		await tab.display();
+
+		const scriptsButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Scripts");
+		expect(scriptsButton).toBeDefined();
+
+		clearCapturedSettings();
+		// Scripts section is async — its render method awaits getScripts().
+		// The click handler must schedule or await the async render.
+		scriptsButton!._click();
+
+		// Allow async render to complete — the click handler queues a microtask.
+		await Promise.resolve();
+
+		const settings = capturedSettings() as unknown as CapturedSetting[];
+
+		// Scripts heading must appear.
+		const scriptsHeading = settings.find((s) => s.isHeading && s.name === "Scripts");
+		expect(scriptsHeading).toBeDefined();
+
+		// resourcesName must NOT appear.
+		const resourcesSetting = settings.find(
+			(s) => !s.isHeading && s.textControls.length > 0 && s.name.toLowerCase().includes("resources"),
+		);
+		expect(resourcesSetting).toBeUndefined();
+	});
+});
+
+// ---------------------------------------------------------------------------
 // SECTION HEADINGS
 // ---------------------------------------------------------------------------
 
 describe("MasonSettingTab — section headings", () => {
-	it("renders three headings: General, Scripts, Advanced", async () => {
+	it("renders the General heading when General segment is active", async () => {
 		const plugin = makePlugin();
 		const settings = await renderTab(plugin);
 
 		const headings = settings.filter((s) => s.isHeading).map((s) => s.name);
 		expect(headings).toContain("General");
-		expect(headings).toContain("Scripts");
-		expect(headings).toContain("Advanced");
+	});
+
+	it("does not render the Advanced heading when General segment is active", async () => {
+		const plugin = makePlugin();
+		const settings = await renderTab(plugin);
+
+		const headings = settings.filter((s) => s.isHeading).map((s) => s.name);
+		expect(headings).not.toContain("Advanced");
 	});
 
 	it("all headings use setHeading() not a bare h2 tag", async () => {
 		const plugin = makePlugin();
-		const settings = await renderTab(plugin);
+		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
+		clearCapturedSettings();
+		await tab.display();
 
-		const headings = settings.filter((s) => s.isHeading);
-		expect(headings.length).toBeGreaterThanOrEqual(3);
-		// Each heading must have been marked via setHeading() — confirmed by isHeading flag
-		for (const h of headings) {
-			expect(h.isHeading).toBe(true);
+		// Check each segment produces setHeading()-marked headings.
+		const allHeadings: string[] = [];
+		for (const label of ["General", "Scripts", "Commands", "Advanced"]) {
+			clearCapturedSettings();
+			const btn = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText(label);
+			if (label === "Scripts") {
+				btn!._click();
+				await Promise.resolve();
+			} else {
+				btn!._click();
+			}
+			const captured = capturedSettings() as unknown as CapturedSetting[];
+			const headings = captured.filter((s) => s.isHeading);
+			for (const h of headings) {
+				expect(h.isHeading).toBe(true);
+				allHeadings.push(h.name);
+			}
 		}
+		expect(allHeadings).toContain("General");
+		expect(allHeadings).toContain("Scripts");
+		expect(allHeadings).toContain("Commands");
+		expect(allHeadings).toContain("Advanced");
 	});
 });
 
@@ -171,21 +374,29 @@ describe("MasonSettingTab — section headings", () => {
 describe("MasonSettingTab — sentence case compliance", () => {
 	it("all setName strings follow sentence case (only first word capitalised)", async () => {
 		const plugin = makePlugin();
-		const settings = await renderTab(plugin);
+		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
 
-		// A Title-Case violation: two or more consecutive words where a non-first word
-		// starts with an uppercase letter (excluding ALL-CAPS abbreviations like "XSS").
-		// Pattern: matches any word after the first that starts with an uppercase letter
-		// followed by a lowercase letter (e.g. "Section Name" → "Name" matches).
+		// Check all four segments.
 		const titleCasePattern = /^.+\s+[A-Z][a-z]/;
-
-		for (const s of settings) {
-			// Skip headings — they may be single words like "General"
-			if (s.isHeading) continue;
-			expect(
-				s.name,
-				`Setting name "${s.name}" appears to be Title Case — use sentence case`,
-			).not.toMatch(titleCasePattern);
+		for (const label of ["General", "Scripts", "Commands", "Advanced"]) {
+			clearCapturedSettings();
+			await tab.display();
+			const btn = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText(label);
+			clearCapturedSettings();
+			if (label === "Scripts") {
+				btn!._click();
+				await Promise.resolve();
+			} else {
+				btn!._click();
+			}
+			const captured = capturedSettings() as unknown as CapturedSetting[];
+			for (const s of captured) {
+				if (s.isHeading) continue;
+				expect(
+					s.name,
+					`Setting name "${s.name}" in ${label} segment appears to be Title Case — use sentence case`,
+				).not.toMatch(titleCasePattern);
+			}
 		}
 	});
 });
@@ -254,14 +465,28 @@ describe("MasonSettingTab — General section", () => {
 });
 
 // ---------------------------------------------------------------------------
-// SCRIPTS SECTION (transitional — store-agnostic cases active)
+// SCRIPTS SECTION (transitional — accessible via segment click)
 // ---------------------------------------------------------------------------
 
 // Three cases that work against the migrated getScripts/ScriptRecord store double.
 describe("MasonSettingTab — Scripts section (transitional)", () => {
+	async function renderScriptsSegment(plugin: ReturnType<typeof makePlugin>): Promise<CapturedSetting[]> {
+		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
+		clearCapturedSettings();
+		await tab.display();
+
+		// Select the Scripts segment.
+		const scriptsButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Scripts");
+		clearCapturedSettings();
+		scriptsButton!._click();
+		await Promise.resolve();
+
+		return capturedSettings() as unknown as CapturedSetting[];
+	}
+
 	it("lists each installed script from the store", async () => {
 		const plugin = makePlugin();
-		const allSettings = await renderTab(plugin);
+		const allSettings = await renderScriptsSegment(plugin);
 
 		// Find settings that correspond to scripts (have toggles or buttons, non-heading)
 		const scriptSettings = allSettings.filter(
@@ -274,24 +499,21 @@ describe("MasonSettingTab — Scripts section (transitional)", () => {
 
 	it("each script row has an enable/disable toggle", async () => {
 		const plugin = makePlugin();
-		const allSettings = await renderTab(plugin);
+		const allSettings = await renderScriptsSegment(plugin);
 
-		// Isolate the scripts section: settings between the "Scripts" heading and "Advanced"
+		// Isolate the scripts section: settings between the "Scripts" heading and end
 		const scriptsHeadingIdx = allSettings.findIndex((s) => s.isHeading && s.name === "Scripts");
-		const advancedHeadingIdx = allSettings.findIndex((s) => s.isHeading && s.name === "Advanced");
-
-		const scriptSection = allSettings.slice(scriptsHeadingIdx + 1, advancedHeadingIdx);
+		const scriptSection = allSettings.slice(scriptsHeadingIdx + 1);
 		const toggleRows = scriptSection.filter((s) => s.toggleControls.length > 0);
 		expect(toggleRows.length).toBeGreaterThanOrEqual(2);
 	});
 
 	it("each script row has an import control (button)", async () => {
 		const plugin = makePlugin();
-		const allSettings = await renderTab(plugin);
+		const allSettings = await renderScriptsSegment(plugin);
 
 		const scriptsHeadingIdx = allSettings.findIndex((s) => s.isHeading && s.name === "Scripts");
-		const advancedHeadingIdx = allSettings.findIndex((s) => s.isHeading && s.name === "Advanced");
-		const scriptSection = allSettings.slice(scriptsHeadingIdx + 1, advancedHeadingIdx);
+		const scriptSection = allSettings.slice(scriptsHeadingIdx + 1);
 
 		const buttonRows = scriptSection.filter((s) => s.buttonControls.length > 0);
 		expect(buttonRows.length).toBeGreaterThanOrEqual(2);
@@ -350,14 +572,23 @@ describe.skip("MasonSettingTab — Scripts section (obsolete v0.1 assertions)", 
 // ---------------------------------------------------------------------------
 
 describe("MasonSettingTab — Advanced section", () => {
+	async function renderAdvancedSegment(plugin: ReturnType<typeof makePlugin>): Promise<CapturedSetting[]> {
+		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
+		clearCapturedSettings();
+		await tab.display();
+
+		const advancedButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Advanced");
+		clearCapturedSettings();
+		advancedButton!._click();
+
+		return capturedSettings() as unknown as CapturedSetting[];
+	}
+
 	it("renders a toggle control for debugLogging", async () => {
 		const plugin = makePlugin({ debugLogging: false });
-		const settings = await renderTab(plugin);
+		const settings = await renderAdvancedSegment(plugin);
 
-		const advancedHeadingIdx = settings.findIndex((s) => s.isHeading && s.name === "Advanced");
-		const advancedSection = settings.slice(advancedHeadingIdx + 1);
-
-		const debugToggle = advancedSection.find(
+		const debugToggle = settings.find(
 			(s) => s.toggleControls.length > 0 && s.name.toLowerCase().includes("debug"),
 		);
 		expect(debugToggle).toBeDefined();
@@ -366,12 +597,9 @@ describe("MasonSettingTab — Advanced section", () => {
 
 	it("debugLogging toggle onChange updates settings + calls saveSettings", async () => {
 		const plugin = makePlugin({ debugLogging: false });
-		const settings = await renderTab(plugin);
+		const settings = await renderAdvancedSegment(plugin);
 
-		const advancedHeadingIdx = settings.findIndex((s) => s.isHeading && s.name === "Advanced");
-		const advancedSection = settings.slice(advancedHeadingIdx + 1);
-
-		const debugToggle = advancedSection.find(
+		const debugToggle = settings.find(
 			(s) => s.toggleControls.length > 0 && s.name.toLowerCase().includes("debug"),
 		);
 		expect(debugToggle).toBeDefined();
