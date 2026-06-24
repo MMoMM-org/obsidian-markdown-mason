@@ -39,7 +39,7 @@ immutable set of scripts. No moving branches, no background polling.
    - The curated script bodies in `catalog/dist/*.cjs` are NOT compiled into
      `main.js`. They are distributed via the catalog and materialized into the
      vault at runtime. The old paste autodetect `parsers/detect.ts` was retired
-     in T5.2 (ADR-16) and is not compiled into `main.js`.
+     in T3.3 (ADR-16) and is not compiled into `main.js`.
    - The resulting `main.js` is minified with no inline sourcemaps.
 
 5. **Run checks.** Confirm all of the following pass before tagging:
