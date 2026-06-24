@@ -5,8 +5,8 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-06-23 |
-| **Current Phase** | Ready |
-| **Last Updated** | 2026-06-23 |
+| **Current Phase** | Implemented |
+| **Last Updated** | 2026-06-24 |
 
 ## Documents
 
@@ -35,6 +35,9 @@
 | 2026-06-24 | Implement Phases 4–5 via Agent Team (TDD + dual-review gates) | All tasks gated tdd-guardian → implementer → spec-compliance → code-quality; gates caught and fixed real defects (concurrent-render races, a silent edit-plan data-loss, a semantic mis-wire). 951 tests green after Phase 5 |
 | 2026-06-24 | T5.5 recorded deviation: production GUI not wired to the live engine | Phase 4 deferred the UI resolvers to "P5"; no Phase-5 task scheduled the wiring (T5.3 added composed-unit e2e with "no production glue"). Lifecycle proven by tests, but the live settings UI cannot drive enable→materialize→run (online:false / _comingSoon / empty paste chain / buildCatalogSource unused) |
 | 2026-06-24 | Added Phase 6 (Live GUI Wiring) | User decision: close the deviation now. 4 tasks (T6.1 resolver+catalog, T6.2 lifecycle ops, T6.3 module-load/chain/launcher, T6.4 wired-e2e + final validation) replacing every `// P5:` seam with a real implementation |
+| 2026-06-24 | T6.3 security review caught a match-gate bypass | The network-free runnability check used okayed.checksum as the local checksum, so a tampered .cjs (same version) would run; fixed to byte-authoritative (recompute local checksum from on-disk bytes), preserving network-free + adding a regression-protected real-assembly test |
+| 2026-06-24 | T6.4 validation found a remove deviation → added T6.5 | remove(curated) yielded Disabled not Available (store had no deleteRecord); T6.5 added ScriptStore.deleteRecord + made remove delete the record (+unregister command, delete file, remove fingerprint) → Available/Absent per the SDD state diagram |
+| 2026-06-24 | Implementation complete | Phases 4-6 done via Agent Team (TDD + tdd-guardian→implementer→spec-compliance→code-quality gates; gates caught real defects: concurrent-render races, silent edit-plan data loss, semantic mis-wire, match-gate bypass, command-cleanup gap). v0.2: segmented settings, Scripts cards + ⋯ menu, Templater-style commands + Run-script launcher, full lifecycle wired live, per-device materialization fingerprint, byte-authoritative network-free match-gate, dev-override DCE, 3 Perplexity scripts → standalone catalog .cjs (main.js lean), docs/RELEASE.md. 1066 tests / lint / compliance / build / check:manifest all green. Branch feat/002-script-distribution-and-settings (not yet merged) |
 
 ## Context
 
