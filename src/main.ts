@@ -222,6 +222,7 @@ export class MarkdownMasonPlugin extends Plugin {
 				rerender: () => { /* overridden by settings tab via setRerender() */ },
 				listCjsFiles: () => this._listVaultCjsFiles(),
 				pickCjsFile: (paths) => this._pickVaultCjsFile(paths),
+				unregisterCommand: (id) => this.commandManager.unregister(id),
 			});
 
 			console.debug("[MarkdownMason] lifecycle resolver + controller initialized");

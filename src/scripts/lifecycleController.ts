@@ -78,6 +78,8 @@ export interface LifecycleControllerDeps {
 	listCjsFiles?: () => Promise<string[]>;
 	/** Pick one path from candidates (or null to cancel). */
 	pickCjsFile?: (paths: string[]) => Promise<string | null>;
+	/** Unregister the script's Obsidian command (in-memory only, no persistence). */
+	unregisterCommand?: (id: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -262,6 +264,7 @@ export class LifecycleController {
 	// -------------------------------------------------------------------------
 
 	async remove(id: string): Promise<void> {
+		this._d.unregisterCommand?.(id);
 		await this._deleteMaterialized(id);
 		await this._d.fingerprints.remove(id);
 		await this._d.store.deleteRecord(id);

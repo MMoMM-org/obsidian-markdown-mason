@@ -506,6 +506,60 @@ describe("LifecycleController.remove", () => {
 		});
 		expect(state.kind).toBe("Absent");
 	});
+
+	it("calls unregisterCommand seam with the id, does NOT resurrect the record", async () => {
+		const store = makeStore({
+			"perplexity-app": {
+				provenance: "curated", enabled: true,
+				okayed: { version: 1, checksum: CURATED_CHECKSUM }, source: "", command: true,
+			},
+		});
+		const vault = makeVault({ "plugins/markdown-mason/scripts/perplexity-app.cjs": CURATED_BYTES });
+		const catalog = makeCatalog({ "perplexity-app": curatedEntry() });
+		const fingerprints = { setVersion: vi.fn(async () => {}), remove: vi.fn(async () => {}) };
+		const unregisterCommand = vi.fn();
+
+		const controller = new LifecycleController({
+			app: new App() as never,
+			store,
+			catalog,
+			vault,
+			fingerprints: {
+				getVersion: vi.fn(async () => undefined),
+				setVersion: fingerprints.setVersion,
+				remove: fingerprints.remove,
+			},
+			destPath: (id: string) => `plugins/markdown-mason/scripts/${id}.cjs`,
+			rerender: vi.fn(),
+			ask: async () => "enable-session",
+			openUrl: vi.fn(),
+			unregisterCommand,
+		});
+
+		await controller.remove("perplexity-app");
+
+		// Seam must be called with the correct id
+		expect(unregisterCommand).toHaveBeenCalledWith("perplexity-app");
+		// Record must NOT be resurrected — unregister must not call setRecord
+		expect(store.scripts["perplexity-app"]).toBeUndefined();
+	});
+
+	it("remove without unregisterCommand seam: no-ops the unregister (backward compat)", async () => {
+		const store = makeStore({
+			"perplexity-app": {
+				provenance: "curated", enabled: true,
+				okayed: { version: 1, checksum: CURATED_CHECKSUM }, source: "", command: false,
+			},
+		});
+		const vault = makeVault({ "plugins/markdown-mason/scripts/perplexity-app.cjs": CURATED_BYTES });
+		const catalog = makeCatalog({ "perplexity-app": curatedEntry() });
+		const fingerprints = { setVersion: vi.fn(async () => {}), remove: vi.fn(async () => {}) };
+		const h = makeController({ store, vault, catalog, fingerprints });
+
+		// No unregisterCommand injected — must not throw
+		await expect(h.controller.remove("perplexity-app")).resolves.toBeUndefined();
+		expect(store.scripts["perplexity-app"]).toBeUndefined();
+	});
 });
 
 // ===========================================================================
