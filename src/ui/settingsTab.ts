@@ -11,6 +11,8 @@ import type { CommandsTabCommandManager, ScriptFnResolver, StateResolver } from 
 import type { LifecycleResolver } from "../scripts/lifecycleResolver";
 import type { LifecycleController } from "../scripts/lifecycleController";
 import { BrowseOfficialModal } from "./browseOfficialModal";
+import { loadScriptModule } from "../scripts/loader";
+import type { RequireFn } from "../scripts/loader";
 
 // ---------------------------------------------------------------------------
 // Minimal plugin interface — avoids a hard import cycle with main.ts
@@ -348,15 +350,14 @@ export class MasonSettingTab extends PluginSettingTab {
 	 * into a Map<id, LifecycleState> before rendering. A sync getState facade
 	 * backed by that Map is passed to renderCommandsTab. Falls back to
 	 * fail-closed Disabled when the resolver is absent.
-	 * resolveScriptFn remains a T6.3 placeholder (no change here).
+	 *
+	 * T6.3: resolveScriptFn loads the materialized module for Active scripts and
+	 * returns its run function. Falls back to a safe no-op for non-Active ids
+	 * (CommandManager._invokeScript re-checks state before invoking, so the no-op
+	 * is never actually called for non-Active scripts).
 	 */
 	private async _renderCommandsSection(containerEl: HTMLElement): Promise<void> {
 		new Setting(containerEl).setName("Commands").setHeading();
-
-		// T6.3: resolveScriptFn placeholder — real module loader wires in at T6.3.
-		const resolveScriptFn: ScriptFnResolver = () => {
-			return (): undefined => undefined;
-		};
 
 		// T6.1: pre-resolve all script states into a Map so getState can be sync.
 		// resolveItems fetches the catalog index once and returns one entry per
@@ -375,6 +376,17 @@ export class MasonSettingTab extends PluginSettingTab {
 		} else {
 			getState = () => ({ kind: "Disabled" });
 		}
+
+		// T6.3: resolveScriptFn — loads the materialized module for Active scripts.
+		// Uses getState (already backed by the pre-resolved Map) to gate the load.
+		const scriptsDir = `${this._plugin.manifest.dir}/scripts`;
+		const requireFn = _buildSettingsTabRequireFn(scriptsDir);
+		const resolveScriptFn: ScriptFnResolver = (id: string) => {
+			if (getState(id).kind !== "Active") {
+				return (): undefined => undefined;
+			}
+			return _loadRunFnSafeTab(id, scriptsDir, requireFn);
+		};
 
 		await renderCommandsTab(
 			containerEl,
@@ -404,5 +416,46 @@ export class MasonSettingTab extends PluginSettingTab {
 						await this._plugin.saveSettings();
 					});
 			});
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Module-private helpers — T6.3 script loading for settingsTab
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a Node require function for loading materialized CJS scripts.
+ * Desktop-only: uses module.createRequire (Electron/Node). Soft-fails to a
+ * no-op stub in test environments or when the path is invalid.
+ */
+function _buildSettingsTabRequireFn(scriptsDir: string): RequireFn {
+	try {
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		const nodeModule = require("node:module") as { createRequire(from: string): RequireFn };
+		return nodeModule.createRequire(scriptsDir + "/");
+	} catch {
+		const stub = (): never => { throw new Error("require unavailable"); };
+		(stub as unknown as RequireFn).resolve = (): never => { throw new Error("require unavailable"); };
+		(stub as unknown as RequireFn).cache = {} as Record<string, unknown>;
+		return stub as unknown as RequireFn;
+	}
+}
+
+/**
+ * Load and return the `run` function from a materialized script module.
+ * Returns a safe no-op if the module cannot be loaded (soft-fail).
+ */
+function _loadRunFnSafeTab(
+	id: string,
+	scriptsDir: string,
+	requireFn: RequireFn,
+): import("../scripts/context").ScriptFunction {
+	const absolutePath = `${scriptsDir}/${id}.cjs`;
+	try {
+		const mod = loadScriptModule(absolutePath, requireFn);
+		return mod.run;
+	} catch (err: unknown) {
+		console.debug(`[MarkdownMason] Commands tab resolveScriptFn: failed to load module "${id}":`, err);
+		return (): undefined => undefined;
 	}
 }

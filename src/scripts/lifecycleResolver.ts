@@ -133,6 +133,47 @@ export class LifecycleResolver {
 	}
 
 	/**
+	 * Network-free runnability check for the paste chain (T6.3).
+	 *
+	 * Determines whether a script can run on THIS device without fetching the
+	 * catalog or reading vault file bytes. Uses the per-device fingerprint store
+	 * (a cheap manifest read) and the okayed consent record only.
+	 *
+	 * "local" is derived from the fingerprint store alone:
+	 *   - fingerprint present → { version: fingerprintVersion, checksum: okayed.checksum }
+	 *     (The materializer wrote the file and recorded the version when it materialized;
+	 *      the okayed checksum was verified at that time. Re-hashing on every paste would
+	 *      be expensive and is deferred to the catalog-fetch path.)
+	 *   - fingerprint absent → null (code not yet on this device)
+	 *
+	 * catalogVersion is always undefined so step 7 (UpdateAvailable) never fires.
+	 * An outdated-but-valid script resolves Active here — correct for running.
+	 *
+	 * MUST NOT call fetchIndex. Callers on the paste path depend on this being
+	 * free of any network access.
+	 */
+	async resolveLocalState(id: string, record: ScriptRecord): Promise<LifecycleState> {
+		const fingerprintVersion = await this._deps.fingerprints.getVersion(id);
+
+		let local: { version: number; checksum: string } | null;
+		if (fingerprintVersion !== undefined && record.okayed !== null) {
+			// Fingerprint present: treat local as materialized with the recorded version
+			// and the okayed checksum (re-hashing deferred to catalog-fetch path).
+			local = { version: fingerprintVersion, checksum: record.okayed.checksum };
+		} else {
+			local = null;
+		}
+
+		return evaluateState({
+			record,
+			inCatalog: true,
+			local,
+			catalogVersion: undefined,
+			online: false,
+		});
+	}
+
+	/**
 	 * Resolve all scripts in `records` in a single pass.
 	 * The catalog index is fetched exactly once (cached across all scripts).
 	 *
