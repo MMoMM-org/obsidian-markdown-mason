@@ -129,7 +129,8 @@ function _readConfigFile(configPath: string): string | null {
 	let text: string;
 	try {
 		text = readFileSync(configPath, "utf-8");
-	} catch {
+	} catch (e) {
+		if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
 		return null; // File absent — not an error, just skip to next resolution step
 	}
 

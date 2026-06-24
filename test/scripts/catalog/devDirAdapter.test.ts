@@ -247,6 +247,7 @@ describe("createDevDirAdapter config-file fallback (ADR-15)", () => {
 				// Should have used env dir (tmpDir), not the decoy
 				expect(index.schemaVersion).toBe(1);
 			} finally {
+				delete process.env["MASON_DEV_DIR"];
 				rmSync(pluginDir, { recursive: true, force: true });
 			}
 		}),
