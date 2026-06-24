@@ -38,6 +38,7 @@ import type { FingerprintStore } from "../../src/scripts/materializedFingerprint
 import type { CatalogSource } from "../../src/scripts/catalog/catalogSource";
 import { LifecycleResolver } from "../../src/scripts/lifecycleResolver";
 import type { ScriptFunction } from "../../src/scripts/context";
+import { buildEnabledPasteScripts as buildEnabledPasteScriptsReal } from "../../src/scripts/pasteAssembly";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -1104,5 +1105,253 @@ describe("T6.3 G — SECURITY: byte-authoritative match-gate (drift must be caug
 
 		expect(fakeCatalog.fetchIndex).not.toHaveBeenCalled();
 		expect(state.kind).toBe("Blocked");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Part H: REAL-WIRE assembly drift test (W1)
+//
+// Drives the production buildEnabledPasteScripts (from src/scripts/pasteAssembly)
+// with a REAL LifecycleResolver that reads vault bytes and computes SHA-256.
+//
+// This test exercises the FULL assembly wire:
+//   buildEnabledPasteScripts → resolver.resolveLocalState → _resolveLocal
+//   → vault.readBinary → sha256Bytes → evaluateState step 6
+//
+// If the assembly were to bypass byte hashing (using okayed.checksum as the
+// local checksum shortcut, as the pre-fix isLocallyRunnable helper in Parts A-E
+// does), these tests would FAIL:
+//   - The "drifted file excluded" test would see the drifted script as Active
+//     (because okayed.checksum === okayed.checksum trivially) and include it.
+//   - The "matching file included" test would still pass coincidentally, so we
+//     confirm drift exclusion is the critical regression-detection path.
+// ---------------------------------------------------------------------------
+
+describe("T6.3 H — REAL-WIRE: production assembly with real LifecycleResolver drift detection", () => {
+	const SCRIPTS_DIR = "/vault/.obsidian/plugins/mason/scripts";
+
+	// Pre-computed SHA-256 of "good script bytes"
+	// node -e "const {createHash}=require('node:crypto'); const b=Buffer.from('good script bytes'); console.log('sha256:'+createHash('sha256').update(b).digest('hex'))"
+	const GOOD_BYTES = Buffer.from("good script bytes");
+	const GOOD_CHECKSUM = "sha256:43f9a58f9aeb8f5b72b523c98e8bb51b6a069ce8ac3ea78bf78606a1f635e861";
+	// Drifted: same version=1, but different bytes on disk
+	const DRIFTED_BYTES = Buffer.from("tampered script bytes");
+
+	/** Build a fake require function for the assembly (module loading is faked). */
+	function makeFakeRequireFn() {
+		return Object.assign(
+			(_id: string) => ({}),
+			{
+				resolve: (id: string) => id,
+				cache: {} as Record<string, unknown>,
+			},
+		);
+	}
+
+	/**
+	 * Build a LifecycleResolver with a vault stub that returns specific bytes.
+	 * fetchIndex is wired to throw — confirming network-free operation.
+	 */
+	function makeRealResolver(opts: {
+		vaultBytesById: Record<string, Buffer>;
+		fingerprintVersions: Record<string, number>;
+	}): LifecycleResolver {
+		const fakeCatalog: CatalogSource = {
+			fetchIndex: vi.fn().mockImplementation(() => {
+				throw new Error("fetchIndex must not be called in assembly wire (H)");
+			}),
+			fetchScript: vi.fn().mockResolvedValue(new Uint8Array()),
+		};
+
+		const fakeVault = {
+			exists: vi.fn().mockImplementation((path: string) => {
+				const id = /([^/]+)\.cjs$/.exec(path)?.[1];
+				return Promise.resolve(id !== undefined && id in opts.vaultBytesById);
+			}),
+			readBinary: vi.fn().mockImplementation((path: string) => {
+				const id = /([^/]+)\.cjs$/.exec(path)?.[1];
+				const buf = id !== undefined ? opts.vaultBytesById[id] : undefined;
+				if (buf === undefined) {
+					return Promise.reject(new Error(`[fake-vault] no bytes for path: ${path}`));
+				}
+				// Return an ArrayBuffer slice (as vault.readBinary returns ArrayBuffer)
+				return Promise.resolve(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer);
+			}),
+			writeBinary: vi.fn().mockResolvedValue(undefined),
+			mkdir: vi.fn().mockResolvedValue(undefined),
+		};
+
+		const fakeFingerprints = makeFingerprintStore(opts.fingerprintVersions);
+
+		return new LifecycleResolver({
+			catalog: fakeCatalog,
+			vault: fakeVault,
+			fingerprints: fakeFingerprints,
+			scriptsDir: SCRIPTS_DIR,
+			destPath: (id: string) => `${SCRIPTS_DIR}/${id}.cjs`,
+			onlineProbe: () => false,
+		});
+	}
+
+	it("REAL-WIRE: drifted file (same version, wrong bytes) is EXCLUDED from assembly", async () => {
+		// Arrange: fingerprint version=1 matches okayed.version=1,
+		// but vault bytes hash to DRIFTED_CHECKSUM ≠ okayed.checksum=GOOD_CHECKSUM.
+		//
+		// If the assembly used okayed.checksum as local.checksum (the pre-fix bug),
+		// resolveLocalState would see local.checksum === okayed.checksum → Active → INCLUDED.
+		// With byte-authoritative hashing: local.checksum = sha256(DRIFTED_BYTES) ≠ GOOD_CHECKSUM
+		// → step 6 fires → Blocked("drift") → EXCLUDED.
+		const resolver = makeRealResolver({
+			vaultBytesById: { "perplexity-app": DRIFTED_BYTES },
+			fingerprintVersions: { "perplexity-app": 1 },
+		});
+
+		const records: Record<string, ScriptRecord> = {
+			"perplexity-app": {
+				provenance: "curated",
+				enabled: true,
+				okayed: { version: 1, checksum: GOOD_CHECKSUM },
+				source: "catalog/perplexity-app.cjs",
+				command: false,
+			},
+		};
+
+		const fakeModule = makePasteModule(300);
+		const { loadScriptModule: fakeLoader } = makeFakeLoader({ "perplexity-app": fakeModule });
+
+		const result = await buildEnabledPasteScriptsReal({
+			records,
+			resolver,
+			scriptsDir: SCRIPTS_DIR,
+			loadModule: fakeLoader,
+			requireFn: makeFakeRequireFn(),
+		});
+
+		// CRITICAL: drifted script must NOT appear in the assembled set
+		expect(result).toHaveLength(0);
+		expect(result.map((s) => s.id)).not.toContain("perplexity-app");
+	});
+
+	it("REAL-WIRE: matching file (bytes hash == okayed.checksum) IS included in assembly", async () => {
+		// Arrange: vault bytes hash to GOOD_CHECKSUM == okayed.checksum → Active → included.
+		const resolver = makeRealResolver({
+			vaultBytesById: { "perplexity-app": GOOD_BYTES },
+			fingerprintVersions: { "perplexity-app": 1 },
+		});
+
+		const records: Record<string, ScriptRecord> = {
+			"perplexity-app": {
+				provenance: "curated",
+				enabled: true,
+				okayed: { version: 1, checksum: GOOD_CHECKSUM },
+				source: "catalog/perplexity-app.cjs",
+				command: false,
+			},
+		};
+
+		const fakeModule = makePasteModule(300);
+		const { loadScriptModule: fakeLoader } = makeFakeLoader({ "perplexity-app": fakeModule });
+
+		const result = await buildEnabledPasteScriptsReal({
+			records,
+			resolver,
+			scriptsDir: SCRIPTS_DIR,
+			loadModule: fakeLoader,
+			requireFn: makeFakeRequireFn(),
+		});
+
+		expect(result).toHaveLength(1);
+		expect(result[0]!.id).toBe("perplexity-app");
+		expect(result[0]!.module).toBe(fakeModule);
+	});
+
+	it("REAL-WIRE: one matching + one drifted → only matching is included", async () => {
+		// Two scripts; one matches (Active), one is drifted (Blocked drift).
+		// Confirms the assembly correctly filters per-script, not globally.
+		const resolver = makeRealResolver({
+			vaultBytesById: {
+				"perplexity-app": GOOD_BYTES,      // matches okayed.checksum → Active
+				"perplexity-web": DRIFTED_BYTES,    // drifted → Blocked(drift) → excluded
+			},
+			fingerprintVersions: { "perplexity-app": 1, "perplexity-web": 1 },
+		});
+
+		const records: Record<string, ScriptRecord> = {
+			"perplexity-app": {
+				provenance: "curated", enabled: true,
+				okayed: { version: 1, checksum: GOOD_CHECKSUM },
+				source: "", command: false,
+			},
+			"perplexity-web": {
+				provenance: "curated", enabled: true,
+				okayed: { version: 1, checksum: GOOD_CHECKSUM }, // expects GOOD_CHECKSUM but gets DRIFTED
+				source: "", command: false,
+			},
+		};
+
+		const { loadScriptModule: fakeLoader } = makeFakeLoader({
+			"perplexity-app": makePasteModule(300),
+			"perplexity-web": makePasteModule(100),
+		});
+
+		const result = await buildEnabledPasteScriptsReal({
+			records,
+			resolver,
+			scriptsDir: SCRIPTS_DIR,
+			loadModule: fakeLoader,
+			requireFn: makeFakeRequireFn(),
+		});
+
+		expect(result).toHaveLength(1);
+		expect(result[0]!.id).toBe("perplexity-app");
+		expect(result.map((s) => s.id)).not.toContain("perplexity-web");
+	});
+
+	it("REAL-WIRE: fetchIndex is NOT called during assembly (network-free)", async () => {
+		const fakeCatalog: CatalogSource = {
+			fetchIndex: vi.fn().mockImplementation(() => {
+				throw new Error("fetchIndex must not be called (H network-free check)");
+			}),
+			fetchScript: vi.fn().mockResolvedValue(new Uint8Array()),
+		};
+
+		const goodBuf = GOOD_BYTES.buffer.slice(GOOD_BYTES.byteOffset, GOOD_BYTES.byteOffset + GOOD_BYTES.byteLength) as ArrayBuffer;
+		const fakeVault = {
+			exists: vi.fn().mockResolvedValue(true),
+			readBinary: vi.fn().mockResolvedValue(goodBuf),
+			writeBinary: vi.fn().mockResolvedValue(undefined),
+			mkdir: vi.fn().mockResolvedValue(undefined),
+		};
+
+		const resolver = new LifecycleResolver({
+			catalog: fakeCatalog,
+			vault: fakeVault,
+			fingerprints: makeFingerprintStore({ "perplexity-app": 1 }),
+			scriptsDir: SCRIPTS_DIR,
+			destPath: (id: string) => `${SCRIPTS_DIR}/${id}.cjs`,
+			onlineProbe: () => true, // even "online" must not fetch on the paste path
+		});
+
+		const records: Record<string, ScriptRecord> = {
+			"perplexity-app": {
+				provenance: "curated", enabled: true,
+				okayed: { version: 1, checksum: GOOD_CHECKSUM },
+				source: "", command: false,
+			},
+		};
+
+		const { loadScriptModule: fakeLoader } = makeFakeLoader({
+			"perplexity-app": makePasteModule(300),
+		});
+
+		await buildEnabledPasteScriptsReal({
+			records,
+			resolver,
+			scriptsDir: SCRIPTS_DIR,
+			loadModule: fakeLoader,
+			requireFn: makeFakeRequireFn(),
+		});
+
+		expect(fakeCatalog.fetchIndex).not.toHaveBeenCalled();
 	});
 });

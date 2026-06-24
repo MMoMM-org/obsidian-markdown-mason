@@ -11,8 +11,7 @@ import type { CommandsTabCommandManager, ScriptFnResolver, StateResolver } from 
 import type { LifecycleResolver } from "../scripts/lifecycleResolver";
 import type { LifecycleController } from "../scripts/lifecycleController";
 import { BrowseOfficialModal } from "./browseOfficialModal";
-import { loadScriptModule } from "../scripts/loader";
-import type { RequireFn } from "../scripts/loader";
+import { buildRequireFn, loadRunFnSafe } from "../scripts/loader";
 
 // ---------------------------------------------------------------------------
 // Minimal plugin interface — avoids a hard import cycle with main.ts
@@ -380,12 +379,12 @@ export class MasonSettingTab extends PluginSettingTab {
 		// T6.3: resolveScriptFn — loads the materialized module for Active scripts.
 		// Uses getState (already backed by the pre-resolved Map) to gate the load.
 		const scriptsDir = `${this._plugin.manifest.dir}/scripts`;
-		const requireFn = _buildSettingsTabRequireFn(scriptsDir);
+		const requireFn = buildRequireFn(scriptsDir);
 		const resolveScriptFn: ScriptFnResolver = (id: string) => {
 			if (getState(id).kind !== "Active") {
 				return (): undefined => undefined;
 			}
-			return _loadRunFnSafeTab(id, scriptsDir, requireFn);
+			return loadRunFnSafe(id, scriptsDir, requireFn);
 		};
 
 		await renderCommandsTab(
@@ -419,43 +418,3 @@ export class MasonSettingTab extends PluginSettingTab {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Module-private helpers — T6.3 script loading for settingsTab
-// ---------------------------------------------------------------------------
-
-/**
- * Build a Node require function for loading materialized CJS scripts.
- * Desktop-only: uses module.createRequire (Electron/Node). Soft-fails to a
- * no-op stub in test environments or when the path is invalid.
- */
-function _buildSettingsTabRequireFn(scriptsDir: string): RequireFn {
-	try {
-		// eslint-disable-next-line @typescript-eslint/no-require-imports
-		const nodeModule = require("node:module") as { createRequire(from: string): RequireFn };
-		return nodeModule.createRequire(scriptsDir + "/");
-	} catch {
-		const stub = (): never => { throw new Error("require unavailable"); };
-		(stub as unknown as RequireFn).resolve = (): never => { throw new Error("require unavailable"); };
-		(stub as unknown as RequireFn).cache = {} as Record<string, unknown>;
-		return stub as unknown as RequireFn;
-	}
-}
-
-/**
- * Load and return the `run` function from a materialized script module.
- * Returns a safe no-op if the module cannot be loaded (soft-fail).
- */
-function _loadRunFnSafeTab(
-	id: string,
-	scriptsDir: string,
-	requireFn: RequireFn,
-): import("../scripts/context").ScriptFunction {
-	const absolutePath = `${scriptsDir}/${id}.cjs`;
-	try {
-		const mod = loadScriptModule(absolutePath, requireFn);
-		return mod.run;
-	} catch (err: unknown) {
-		console.debug(`[MarkdownMason] Commands tab resolveScriptFn: failed to load module "${id}":`, err);
-		return (): undefined => undefined;
-	}
-}

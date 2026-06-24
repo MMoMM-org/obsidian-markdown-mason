@@ -296,6 +296,53 @@ function isEnvelopeCandidate(v: unknown): v is Record<string, unknown> {
 	return v !== null && typeof v === "object";
 }
 
+// ---------------------------------------------------------------------------
+// Shared loader helpers — used by main.ts and settingsTab.ts (S1/S2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a Node require function for loading materialized CJS scripts.
+ *
+ * Desktop-only: uses module.createRequire (Electron/Node). The scriptsDir
+ * is used as the base URL so relative requires within a script resolve correctly.
+ * Falls back to a no-op stub (soft-fail) if createRequire is unavailable or
+ * the path is invalid (e.g. in test environments without a real vault path).
+ */
+export function buildRequireFn(scriptsDir: string): RequireFn {
+	try {
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		const nodeModule = require("node:module") as { createRequire(from: string): RequireFn };
+		return nodeModule.createRequire(scriptsDir + "/");
+	} catch {
+		// Non-Electron environment or invalid path: return a stub that always throws.
+		const stub = (): never => { throw new Error("require unavailable"); };
+		(stub as unknown as RequireFn).resolve = (): never => { throw new Error("require unavailable"); };
+		(stub as unknown as RequireFn).cache = {} as Record<string, unknown>;
+		return stub as unknown as RequireFn;
+	}
+}
+
+/**
+ * Load and return the `run` function from a materialized script module.
+ *
+ * Returns a safe no-op if the module cannot be loaded (soft-fail).
+ * Used by resolveScriptFn in the Run script launcher and Commands tab.
+ */
+export function loadRunFnSafe(
+	id: string,
+	scriptsDir: string,
+	requireFn: RequireFn,
+): import("./context").ScriptFunction {
+	const absolutePath = `${scriptsDir}/${id}.cjs`;
+	try {
+		const mod = loadScriptModule(absolutePath, requireFn);
+		return mod.run;
+	} catch (err: unknown) {
+		console.debug(`[MarkdownMason] resolveScriptFn: failed to load module "${id}":`, err);
+		return (): undefined => undefined;
+	}
+}
+
 /**
  * Require a script, evicting every module-cache entry under the script's
  * own directory prefix before loading.

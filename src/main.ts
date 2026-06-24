@@ -23,8 +23,8 @@ import { MaterializedFingerprintStore } from "./scripts/materializedFingerprint"
 import { LifecycleController } from "./scripts/lifecycleController";
 import type { LifecycleVault } from "./scripts/lifecycleController";
 import { ImportPickerModal } from "./ui/importPickerModal";
-import { loadScriptModule } from "./scripts/loader";
-import type { RequireFn } from "./scripts/loader";
+import { loadScriptModule, buildRequireFn, loadRunFnSafe } from "./scripts/loader";
+import { buildEnabledPasteScripts } from "./scripts/pasteAssembly";
 
 // Re-export so consumers that import from "src/main" still resolve.
 export { DEFAULT_SETTINGS, type MasonSettings };
@@ -354,28 +354,15 @@ export class MarkdownMasonPlugin extends Plugin {
 
 		const records = await this.store.getScripts();
 		const scriptsDir = `${this.manifest.dir}/scripts`;
-		const requireFn = _buildRequireFn(scriptsDir);
-		const results: LoadedScript[] = [];
+		const requireFn = buildRequireFn(scriptsDir);
 
-		for (const [id, record] of Object.entries(records)) {
-			const state = await resolver.resolveLocalState(id, record);
-			if (state.kind !== "Active") {
-				continue;
-			}
-
-			const absolutePath = `${scriptsDir}/${id}.cjs`;
-			let module: import("./scripts/loader").ScriptModule | null;
-			try {
-				module = loadScriptModule(absolutePath, requireFn);
-			} catch (err: unknown) {
-				console.debug(`[MarkdownMason] paste: failed to load module "${id}":`, err);
-				module = null;
-			}
-
-			results.push({ id, record: { provenance: record.provenance }, module });
-		}
-
-		return results;
+		return buildEnabledPasteScripts({
+			records,
+			resolver,
+			scriptsDir,
+			loadModule: loadScriptModule,
+			requireFn,
+		});
 	}
 
 	// -------------------------------------------------------------------------
@@ -427,12 +414,12 @@ export class MarkdownMasonPlugin extends Plugin {
 				// ids (CommandManager._invokeScript re-checks getState before invoking, so
 				// this no-op is never actually invoked for non-Active scripts).
 				const scriptsDir = `${this.manifest.dir}/scripts`;
-				const requireFn = _buildRequireFn(scriptsDir);
+				const requireFn = buildRequireFn(scriptsDir);
 				const resolveScriptFn = (id: string): import("./scripts/context").ScriptFunction => {
 					if (getState(id).kind !== "Active") {
 						return (): undefined => undefined;
 					}
-					return _loadRunFnSafe(id, scriptsDir, requireFn);
+					return loadRunFnSafe(id, scriptsDir, requireFn);
 				};
 
 				const modal = new RunScriptModal(
@@ -582,49 +569,6 @@ function buildFailScript() {
 	return function failingScript(): never {
 		throw new Error("injected test failure");
 	};
-}
-
-/**
- * Build a Node require function for loading materialized CJS scripts.
- *
- * Desktop-only: uses module.createRequire (Electron/Node). The scriptsDir
- * is used as the base URL so relative requires within a script resolve correctly.
- * Falls back to a no-op stub (soft-fail) if createRequire is unavailable or
- * the path is invalid (e.g. in test environments without a real vault path).
- */
-function _buildRequireFn(scriptsDir: string): RequireFn {
-	try {
-		// eslint-disable-next-line @typescript-eslint/no-require-imports
-		const nodeModule = require("node:module") as { createRequire(from: string): RequireFn };
-		return nodeModule.createRequire(scriptsDir + "/");
-	} catch {
-		// Non-Electron environment or invalid path: return a stub that always throws.
-		const stub = (): never => { throw new Error("require unavailable"); };
-		(stub as unknown as RequireFn).resolve = (): never => { throw new Error("require unavailable"); };
-		(stub as unknown as RequireFn).cache = {} as Record<string, unknown>;
-		return stub as unknown as RequireFn;
-	}
-}
-
-/**
- * Load and return the `run` function from a materialized script module.
- *
- * Returns a safe no-op if the module cannot be loaded (soft-fail).
- * Used by resolveScriptFn in the Run script launcher and Commands tab.
- */
-function _loadRunFnSafe(
-	id: string,
-	scriptsDir: string,
-	requireFn: RequireFn,
-): import("./scripts/context").ScriptFunction {
-	const absolutePath = `${scriptsDir}/${id}.cjs`;
-	try {
-		const mod = loadScriptModule(absolutePath, requireFn);
-		return mod.run;
-	} catch (err: unknown) {
-		console.debug(`[MarkdownMason] resolveScriptFn: failed to load module "${id}":`, err);
-		return (): undefined => undefined;
-	}
 }
 
 export default MarkdownMasonPlugin;
