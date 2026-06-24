@@ -42,7 +42,7 @@ import { ScriptStore } from "../../src/scripts/store";
 import type { PluginDataPort } from "../../src/scripts/store";
 import { buildEnabledPasteScripts } from "../../src/scripts/pasteAssembly";
 import { buildPasteChain } from "../../src/scripts/paste/buildPasteChain";
-import { loadScriptModule } from "../../src/scripts/loader";
+import { loadScriptModule, loadRunFnSafe } from "../../src/scripts/loader";
 import { ScriptRunner } from "../../src/scripts/runner";
 import type { RunnerEffects } from "../../src/scripts/runner";
 import { buildScriptContext } from "../../src/scripts/context";
@@ -68,8 +68,13 @@ const catalogDistDir = path.join(repoRoot, "catalog", "dist");
 // ---------------------------------------------------------------------------
 
 const SCRIPT_ID = "perplexity-app";
-const CATALOG_VERSION = 1;
-const CATALOG_CHECKSUM = "sha256:dd55cb5cb48e04379f94fa2348d42f55ef0eaf64858b92c6affdf567b451aedc";
+
+// Derive version + checksum from the live catalog index so these constants
+// never silently drift when catalog/dist changes.
+const _catalogEntry = makeRealCatalogIndex().scripts[SCRIPT_ID];
+if (!_catalogEntry) throw new Error(`catalog/dist/index.json has no entry for "${SCRIPT_ID}"`);
+const CATALOG_VERSION = _catalogEntry.version;
+const CATALOG_CHECKSUM = _catalogEntry.checksum;
 
 function readCatalogBytes(id: string): Uint8Array {
 	return new Uint8Array(fs.readFileSync(path.join(catalogDistDir, `${id}.cjs`)));
@@ -92,7 +97,7 @@ function makeRealCatalogIndex(): CatalogIndex {
 // is NOT called during paste-chain assembly)
 // ---------------------------------------------------------------------------
 
-function makeFakeCatalog(opts: { rejectFetchIndex?: boolean } = {}): CatalogSource & {
+function makeFakeCatalog(): CatalogSource & {
 	fetchIndexCallCount: number;
 } {
 	const index = makeRealCatalogIndex();
@@ -101,9 +106,6 @@ function makeFakeCatalog(opts: { rejectFetchIndex?: boolean } = {}): CatalogSour
 		get fetchIndexCallCount(): number { return fetchIndexCallCount; },
 		async fetchIndex(): Promise<CatalogIndex> {
 			fetchIndexCallCount++;
-			if (opts.rejectFetchIndex) {
-				throw new Error("fetchIndex rejected (offline simulation)");
-			}
 			return index;
 		},
 		async fetchScript(entry: CatalogEntry): Promise<Uint8Array> {
@@ -484,7 +486,7 @@ describe("T6.4 wired lifecycle — real controller/resolver/assembly (enable→r
 		expect(chain.length).toBeGreaterThan(0);
 
 		// Find the handler for SCRIPT_ID
-		const handler = chain.find((h) => h.id === SCRIPT_ID);
+		const handler = chain.find((entry) => entry.id === SCRIPT_ID);
 		expect(handler, "paste handler for SCRIPT_ID must be in chain").toBeDefined();
 
 		// Run the handler via ScriptRunner — assert applied outcome
@@ -524,15 +526,16 @@ describe("T6.4 wired lifecycle — real controller/resolver/assembly (enable→r
 		const localState = await h.resolver.resolveLocalState(SCRIPT_ID, rec!);
 		expect(localState.kind).toBe("Active");
 
-		// Load the run fn from the materialized module
+		// Load the run fn via the production launcher wrapper (exercises soft-fail
+		// wrapper + path construction, not just the low-level loadScriptModule)
 		const requireFn = createRequire(h.scriptsDir + "/");
-		const mod = loadScriptModule(h.destAbsPath, requireFn);
+		const runFn = loadRunFnSafe(SCRIPT_ID, h.scriptsDir, requireFn);
 
 		// Run via ScriptRunner — assert applied outcome
 		const effects = makeEffects();
 		const runner = new ScriptRunner(effects, { policy: "enabled" });
 		const ctx = makeCtx(PERPLEXITY_APP_INPUT);
-		const outcome = await runner.run(mod.run, ctx);
+		const outcome = await runner.run(runFn, ctx);
 
 		expect(outcome.kind).toBe("applied");
 		expect(effects.appliedPlans).toHaveLength(1);
@@ -608,6 +611,7 @@ describe("T6.4 wired lifecycle — real controller/resolver/assembly (enable→r
 		// Record must be cleared (okayed: null)
 		const records = await h.store.getScripts();
 		const rec = records[SCRIPT_ID];
+		expect(rec).toBeDefined();
 		expect(rec!.okayed).toBeNull();
 		expect(rec!.enabled).toBe(false);
 
