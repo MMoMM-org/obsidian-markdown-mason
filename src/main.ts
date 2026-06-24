@@ -384,8 +384,9 @@ export class MarkdownMasonPlugin extends Plugin {
 	// Opens RunScriptModal listing only Active scripts.
 	// No default hotkey (ADR-17). The editor is available via editorCallback.
 	//
-	// P5 seam: resolveScriptFn and getState return placeholder values until
-	// the live module loader and lifecycle resolver wire in (P5).
+	// State + run path are wired live (T6.1/T6.3): getState is backed by the
+	// LifecycleResolver state map and resolveScriptFn loads the materialized
+	// module via loadRunFnSafe; both fail safe for non-Active scripts.
 	// -------------------------------------------------------------------------
 
 	private _registerRunScriptLauncher(): void {

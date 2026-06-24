@@ -70,7 +70,7 @@ const SEGMENTS: readonly Segment[] = ["General", "Scripts", "Commands", "Advance
  * Segments:
  *   1. General  — resourcesName text field, numericOnly toggle
  *   2. Scripts  — card rows (status pill, ⋯ menu, inline recovery) + toolbar
- *   3. Commands — placeholder heading (T4.4 seam)
+ *   3. Commands — per-script "Create command" toggles + Run-script launcher (T4.4)
  *   4. Advanced — debugLogging toggle
  */
 export class MasonSettingTab extends PluginSettingTab {
