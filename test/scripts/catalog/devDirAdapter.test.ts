@@ -74,20 +74,11 @@ afterAll(() => {
 // ---------------------------------------------------------------------------
 
 describe("DevDirAdapter construction contract (T5.1, ADR-15)", () => {
-	it("accepts a dir path via constructor and exposes it for inspection", () => {
+	it("constructor accepts a string dir without throwing", () => {
 		const adapter = new DevDirAdapter(tmpDir);
-		// The adapter takes dir from the constructor — not from ScriptRecord / data.json.
-		// We confirm the constructor arg is accepted without error.
+		// Confirm the adapter is constructed from a plain string (not ScriptRecord / data.json).
 		expect(adapter).toBeDefined();
-	});
-
-	it("dir path does NOT come from a ScriptRecord or data.json read path", () => {
-		// DevDirAdapter constructor takes only a string dir (or reads env — not ScriptRecord).
-		// Confirm we can construct it with a plain string and it does not accept
-		// any ScriptRecord-shaped argument as a second parameter (the type signature
-		// itself enforces this, but we assert runtime shape here).
-		const adapter = new DevDirAdapter(tmpDir);
-		// The adapter instance has no property that is a ScriptRecord / has an okayed field.
+		// The adapter instance has no property that is a ScriptRecord.
 		expect((adapter as unknown as Record<string, unknown>)["okayed"]).toBeUndefined();
 		expect((adapter as unknown as Record<string, unknown>)["record"]).toBeUndefined();
 	});

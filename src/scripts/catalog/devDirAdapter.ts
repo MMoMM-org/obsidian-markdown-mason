@@ -17,7 +17,7 @@
 // UNIQUE MARKER (DCE probe)
 // -------------------------
 // The string literal below is present ONLY in this module. The prod-bundle DCE
-// test (test/build/devAdapterDce.test.ts) greps for it in the prod bundle to
+// test (test/bundling/devAdapterDce.test.ts) greps for it in the prod bundle to
 // assert that esbuild eliminated this code path when __MASON_DEV__ is "false".
 //
 // BYTE-EXACT READS (ADR-14)
@@ -30,6 +30,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CatalogSource, CatalogIndex, CatalogEntry } from "./catalogSource";
+
+// DCE marker: present in dev bundles, eliminated in prod (test/bundling/devAdapterDce.test.ts)
+const _DCE_MARKER = "__MASON_DEV_DIR_ADAPTER__";
 
 // ---------------------------------------------------------------------------
 // DevDirAdapter
@@ -122,15 +125,14 @@ export class DevDirAdapter implements CatalogSource {
  *
  * Call only inside `if (__MASON_DEV__)` blocks.
  */
-// DCE sentinel: the string __MASON_DEV_DIR_ADAPTER__ must appear in dev bundles
-// and be absent from prod bundles. It is embedded here so it survives in the
-// emitted JS when this module is included (dev build) and is eliminated when
-// the module is tree-shaken (prod build, __MASON_DEV__ = false).
+// DCE sentinel: the marker must appear in dev bundles and be absent from prod bundles.
+// It is embedded here so it survives in the emitted JS when this module is included
+// (dev build) and is eliminated when the module is tree-shaken (prod build, __MASON_DEV__ = false).
 export function createDevDirAdapter(): DevDirAdapter {
 	const dir = process.env["MASON_DEV_DIR"];
 	if (dir === undefined || dir === "") {
 		throw new Error(
-			"[__MASON_DEV_DIR_ADAPTER__] MASON_DEV_DIR env var is not set. " +
+			"[" + _DCE_MARKER + "] MASON_DEV_DIR env var is not set. " +
 			"Set it to the absolute path of your local catalog working-tree directory.",
 		);
 	}
