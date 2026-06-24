@@ -8,6 +8,7 @@ import { renderScriptsTab } from "./scriptsTab";
 import type { ScriptItem, LifecycleOps } from "./scriptsTab";
 import { renderCommandsTab } from "./commandsTab";
 import type { CommandsTabCommandManager, ScriptFnResolver, StateResolver } from "./commandsTab";
+import type { LifecycleResolver } from "../scripts/lifecycleResolver";
 
 // ---------------------------------------------------------------------------
 // Minimal plugin interface — avoids a hard import cycle with main.ts
@@ -23,6 +24,12 @@ export interface MasonPlugin extends Plugin {
 	saveSettings(): Promise<void>;
 	store: Pick<ScriptStore, "getScripts" | "setRecord">;
 	commandManager: CommandsTabCommandManager;
+	/**
+	 * Live lifecycle resolver (T6.1). Optional: tests that don't exercise the
+	 * live resolver inject a fake or leave it undefined; the tab falls back to
+	 * safe offline stubs when absent.
+	 */
+	lifecycleResolver?: LifecycleResolver;
 }
 
 // ---------------------------------------------------------------------------
@@ -193,37 +200,45 @@ export class MasonSettingTab extends PluginSettingTab {
 	/**
 	 * Render the Scripts section: a heading plus the card-based Scripts tab
 	 * (scriptsTab.ts). This method is the thin CONTROLLER: it resolves each
-	 * ScriptRecord into a ScriptItem (computing LifecycleState via evaluateState),
-	 * builds a concrete LifecycleOps action seam, then hands BOTH to the
-	 * synchronous, rendering-focused renderScriptsTab(). All async I/O lives here;
-	 * the render path stays pure and unit-testable.
+	 * ScriptRecord into a ScriptItem (computing LifecycleState via the live
+	 * resolver or offline stubs), builds a concrete LifecycleOps action seam,
+	 * then hands BOTH to the synchronous, rendering-focused renderScriptsTab().
+	 * All async I/O lives here; the render path stays pure and unit-testable.
+	 *
+	 * T6.1: uses the live LifecycleResolver when wired (plugin.lifecycleResolver);
+	 * falls back to safe offline stubs (_buildScriptItemsFallback) when absent.
+	 * renderScriptsTab itself remains synchronous.
 	 */
 	private async _renderScriptsSection(containerEl: HTMLElement): Promise<void> {
 		new Setting(containerEl).setName("Scripts").setHeading();
 
 		const scripts = await this._plugin.store.getScripts();
-		const items = this._buildScriptItems(scripts);
+		let items: ScriptItem[];
+		if (this._plugin.lifecycleResolver !== undefined) {
+			// T6.1: live resolver — creates a fresh cache per render pass
+			this._plugin.lifecycleResolver.clearCache();
+			items = await this._plugin.lifecycleResolver.resolveItems(scripts);
+		} else {
+			items = this._buildScriptItemsFallback(scripts);
+		}
 		renderScriptsTab(containerEl, items, this._buildLifecycleOps(containerEl));
 	}
 
 	/**
-	 * Resolve persisted records into rendered ScriptItems.
+	 * Offline fallback: resolve persisted records into ScriptItems with safe defaults.
 	 *
-	 * P5: The live catalog is not wired in T4.2, so the inputs that need it are
-	 * the safe-default unknowns: `local: null` (materialization status is resolved
-	 * by the materializer in a later phase), `catalogVersion: undefined`, and
-	 * `online: false`. evaluateState fails closed on these (no false Active). The
-	 * real catalog adapter that supplies local/catalogVersion/online lands in P5
-	 * (T5.x); this resolver is the single place those inputs plug in.
+	 * Used when the live resolver is not available (tests that don't wire it, or
+	 * when _initLifecycleResolver failed). evaluateState fails closed: online=false,
+	 * local=null → no false Active state.
 	 */
-	private _buildScriptItems(scripts: Record<string, ScriptRecord>): ScriptItem[] {
+	private _buildScriptItemsFallback(scripts: Record<string, ScriptRecord>): ScriptItem[] {
 		return Object.entries(scripts).map(([id, record]) => {
 			const state = evaluateState({
 				record,
 				inCatalog: record.provenance === "curated",
-				local: null, // P5: materializer/catalog supplies the local fingerprint
-				catalogVersion: undefined, // P5: live catalog supplies the latest version
-				online: false, // P5: live network probe
+				local: null,
+				catalogVersion: undefined,
+				online: false,
 			});
 			return {
 				id,
@@ -233,7 +248,7 @@ export class MasonSettingTab extends PluginSettingTab {
 				state,
 				version: record.okayed?.version ?? 0,
 				provenance: record.provenance,
-				catalogVersion: undefined, // P5: live catalog
+				catalogVersion: undefined,
 			};
 		});
 	}
@@ -301,20 +316,29 @@ export class MasonSettingTab extends PluginSettingTab {
 	/**
 	 * Render the Commands section heading and the Commands tab.
 	 *
-	 * P5 seam: resolveScriptFn and getState are placeholder adapters here.
-	 * The real script-function loader and live lifecycle resolver plug in at P5.
+	 * T6.1: getState is wired to the live resolver when available, falling back
+	 * to the fail-closed Disabled stub. resolveScriptFn remains a stub until T6.3
+	 * (module loader) lands.
 	 */
 	private async _renderCommandsSection(containerEl: HTMLElement): Promise<void> {
 		new Setting(containerEl).setName("Commands").setHeading();
 
-		// P5: placeholder resolvers — real module loader and live lifecycle wire in at P5.
-		// Parameters intentionally unnamed: resolvers are stubs until P5 wires in live logic.
+		// T6.3: resolveScriptFn placeholder — real module loader wires in at T6.3.
 		const resolveScriptFn: ScriptFnResolver = () => {
-			// P5: return the loaded module's run function for the given id
 			return (): undefined => undefined;
 		};
-		const getState: StateResolver = () => {
-			// P5: derive from live catalog/materializer; fail-closed to Disabled until then
+
+		// T6.1: getState uses the live resolver when wired; fails closed to Disabled
+		// when absent. The resolver's async resolveInput is wrapped in a sync facade
+		// that returns Disabled immediately (safe default); the async result is not
+		// awaited here since CommandsTab renders synchronously.
+		const resolver = this._plugin.lifecycleResolver;
+		const getState: StateResolver = (id: string) => {
+			if (resolver === undefined) return { kind: "Disabled" };
+			// resolveInput is async; return sync Disabled until T6.3 provides
+			// a sync-capable lookup (e.g. pre-computed state cache). For now
+			// the resolver is used for the Scripts tab (async) only.
+			void id;
 			return { kind: "Disabled" };
 		};
 

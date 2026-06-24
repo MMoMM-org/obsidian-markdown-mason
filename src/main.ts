@@ -18,6 +18,8 @@ import { CommandManager } from "./scripts/commandManager";
 import { RunScriptModal } from "./ui/runScriptModal";
 import type { CatalogSource } from "./scripts/catalog/catalogSource";
 import { createCatalogSource } from "./scripts/catalog/requestUrlAdapter";
+import { LifecycleResolver } from "./scripts/lifecycleResolver";
+import { MaterializedFingerprintStore } from "./scripts/materializedFingerprint";
 
 // Re-export so consumers that import from "src/main" still resolve.
 export { DEFAULT_SETTINGS, type MasonSettings };
@@ -40,7 +42,8 @@ export { DEFAULT_SETTINGS, type MasonSettings };
  * the dev/prod gate. The `if (__MASON_DEV__)` guard ensures esbuild tree-shakes
  * DevDirAdapter and its Node fs imports entirely from the production bundle.
  *
- * P5 TODO: call this from the sync/materialize flow once it lands.
+ * T6.1: called from _initLifecycleResolver() in onload() to wire the real catalog
+ * source into the LifecycleResolver. Previously only a TODO comment.
  */
 export async function buildCatalogSource(): Promise<CatalogSource> {
 	if (__MASON_DEV__) {
@@ -110,6 +113,14 @@ export class MarkdownMasonPlugin extends Plugin {
 	declare commandManager: CommandManager;
 
 	/**
+	 * Live lifecycle resolver — wires real catalog + vault + per-device fingerprint store.
+	 * Initialised lazily in _initLifecycleResolver() called from onload().
+	 * Exposed so MasonSettingTab can build real ScriptItems with live states (T6.1).
+	 * Optional so test doubles can omit it; settingsTab falls back to stub when absent.
+	 */
+	lifecycleResolver?: LifecycleResolver;
+
+	/**
 	 * Test seam for the paste command.
 	 * Set this property before triggering a command in tests.
 	 * Undefined in production — all defaults apply.
@@ -119,6 +130,7 @@ export class MarkdownMasonPlugin extends Plugin {
 	override async onload(): Promise<void> {
 		await this.loadSettings();
 		this._initStore();
+		await this._initLifecycleResolver();
 		this.addSettingTab(new MasonSettingTab(this.app, this));
 		this.app.workspace.onLayoutReady(() => this.onLayoutReady());
 		console.debug("[MarkdownMason] loaded");
@@ -143,6 +155,46 @@ export class MarkdownMasonPlugin extends Plugin {
 			this.store,
 			this.settings,
 		);
+	}
+
+	/**
+	 * Build and wire the live LifecycleResolver (T6.1).
+	 *
+	 * Called once during onload(), after settings and store are ready.
+	 * Constructs the per-device scripts dir path from manifest.dir, then
+	 * builds the real catalog source (ADR-15 dev/prod gate) and wires it
+	 * into a LifecycleResolver with the Obsidian vault adapter.
+	 *
+	 * The resolver is exposed as plugin.lifecycleResolver for MasonSettingTab.
+	 * On error (e.g. buildCatalogSource fails), lifecycleResolver remains undefined
+	 * and the settings tab falls back to safe offline stubs.
+	 */
+	private async _initLifecycleResolver(): Promise<void> {
+		try {
+			const catalog = await buildCatalogSource();
+			const scriptsDir = `${this.manifest.dir}/scripts`;
+			const manifestPath = `${scriptsDir}/.materialized.json`;
+
+			// Obsidian's vault.adapter satisfies the VaultAdapterPort surface:
+			// readBinary, writeBinary, exists are available on the DataAdapter.
+			// Cast via unknown: Obsidian's TS types don't expose the exact interface
+			// but the runtime methods are present on FileSystemAdapter.
+			const vaultAdapter = this.app.vault.adapter as unknown as import("./scripts/runtime").VaultAdapterPort;
+			const fingerprintStore = new MaterializedFingerprintStore(vaultAdapter, manifestPath);
+
+			this.lifecycleResolver = new LifecycleResolver({
+				catalog,
+				vault: vaultAdapter,
+				fingerprints: fingerprintStore,
+				scriptsDir,
+				destPath: (id: string) => `${scriptsDir}/${id}.cjs`,
+				onlineProbe: () =>
+					typeof navigator !== "undefined" ? navigator.onLine : true,
+			});
+			console.debug("[MarkdownMason] lifecycle resolver initialized");
+		} catch (err: unknown) {
+			console.debug("[MarkdownMason] lifecycle resolver init failed — using offline stubs:", err);
+		}
 	}
 
 	/**
@@ -249,13 +301,16 @@ export class MarkdownMasonPlugin extends Plugin {
 			id: "mason.runScript",
 			name: "Run script…",
 			editorCallback: (editor: Editor): void => {
-				// P5: getState fails closed to Disabled until live lifecycle wires in.
-				// Parameter unnamed: stub returns same value regardless of id.
-				const getState = (): import("./scripts/lifecycle").LifecycleState => ({
-					kind: "Disabled",
-				});
-				// P5: resolveScriptFn returns a placeholder until real module loader exists.
-				// Parameter unnamed: stub returns same fn regardless of id.
+				const resolver = this.lifecycleResolver;
+				// T6.1: use live resolver when available; fail-closed to Disabled when absent.
+				const getState = (id: string): import("./scripts/lifecycle").LifecycleState => {
+					if (resolver === undefined) return { kind: "Disabled" };
+					// resolveInput is async but RunScriptModal's getState is sync.
+					// Return Disabled as conservative sync fallback; T6.3 wires the async path.
+					void id;
+					return { kind: "Disabled" };
+				};
+				// T6.3: resolveScriptFn placeholder — real module loader wires in at T6.3.
 				const resolveScriptFn = (): import("./scripts/context").ScriptFunction => {
 					return (): undefined => undefined;
 				};
