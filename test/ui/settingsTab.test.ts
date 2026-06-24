@@ -91,6 +91,7 @@ function makePlugin(overrides?: {
 	debugLogging?: boolean;
 	numericOnly?: boolean;
 	lifecycleResolver?: LifecycleResolver;
+	lifecycleController?: unknown;
 }) {
 	const app = new App();
 	const settings = {
@@ -136,8 +137,9 @@ function makePlugin(overrides?: {
 	};
 
 	const lifecycleResolver = overrides?.lifecycleResolver;
+	const lifecycleController = overrides?.lifecycleController;
 
-	return { app, settings, saveSettings, store, manifest: pluginManifest, commandManager, lifecycleResolver } as const;
+	return { app, settings, saveSettings, store, manifest: pluginManifest, commandManager, lifecycleResolver, lifecycleController } as const;
 }
 
 /**
@@ -897,5 +899,80 @@ describe("MasonSettingTab — T6.1 live resolver state map (Commands tab)", () =
 
 		// A script id not in the resolver's output falls back to Disabled
 		expect(capturedGetState("unknown-script")).toEqual({ kind: "Disabled" });
+	});
+});
+
+// ---------------------------------------------------------------------------
+// T6.2 — Scripts-tab lifecycle ops delegate to the live LifecycleController
+//
+// When a lifecycleController is injected, _buildLifecycleOps must delegate EVERY
+// op to it (no _comingSoon Notice). It must also inject the GUARDED re-render
+// path via setRerender. These tests FAIL against the old _comingSoon stubs.
+// ---------------------------------------------------------------------------
+
+describe("MasonSettingTab — T6.2 lifecycle ops delegate to controller", () => {
+	function makeFakeController() {
+		return {
+			enable: vi.fn().mockResolvedValue(undefined),
+			disable: vi.fn().mockResolvedValue(undefined),
+			remove: vi.fn().mockResolvedValue(undefined),
+			retry: vi.fn().mockResolvedValue(undefined),
+			update: vi.fn().mockResolvedValue(undefined),
+			reReview: vi.fn().mockResolvedValue(undefined),
+			viewSource: vi.fn().mockResolvedValue(undefined),
+			importFromVault: vi.fn().mockResolvedValue(undefined),
+			listOfficial: vi.fn().mockResolvedValue([]),
+			setRerender: vi.fn(),
+		};
+	}
+
+	async function renderScriptsWithController(controller: unknown): Promise<MockHTMLElement> {
+		const plugin = makePlugin({ lifecycleController: controller });
+		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
+		clearCapturedSettings();
+		await tab.display();
+		const container = tab.containerEl as unknown as MockHTMLElement;
+		container._findButtonByText("Scripts")!._click();
+		await Promise.resolve();
+		await Promise.resolve();
+		return container;
+	}
+
+	it("injects the guarded re-render via setRerender", async () => {
+		const controller = makeFakeController();
+		await renderScriptsWithController(controller);
+		expect(controller.setRerender).toHaveBeenCalled();
+	});
+
+	it("toggling a card's enable drives controller.enable (not a coming-soon Notice)", async () => {
+		const { clearNoticeLog, noticeLog } = await import("../__mocks__/obsidian");
+		clearNoticeLog();
+		const controller = makeFakeController();
+		const container = await renderScriptsWithController(controller);
+
+		const toggle = container._findToggle();
+		expect(toggle).toBeDefined();
+		toggle!.setValue(true);
+		await Promise.resolve();
+
+		expect(controller.enable).toHaveBeenCalledOnce();
+		expect(noticeLog().join(" ")).not.toContain("coming soon");
+	});
+
+	it("Import from vault button drives controller.importFromVault", async () => {
+		const controller = makeFakeController();
+		const container = await renderScriptsWithController(controller);
+		container._findButtonByText("Import from vault")!._click();
+		await Promise.resolve();
+		expect(controller.importFromVault).toHaveBeenCalledOnce();
+	});
+
+	it("Browse official button fetches the catalog list via controller.listOfficial", async () => {
+		const controller = makeFakeController();
+		const container = await renderScriptsWithController(controller);
+		container._findButtonByText("Browse official")!._click();
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(controller.listOfficial).toHaveBeenCalledOnce();
 	});
 });

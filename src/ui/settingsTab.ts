@@ -9,6 +9,8 @@ import type { ScriptItem, LifecycleOps } from "./scriptsTab";
 import { renderCommandsTab } from "./commandsTab";
 import type { CommandsTabCommandManager, ScriptFnResolver, StateResolver } from "./commandsTab";
 import type { LifecycleResolver } from "../scripts/lifecycleResolver";
+import type { LifecycleController } from "../scripts/lifecycleController";
+import { BrowseOfficialModal } from "./browseOfficialModal";
 
 // ---------------------------------------------------------------------------
 // Minimal plugin interface — avoids a hard import cycle with main.ts
@@ -30,6 +32,12 @@ export interface MasonPlugin extends Plugin {
 	 * safe offline stubs when absent.
 	 */
 	lifecycleResolver?: LifecycleResolver;
+	/**
+	 * Live lifecycle controller (T6.2). Optional: tests that exercise only the
+	 * card rendering inject a fake LifecycleOps and leave this undefined; the tab
+	 * then falls back to the minimal store-only enable/disable/remove path.
+	 */
+	lifecycleController?: LifecycleController;
 }
 
 // ---------------------------------------------------------------------------
@@ -254,19 +262,49 @@ export class MasonSettingTab extends PluginSettingTab {
 	}
 
 	/**
-	 * Build the concrete LifecycleOps action seam.
+	 * Build the concrete LifecycleOps action seam (T6.2).
 	 *
-	 * What EXISTS now is wired directly:
-	 *   enable/disable → store.setRecord (toggle the persisted record), then
-	 *                    re-render so the card reflects the new state.
-	 *   remove         → clear the record's consent + disable, then re-render.
+	 * When the live LifecycleController is wired (production + integration tests),
+	 * EVERY op delegates to it — the controller composes the existing services
+	 * (disclosure consent gate, materializer, store, per-device fingerprint,
+	 * catalog) and re-renders via the GUARDED path injected below. browseOfficial
+	 * presents a minimal modal listing curated entries, each with an enable action.
 	 *
-	 * P5: actions that require the LIVE catalog (browseOfficial, and the network
-	 * fetch inside update/retry/reReview's materialization) are backed by a
-	 * "coming soon" Notice seam. The real catalog adapter + browse modal land in
-	 * Phase 5 (T5.x); replace these notice bodies with the live calls there.
+	 * Fallback (controller absent — card-rendering unit tests that inject only a
+	 * fake store): enable/disable/remove operate on the store directly; the
+	 * catalog-requiring ops surface a sentence-case Notice rather than a stub.
 	 */
 	private _buildLifecycleOps(containerEl: HTMLElement): LifecycleOps {
+		const controller = this._plugin.lifecycleController;
+		if (controller !== undefined) {
+			// Inject the GUARDED re-render path so every op refreshes via _selectSegment.
+			controller.setRerender(() => { void this._selectSegment(containerEl, "Scripts"); });
+			return {
+				enable: (id) => controller.enable(id),
+				disable: (id) => controller.disable(id),
+				remove: (id) => controller.remove(id),
+				retry: (id) => controller.retry(id),
+				update: (id) => controller.update(id),
+				reReview: (id) => controller.reReview(id),
+				viewSource: (id) => controller.viewSource(id),
+				importFromVault: () => controller.importFromVault(),
+				browseOfficial: async () => {
+					const entries = await controller.listOfficial();
+					new BrowseOfficialModal(this._plugin.app, entries, (id) => {
+						void controller.enable(id);
+					}).open();
+				},
+			};
+		}
+		return this._buildLifecycleOpsFallback(containerEl);
+	}
+
+	/**
+	 * Minimal store-only LifecycleOps for the card-rendering unit tests that inject
+	 * a fake store but no live controller. enable/disable/remove persist directly;
+	 * the catalog-requiring ops surface a sentence-case Notice.
+	 */
+	private _buildLifecycleOpsFallback(containerEl: HTMLElement): LifecycleOps {
 		const rerender = (): void => { void this._selectSegment(containerEl, "Scripts"); };
 		const store = this._plugin.store;
 
@@ -277,36 +315,26 @@ export class MasonSettingTab extends PluginSettingTab {
 			rerender();
 		};
 
+		const unavailable = (): void => {
+			new Notice("Mason: the script catalog is not available right now.");
+		};
+
 		return {
 			enable: (id) => setEnabled(id, true),
 			disable: (id) => setEnabled(id, false),
 			remove: async (id) => {
 				const rec = (await store.getScripts())[id];
 				if (rec === undefined) return;
-				// Clear consent + disable (single-store removal of the active decision).
 				await store.setRecord(id, { ...rec, enabled: false, okayed: null });
 				rerender();
 			},
-			// P5: retry/update require the live catalog (materializer fetch path).
-			retry: (id) => { this._comingSoon("retry", id); },
-			update: (id) => { this._comingSoon("update", id); },
-			// P5: re-review re-shows the disclosure modal once materialization metadata
-			// (size/checksum/version) is available from the catalog/materializer.
-			reReview: (id) => { this._comingSoon("re-review consent", id); },
-			// P5: view source — curated→repo link, imported→reveal in vault.
-			viewSource: (id) => { this._comingSoon("view source", id); },
-			// P5: import-from-vault file picker.
-			importFromVault: () => { this._comingSoon("import from vault"); },
-			// P5: browse-official catalog modal.
-			browseOfficial: () => { this._comingSoon("browse official"); },
+			retry: () => { unavailable(); },
+			update: () => { unavailable(); },
+			reReview: () => { unavailable(); },
+			viewSource: () => { unavailable(); },
+			importFromVault: () => { unavailable(); },
+			browseOfficial: () => { unavailable(); },
 		};
-	}
-
-	/** P5 seam: surface a sentence-case "coming soon" Notice for unwired actions. */
-	private _comingSoon(action: string, id?: string): void {
-		const suffix = id === undefined ? "" : ` for "${id}"`;
-		new Notice(`Mason: ${action}${suffix} is coming soon.`);
-		console.debug(`[MarkdownMason] P5 action not yet wired: ${action}${suffix}`);
 	}
 
 	// -------------------------------------------------------------------------

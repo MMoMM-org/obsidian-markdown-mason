@@ -20,6 +20,9 @@ import type { CatalogSource } from "./scripts/catalog/catalogSource";
 import { createCatalogSource } from "./scripts/catalog/requestUrlAdapter";
 import { LifecycleResolver } from "./scripts/lifecycleResolver";
 import { MaterializedFingerprintStore } from "./scripts/materializedFingerprint";
+import { LifecycleController } from "./scripts/lifecycleController";
+import type { LifecycleVault } from "./scripts/lifecycleController";
+import { ImportPickerModal } from "./ui/importPickerModal";
 
 // Re-export so consumers that import from "src/main" still resolve.
 export { DEFAULT_SETTINGS, type MasonSettings };
@@ -121,6 +124,16 @@ export class MarkdownMasonPlugin extends Plugin {
 	lifecycleResolver?: LifecycleResolver;
 
 	/**
+	 * Live lifecycle controller (T6.2) — composes disclosure + materializer + store
+	 * + per-device fingerprint + catalog into one method per Scripts-tab op.
+	 * Initialised in _initLifecycleResolver() reusing the same catalog/vault/
+	 * scriptsDir/fingerprint wiring. Exposed so MasonSettingTab can delegate its
+	 * lifecycle ops. Optional so test doubles can omit it; the tab falls back to
+	 * the minimal store-only ops when absent.
+	 */
+	lifecycleController?: LifecycleController;
+
+	/**
 	 * Test seam for the paste command.
 	 * Set this property before triggering a command in tests.
 	 * Undefined in production — all defaults apply.
@@ -182,19 +195,77 @@ export class MarkdownMasonPlugin extends Plugin {
 			const vaultAdapter = this.app.vault.adapter as unknown as import("./scripts/runtime").VaultAdapterPort;
 			const fingerprintStore = new MaterializedFingerprintStore(vaultAdapter, manifestPath);
 
+			const destPath = (id: string): string => `${scriptsDir}/${id}.cjs`;
+
 			this.lifecycleResolver = new LifecycleResolver({
 				catalog,
 				vault: vaultAdapter,
 				fingerprints: fingerprintStore,
 				scriptsDir,
-				destPath: (id: string) => `${scriptsDir}/${id}.cjs`,
+				destPath,
 				onlineProbe: () =>
 					typeof navigator !== "undefined" ? navigator.onLine : true,
 			});
-			console.debug("[MarkdownMason] lifecycle resolver initialized");
+
+			// T6.2: live lifecycle controller — reuses the SAME catalog/vault/
+			// scriptsDir/fingerprint wiring. rerender is overridden by the settings
+			// tab's guarded _selectSegment path when it builds its lifecycle ops.
+			this.lifecycleController = new LifecycleController({
+				app: this.app,
+				store: this.store,
+				catalog,
+				vault: this._buildControllerVault(vaultAdapter),
+				fingerprints: fingerprintStore,
+				destPath,
+				rerender: () => { /* overridden by settings tab via setRerender() */ },
+				listCjsFiles: () => this._listVaultCjsFiles(),
+				pickCjsFile: (paths) => this._pickVaultCjsFile(paths),
+			});
+
+			console.debug("[MarkdownMason] lifecycle resolver + controller initialized");
 		} catch (err: unknown) {
 			console.debug("[MarkdownMason] lifecycle resolver init failed — using offline stubs:", err);
 		}
+	}
+
+	/**
+	 * Wrap the vault adapter with a best-effort `remove` for the lifecycle controller
+	 * (used by remove() to delete a materialized `<id>.cjs`). Obsidian's DataAdapter
+	 * exposes remove(normalizedPath); we surface it as the optional LifecycleVault.remove.
+	 */
+	private _buildControllerVault(
+		vaultAdapter: import("./scripts/runtime").VaultAdapterPort,
+	): LifecycleVault {
+		const adapterRemove = (this.app.vault.adapter as unknown as {
+			remove?: (path: string) => Promise<void>;
+		}).remove;
+		return {
+			readBinary: (p) => vaultAdapter.readBinary(p),
+			writeBinary: (p, d) => vaultAdapter.writeBinary(p, d),
+			exists: (p) => vaultAdapter.exists(p),
+			mkdir: vaultAdapter.mkdir ? (p) => vaultAdapter.mkdir!(p) : undefined,
+			remove: adapterRemove ? (p) => adapterRemove.call(this.app.vault.adapter, p) : undefined,
+		};
+	}
+
+	/**
+	 * List vault-relative `.cjs` files as candidates for import-from-vault.
+	 * Uses the loaded-file index (getFiles) so no recursive scan is needed.
+	 */
+	private async _listVaultCjsFiles(): Promise<string[]> {
+		const files = this.app.vault.getFiles();
+		return files
+			.filter((f) => f.extension === "cjs")
+			.map((f) => f.path)
+			.sort();
+	}
+
+	/**
+	 * Minimal real picker: open ImportPickerModal listing the candidate `.cjs`
+	 * paths and resolve with the chosen path (or null when cancelled).
+	 */
+	private _pickVaultCjsFile(paths: string[]): Promise<string | null> {
+		return new ImportPickerModal(this.app, paths).pick();
 	}
 
 	/**

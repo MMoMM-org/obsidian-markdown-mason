@@ -33,7 +33,7 @@ phase: 6
 
 This phase replaces every `// P5:` seam with a real implementation and proves the wired path end-to-end through the actual plugin objects.
 
-- [ ] **T6.1 Live state resolver + production CatalogSource** `[activity: backend-api]`
+- [x] **T6.1 Live state resolver + production CatalogSource** `[activity: backend-api]`
 
   1. Prime: Read `evaluateState` inputs (`src/scripts/lifecycle.ts`), `buildCatalogSource()` + `_buildScriptItems` stubs, the materializer's per-device write path `[ref: SDD/ADR-11; SDD/Runtime View]`.
   2. Test (RED): a `LifecycleResolver` assembles a real `EvaluateStateInput` per script — `inCatalog`/`catalogVersion` from a fetched-and-cached catalog index; `local` from a per-device fingerprint reader (materialized bytes → checksum; version from the per-device manifest; `null` when absent); `online` from `navigator.onLine` AND fetch-failure-authoritative; `record` from the store. `getState(id)` returns the correct `LifecycleState` for each combination (Available/Active/UpdateAvailable/Blocked(drift|offline)/Disabled/Materializing). Catalog fetch failure → `online:false` path → `Blocked(offline)` for an enabled+okayed script with absent local. Per-device fingerprint is NOT written to synced `data.json`.
@@ -41,7 +41,7 @@ This phase replaces every `// P5:` seam with a real implementation and proves th
   4. Validate: unit tests for the resolver + fingerprint store; `npm test`; lint; types.
   - Success: live `getState` drives the Scripts/Commands tabs; a curated script can render **Active**/**UpdateAvailable** in the real UI `[ref: PRD/F1, F4, F5]`.
 
-- [ ] **T6.2 Live lifecycle ops (enable→disclosure→materialize; retry/update/re-review/remove/view/import/browse)** `[activity: frontend-ui]`
+- [x] **T6.2 Live lifecycle ops (enable→disclosure→materialize; retry/update/re-review/remove/view/import/browse)** `[activity: frontend-ui]`
 
   1. Prime: Read `_buildLifecycleOps` `_comingSoon` stubs, `disclosure.ts` (`makeAskCallback`/modal), `materializer.ts`, the card state→action mapping `[ref: SDD/Runtime View; SDD/User Interface & UX]`.
   2. Test (RED): **enable** an un-consented curated script → disclosure modal shown with `{version,checksum}` → on consent, `okayed` persisted and `materialize` runs → re-render shows Active; re-enable with unchanged `{v,c}` shows NO modal. **retry** (Blocked) → materialize. **update** (UpdateAvailable) → re-disclose new `{v,c}` → materialize → Active@new. **reReview** → re-show disclosure. **remove** → clear record + delete the materialized file + per-device fingerprint → Available/Absent. **viewSource** → curated repo link / imported reveal-in-vault. **importFromVault** → file-pick an imported `.cjs` → disclosure → materialize. **browseOfficial** → list catalog entries (minimal, real index). No `_comingSoon` remains.
