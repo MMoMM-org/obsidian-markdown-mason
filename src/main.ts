@@ -49,15 +49,19 @@ export { DEFAULT_SETTINGS, type MasonSettings };
  *
  * T6.1: called from _initLifecycleResolver() in onload() to wire the real catalog
  * source into the LifecycleResolver. Previously only a TODO comment.
+ *
+ * ADR-15 amendment: pluginDir (absolute path) enables the config-file fallback
+ * (.mason-dev.json) when MASON_DEV_DIR env var is unset — needed because Obsidian
+ * runs outside the dev container where env vars are unavailable.
  */
-export async function buildCatalogSource(): Promise<CatalogSource> {
+export async function buildCatalogSource(pluginDir?: string): Promise<CatalogSource> {
 	if (__MASON_DEV__) {
 		// Dev-only path: dynamically import so esbuild sees no static reference
 		// to devDirAdapter from outside the guarded branch. The dynamic import
 		// is inlined at build time when __MASON_DEV__ is "true" and eliminated
 		// entirely when it is "false".
 		const { createDevDirAdapter } = await import("./scripts/catalog/devDirAdapter");
-		return createDevDirAdapter();
+		return createDevDirAdapter(pluginDir);
 	}
 	return createCatalogSource();
 }
@@ -186,7 +190,19 @@ export class MarkdownMasonPlugin extends Plugin {
 	 */
 	private async _initLifecycleResolver(): Promise<void> {
 		try {
-			const catalog = await buildCatalogSource();
+			// Compute absolute plugin dir for the dev config-file fallback (ADR-15).
+			// FileSystemAdapter is a desktop-only Obsidian API; cast via unknown when
+			// unavailable (mobile) — pluginDir stays undefined and the env-or-throw
+			// path applies on mobile (which is expected: dev builds are desktop-only).
+			let pluginDir: string | undefined;
+			if (__MASON_DEV__) {
+				const { FileSystemAdapter } = await import("obsidian");
+				if (this.app.vault.adapter instanceof FileSystemAdapter) {
+					pluginDir = `${this.app.vault.adapter.getBasePath()}/${this.manifest.dir}`;
+				}
+			}
+
+			const catalog = await buildCatalogSource(pluginDir);
 			const scriptsDir = `${this.manifest.dir}/scripts`;
 			const manifestPath = `${scriptsDir}/.materialized.json`;
 

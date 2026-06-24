@@ -201,3 +201,175 @@ describe("DevDirAdapter env-var fallback (T5.1, ADR-15)", () => {
 		}
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Suite: config-file fallback (ADR-15 amendment — .mason-dev.json)
+// ---------------------------------------------------------------------------
+
+describe("createDevDirAdapter config-file fallback (ADR-15)", () => {
+	// Each test manages its own pluginDir temp dir and env state to stay hermetic.
+
+	function withNoEnv(fn: () => void | Promise<void>): () => Promise<void> {
+		return async () => {
+			const original = process.env["MASON_DEV_DIR"];
+			delete process.env["MASON_DEV_DIR"];
+			try {
+				await fn();
+			} finally {
+				if (original !== undefined) {
+					process.env["MASON_DEV_DIR"] = original;
+				}
+			}
+		};
+	}
+
+	it(
+		"env wins even when a config file is also present",
+		withNoEnv(async () => {
+			const { createDevDirAdapter } = await import(
+				"../../../src/scripts/catalog/devDirAdapter"
+			);
+
+			// pluginDir has a .mason-dev.json pointing at a different (nonexistent) dir
+			const pluginDir = mkdtempSync(join(tmpdir(), "mason-dev-plugindir-envwins-"));
+			try {
+				const decoyDir = "/decoy/catalog/dir";
+				writeFileSync(
+					join(pluginDir, ".mason-dev.json"),
+					JSON.stringify({ catalogDir: decoyDir }),
+					"utf-8",
+				);
+
+				// env is set to the real tmpDir (has index.json), decoy does not exist
+				process.env["MASON_DEV_DIR"] = tmpDir;
+				const adapter = createDevDirAdapter(pluginDir);
+				const index = await adapter.fetchIndex();
+				// Should have used env dir (tmpDir), not the decoy
+				expect(index.schemaVersion).toBe(1);
+			} finally {
+				rmSync(pluginDir, { recursive: true, force: true });
+			}
+		}),
+	);
+
+	it(
+		"uses .mason-dev.json catalogDir when env is unset and config file is present",
+		withNoEnv(async () => {
+			const { createDevDirAdapter } = await import(
+				"../../../src/scripts/catalog/devDirAdapter"
+			);
+
+			const pluginDir = mkdtempSync(join(tmpdir(), "mason-dev-plugindir-cfgfile-"));
+			try {
+				writeFileSync(
+					join(pluginDir, ".mason-dev.json"),
+					JSON.stringify({ catalogDir: tmpDir }),
+					"utf-8",
+				);
+
+				const adapter = createDevDirAdapter(pluginDir);
+				const index = await adapter.fetchIndex();
+				expect(index.schemaVersion).toBe(1);
+				expect(index.ref).toBe("test-sha-abc123");
+			} finally {
+				rmSync(pluginDir, { recursive: true, force: true });
+			}
+		}),
+	);
+
+	it(
+		"throws with message naming MASON_DEV_DIR AND the config path when env unset and no config file",
+		withNoEnv(async () => {
+			const { createDevDirAdapter } = await import(
+				"../../../src/scripts/catalog/devDirAdapter"
+			);
+
+			const pluginDir = mkdtempSync(join(tmpdir(), "mason-dev-plugindir-nofile-"));
+			try {
+				// No .mason-dev.json written here
+				expect(() => createDevDirAdapter(pluginDir)).toThrow(/MASON_DEV_DIR/);
+				expect(() => createDevDirAdapter(pluginDir)).toThrow(/\.mason-dev\.json/);
+			} finally {
+				rmSync(pluginDir, { recursive: true, force: true });
+			}
+		}),
+	);
+
+	it(
+		"throws a clear error when .mason-dev.json contains malformed JSON",
+		withNoEnv(async () => {
+			const { createDevDirAdapter } = await import(
+				"../../../src/scripts/catalog/devDirAdapter"
+			);
+
+			const pluginDir = mkdtempSync(join(tmpdir(), "mason-dev-plugindir-badjson-"));
+			try {
+				writeFileSync(
+					join(pluginDir, ".mason-dev.json"),
+					"{ this is not valid json !!!",
+					"utf-8",
+				);
+
+				expect(() => createDevDirAdapter(pluginDir)).toThrow(/\.mason-dev\.json/);
+			} finally {
+				rmSync(pluginDir, { recursive: true, force: true });
+			}
+		}),
+	);
+
+	it(
+		"throws a clear error when .mason-dev.json has missing catalogDir field",
+		withNoEnv(async () => {
+			const { createDevDirAdapter } = await import(
+				"../../../src/scripts/catalog/devDirAdapter"
+			);
+
+			const pluginDir = mkdtempSync(join(tmpdir(), "mason-dev-plugindir-nocatalogdir-"));
+			try {
+				writeFileSync(
+					join(pluginDir, ".mason-dev.json"),
+					JSON.stringify({ someOtherField: "/some/path" }),
+					"utf-8",
+				);
+
+				expect(() => createDevDirAdapter(pluginDir)).toThrow(/catalogDir/);
+			} finally {
+				rmSync(pluginDir, { recursive: true, force: true });
+			}
+		}),
+	);
+
+	it(
+		"throws a clear error when .mason-dev.json has empty catalogDir string",
+		withNoEnv(async () => {
+			const { createDevDirAdapter } = await import(
+				"../../../src/scripts/catalog/devDirAdapter"
+			);
+
+			const pluginDir = mkdtempSync(join(tmpdir(), "mason-dev-plugindir-emptycatalogdir-"));
+			try {
+				writeFileSync(
+					join(pluginDir, ".mason-dev.json"),
+					JSON.stringify({ catalogDir: "" }),
+					"utf-8",
+				);
+
+				expect(() => createDevDirAdapter(pluginDir)).toThrow(/catalogDir/);
+			} finally {
+				rmSync(pluginDir, { recursive: true, force: true });
+			}
+		}),
+	);
+
+	it(
+		"throws (env-or-throw) when no pluginDir is passed and env is unset",
+		withNoEnv(async () => {
+			const { createDevDirAdapter } = await import(
+				"../../../src/scripts/catalog/devDirAdapter"
+			);
+
+			// No pluginDir → config file step is skipped → throw like before
+			expect(() => createDevDirAdapter()).toThrow(/MASON_DEV_DIR/);
+		}),
+	);
+});

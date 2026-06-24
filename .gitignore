@@ -53,5 +53,8 @@ begin-code.sh
 # Local Obsidian dev test vault (manual plugin testing; not tracked)
 test/mason/
 
+# Dev catalog override config (ADR-15 amendment — per-machine, never committed)
+.mason-dev.json
+
 # Visual companion brainstorm scratch (tcs-workflow)
 .brainstorm/

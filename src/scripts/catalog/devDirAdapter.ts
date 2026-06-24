@@ -116,25 +116,90 @@ export class DevDirAdapter implements CatalogSource {
 }
 
 // ---------------------------------------------------------------------------
-// Factory: reads dir from MASON_DEV_DIR env var
+// Factory: reads dir from MASON_DEV_DIR env var OR .mason-dev.json config file
 // ---------------------------------------------------------------------------
 
 /**
- * Create a DevDirAdapter whose dir is read from the MASON_DEV_DIR environment
- * variable. Throws immediately if the variable is not set.
+ * Attempt to read catalogDir from <pluginDir>/.mason-dev.json.
+ * Returns the catalogDir string on success, throws a clear error on failure
+ * (malformed JSON or missing/empty catalogDir), returns null when the file is
+ * absent (so the caller can fall through to the final throw).
+ */
+function _readConfigFile(configPath: string): string | null {
+	let text: string;
+	try {
+		text = readFileSync(configPath, "utf-8");
+	} catch {
+		return null; // File absent — not an error, just skip to next resolution step
+	}
+
+	let doc: unknown;
+	try {
+		doc = JSON.parse(text);
+	} catch (cause) {
+		throw new Error(
+			`.mason-dev.json at ${configPath} contains malformed JSON. ` +
+			"Fix the file or remove it and set MASON_DEV_DIR instead.",
+			{ cause: cause instanceof Error ? cause : undefined },
+		);
+	}
+
+	if (
+		doc === null ||
+		typeof doc !== "object" ||
+		!("catalogDir" in doc) ||
+		typeof (doc as Record<string, unknown>)["catalogDir"] !== "string" ||
+		(doc as Record<string, string>)["catalogDir"] === ""
+	) {
+		throw new Error(
+			`.mason-dev.json at ${configPath} must contain a non-empty "catalogDir" string field. ` +
+			"Fix the file or remove it and set MASON_DEV_DIR instead.",
+		);
+	}
+
+	return (doc as Record<string, string>)["catalogDir"];
+}
+
+/**
+ * Create a DevDirAdapter using the following resolution order (ADR-15):
+ *   1. MASON_DEV_DIR env var — wins if set and non-empty.
+ *   2. <pluginDir>/.mason-dev.json — read when pluginDir is provided; must
+ *      contain `{ "catalogDir": string }` (absolute path).
+ *   3. Throw — names BOTH MASON_DEV_DIR and the config-file path.
+ *
+ * If pluginDir is not provided the config-file step is skipped (env-or-throw).
  *
  * Call only inside `if (__MASON_DEV__)` blocks.
  */
 // DCE sentinel: the marker must appear in dev bundles and be absent from prod bundles.
 // It is embedded here so it survives in the emitted JS when this module is included
 // (dev build) and is eliminated when the module is tree-shaken (prod build, __MASON_DEV__ = false).
-export function createDevDirAdapter(): DevDirAdapter {
-	const dir = process.env["MASON_DEV_DIR"];
-	if (dir === undefined || dir === "") {
+export function createDevDirAdapter(pluginDir?: string): DevDirAdapter {
+	// Step 1: env var wins
+	const envDir = process.env["MASON_DEV_DIR"];
+	if (envDir !== undefined && envDir !== "") {
+		return new DevDirAdapter(envDir);
+	}
+
+	// Step 2: config file (only when pluginDir is provided)
+	if (pluginDir !== undefined) {
+		const configPath = join(pluginDir, ".mason-dev.json");
+		const catalogDir = _readConfigFile(configPath); // throws on parse errors
+		if (catalogDir !== null) {
+			return new DevDirAdapter(catalogDir);
+		}
+
+		// File absent — fall through to step 3 with the config path in the message
 		throw new Error(
-			"[" + _DCE_MARKER + "] MASON_DEV_DIR env var is not set. " +
-			"Set it to the absolute path of your local catalog working-tree directory.",
+			"[" + _DCE_MARKER + "] Dev catalog directory not configured. " +
+			"Set the MASON_DEV_DIR env var or create " + configPath + " with " +
+			'{ "catalogDir": "/absolute/path/to/catalog" }.',
 		);
 	}
-	return new DevDirAdapter(dir);
+
+	// Step 3: no pluginDir — env-or-throw (original behaviour)
+	throw new Error(
+		"[" + _DCE_MARKER + "] MASON_DEV_DIR env var is not set. " +
+		"Set it to the absolute path of your local catalog working-tree directory.",
+	);
 }
