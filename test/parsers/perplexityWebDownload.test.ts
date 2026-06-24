@@ -2,7 +2,7 @@
 
 import { describe, it, expect } from "vitest";
 import { loadFixture } from "../fixtures";
-import { perplexityWebDownload } from "../../src/parsers/perplexityWebDownload";
+import { perplexityWebDownload } from "../../catalog/parsers/perplexityWebDownload";
 
 // ---------------------------------------------------------------------------
 // Fixture

@@ -4,7 +4,7 @@
 // offset queue), and empty inline returning body unchanged.
 
 import { describe, it, expect } from "vitest";
-import { replaceMarkersInBody } from "../../src/scripts/library/replaceMarkersInBody";
+import { replaceMarkersInBody } from "../../catalog/scripts/replaceMarkersInBody";
 import type { InlineMarker } from "../../src/core/types";
 
 // ---------------------------------------------------------------------------

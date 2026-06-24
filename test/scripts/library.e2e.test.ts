@@ -18,16 +18,16 @@ import { describe, it, expect, vi } from "vitest";
 import { buildRegistry } from "../../src/core/registry";
 import { buildScriptContext } from "../../src/scripts/context";
 import { applyToString } from "../../src/core/applyToString";
-import { perplexityApp } from "../../src/parsers/perplexityApp";
+import { perplexityApp } from "../../catalog/parsers/perplexityApp";
 import { normalizeUrl } from "../../src/core/url";
 import { loadFixture } from "../fixtures";
 import type { OperationContext, MasonSettings, EditPlan } from "../../src/core/types";
 import type { ScriptContext } from "../../src/scripts/context";
 
 // Import the four library scripts under test
-import { perplexityAppScript } from "../../src/scripts/library/perplexityApp";
-import { perplexityWebScript } from "../../src/scripts/library/perplexityWeb";
-import { perplexityWebDownloadScript } from "../../src/scripts/library/perplexityWebDownload";
+import { perplexityAppScript } from "../../catalog/scripts/perplexityApp";
+import { perplexityWebScript } from "../../catalog/scripts/perplexityWeb";
+import { perplexityWebDownloadScript } from "../../catalog/scripts/perplexityWebDownload";
 
 // ---------------------------------------------------------------------------
 // Fixtures

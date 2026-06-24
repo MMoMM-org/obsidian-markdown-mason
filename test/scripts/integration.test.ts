@@ -364,8 +364,8 @@ describe("T5.5B importScript — vault import flow", () => {
 import { App } from "obsidian";
 import { noticeLog, clearNoticeLog } from "../__mocks__/obsidian";
 import type { Editor } from "obsidian";
-import { perplexityApp } from "../../src/parsers/perplexityApp";
-import { perplexityAppScript } from "../../src/scripts/library/perplexityApp";
+import { perplexityApp } from "../../catalog/parsers/perplexityApp";
+import { perplexityAppScript } from "../../catalog/scripts/perplexityApp";
 import type { LoadedScript } from "../../src/scripts/paste/buildPasteChain";
 import type { ScriptFunction } from "../../src/scripts/context";
 
@@ -920,286 +920,33 @@ describe("T3.3 — data-driven paste chain dispatch via mason.pasteAndFormat", (
 });
 
 // ---------------------------------------------------------------------------
-// D: Selection script commands — bound script runs on selection, applyPlan called
+// D: Curated per-script selection commands are RETIRED (T5.2, PRD F11 / ADR-16)
 //
-// Tests verify the per-script selection commands (mason.script.perplexity-*):
-//   - The command is registered
-//   - When invoked on a selection, the script runs and applyPlan is called with
-//     the produced EditPlan (non-empty plan case)
-//   - rawFallback (replaceSelection) is NOT called on success
-//   - On script failure, rawFallback is a NO-OP (selection left intact)
-//
-// Editor stub: listSelections() returns a selection covering the full doc text
-// so selectionContext() uses the full doc as ctx.input.
-//
-// Input: minimal valid Perplexity-app format text that produces a non-empty
-// EditPlan via perplexityAppScript (Sources marker + at least one source line).
+// v0.1 registered a per-script selection command per bundled library script
+// (mason.script.perplexity-app/web/web-download). Curated scripts now ship as
+// standalone catalog .cjs entries (catalog/dist) and are enabled via the
+// Scripts settings tab, not compiled into the plugin. The paste path consumes
+// them through the data-driven paste chain (covered in block C above), and the
+// command path goes through the CommandManager launcher. The compiled-in
+// selection commands must therefore no longer be registered.
 // ---------------------------------------------------------------------------
 
-import type { EditorPosition, EditorSelection } from "obsidian";
-
-/** Build a minimal editor stub where listSelections() returns a full-doc selection. */
-function makeSelectionEditorStub(doc: string): Editor & { _replaced: string[] } {
-	const lines = doc.split("\n");
-	const replacedParts: string[] = [];
-
-	function posToOffset(pos: EditorPosition): number {
-		let offset = 0;
-		for (let i = 0; i < pos.line; i++) {
-			offset += (lines[i]?.length ?? 0) + 1;
-		}
-		return offset + pos.ch;
-	}
-
-	// Select the entire document: anchor at start, head at end of last line
-	const lastLine = lines.length - 1;
-	const lastCh = lines[lastLine]?.length ?? 0;
-	const selections: EditorSelection[] = [
-		{
-			anchor: { line: 0, ch: 0 } as EditorPosition,
-			head: { line: lastLine, ch: lastCh } as EditorPosition,
-		},
-	];
-
-	return {
-		_replaced: replacedParts,
-		getValue: () => doc,
-		getCursor: () => ({ line: lastLine, ch: lastCh } as EditorPosition),
-		posToOffset,
-		listSelections: (): EditorSelection[] => selections,
-		replaceSelection: (text: string): void => { replacedParts.push(text); },
-		getSelection: () => doc,
-		replaceRange: () => undefined,
-		setCursor: () => undefined,
-		setSelection: () => undefined,
-		setSelections: () => undefined,
-		setValue: () => undefined,
-		getLine: (n: number) => lines[n] ?? "",
-		lineCount: () => lines.length,
-		lastLine: () => lastLine,
-		somethingSelected: () => true,
-		getRange: () => "",
-		refresh: () => undefined,
-		focus: () => undefined,
-		blur: () => undefined,
-		hasFocus: () => false,
-		getScrollInfo: () => ({ top: 0, left: 0 }),
-		scrollTo: () => undefined,
-		scrollIntoView: () => undefined,
-		undo: () => undefined,
-		redo: () => undefined,
-		exec: () => undefined,
-		transaction: () => undefined,
-		wordAt: () => null,
-		offsetToPos: (offset: number) => {
-			let remaining = offset;
-			for (let i = 0; i < lines.length; i++) {
-				const len = (lines[i]?.length ?? 0) + 1;
-				if (remaining < len) return { line: i, ch: remaining } as EditorPosition;
-				remaining -= len;
-			}
-			return { line: lastLine, ch: lastCh } as EditorPosition;
-		},
-		processLines: () => undefined,
-		getDoc: function () { return this as unknown as typeof this; },
-		setLine: () => undefined,
-	} as unknown as Editor & { _replaced: string[] };
-}
-
-describe("D — selection script commands: bound script runs on selection, applyPlan called", () => {
+describe("D — compiled-in Perplexity selection commands are retired", () => {
 	beforeEach(() => clearNoticeLog());
 
-	it("mason.script.perplexity-auto is NOT registered (retired in T3.3 — auto detector removed)", async () => {
-		const plugin = await makePluginAndFireLayout();
-		const cmd = findCommand(plugin, "mason.script.perplexity-auto");
-		expect(cmd, "mason.script.perplexity-auto must NOT be registered after the detector retirement").toBeUndefined();
-	});
+	const RETIRED_IDS = [
+		"mason.script.perplexity-app",
+		"mason.script.perplexity-web",
+		"mason.script.perplexity-web-download",
+		// perplexity-auto was retired earlier (T3.3) — assert it stays gone too.
+		"mason.script.perplexity-auto",
+	];
 
-	it("mason.script.perplexity-app is registered after onLayoutReady", async () => {
-		const plugin = await makePluginAndFireLayout();
-		const cmd = findCommand(plugin, "mason.script.perplexity-app");
-		expect(cmd, "mason.script.perplexity-app must be registered").toBeDefined();
-		expect(cmd?.name).toBe("Perplexity app");
-	});
-
-	it("mason.script.perplexity-web is registered after onLayoutReady", async () => {
-		const plugin = await makePluginAndFireLayout();
-		const cmd = findCommand(plugin, "mason.script.perplexity-web");
-		expect(cmd, "mason.script.perplexity-web must be registered").toBeDefined();
-	});
-
-	it("mason.script.perplexity-web-download is registered after onLayoutReady", async () => {
-		const plugin = await makePluginAndFireLayout();
-		const cmd = findCommand(plugin, "mason.script.perplexity-web-download");
-		expect(cmd, "mason.script.perplexity-web-download must be registered").toBeDefined();
-	});
-
-	it("mason.script.perplexity-app on a Perplexity-app selection calls applyPlan with the produced plan", async () => {
-		const plugin = await makePluginAndFireLayout();
-		// Editor with full-doc selection: selectionContext uses the entire doc as input
-		const editor = makeSelectionEditorStub(PERPLEXITY_APP_INPUT);
-
-		const applyPlanSpy = vi.fn();
-
-		// Inject applyPlan spy via the shared _commandInjection test seam.
-		// Selection commands pass this._commandInjection to _runScriptOnSelection.
-		plugin._commandInjection = {
-			applyPlan: applyPlanSpy,
-		};
-
-		const cmd = findCommand(plugin, "mason.script.perplexity-app");
-		expect(cmd, "mason.script.perplexity-app must be registered").toBeDefined();
-
-		await cmd.editorCallback(editor);
-
-		// Script produced a non-empty EditPlan → applyPlan must have been called
-		expect(
-			applyPlanSpy,
-			"applyPlan must be called when the script produces a non-empty EditPlan",
-		).toHaveBeenCalledOnce();
-
-		// The plan passed to applyPlan must be a non-empty EditPlan array
-		const planArg = applyPlanSpy.mock.calls[0]?.[0] as unknown[];
-		expect(
-			Array.isArray(planArg) && planArg.length > 0,
-			`applyPlan must receive a non-empty EditPlan; got: ${JSON.stringify(planArg)}`,
-		).toBe(true);
-
-		// rawFallback (replaceSelection) must NOT be called on success
-		expect(
-			editor._replaced,
-			"rawFallback must NOT be called on success path",
-		).toHaveLength(0);
-	});
-
-	it("selection command is a noop when script returns undefined — replaceSelection and applyPlan not called", async () => {
-		// Script returns undefined for unrecognized input (noop path, not a throw).
-		// rawFallback is never triggered; applyPlan is not called.
-		const plugin = await makePluginAndFireLayout();
-		const doc = "# My Note\n\nSelected text.";
-		const editor = makeSelectionEditorStub(doc);
-
-		const applyPlanSpy = vi.fn();
-
-		plugin._commandInjection = {
-			applyPlan: applyPlanSpy,
-			// scriptOverride not set — perplexityAppScript runs and returns noop for this
-			// input (perplexityApp.canParse finds no Sources/Citations marker block).
-		};
-
-		const cmd = findCommand(plugin, "mason.script.perplexity-app");
-		await cmd.editorCallback(editor);
-
-		// Script returned undefined → noop: replaceSelection not called
-		expect(
-			editor._replaced,
-			"replaceSelection must not be called when script returns noop",
-		).toHaveLength(0);
-
-		// applyPlan not called (noop path)
-		expect(
-			applyPlanSpy,
-			"applyPlan must not be called when script returns noop",
-		).not.toHaveBeenCalled();
-	});
-
-	// PRD F8-AC2 / F7-AC3: success path — selection command shows footnote-count Notice.
-	it("selection command shows footnote-count Notice ('Mason: N footnote(s) filed') when script produces footnote defs (PRD F8-AC2/F7-AC3)", async () => {
-		const plugin = await makePluginAndFireLayout();
-		const editor = makeSelectionEditorStub(PERPLEXITY_APP_INPUT);
-
-		const applyPlanSpy = vi.fn();
-
-		plugin._commandInjection = {
-			applyPlan: applyPlanSpy,
-		};
-
-		const cmd = findCommand(plugin, "mason.script.perplexity-app");
-		expect(cmd).toBeDefined();
-
-		clearNoticeLog();
-		await cmd.editorCallback(editor);
-
-		// Script produced a non-empty EditPlan → applyPlan called (pre-condition for Notice)
-		expect(applyPlanSpy, "applyPlan must be called before we check the Notice").toHaveBeenCalledOnce();
-
-		// Exactly ONE count Notice must fire (PRD F8-AC2)
-		const notices = noticeLog();
-		expect(notices, "exactly one count Notice must fire on apply success").toHaveLength(1);
-
-		// The Notice message must report footnotes filed (feature b)
-		expect(
-			notices[0],
-			"count Notice message must match 'Mason: N footnote' or 'Mason: N footnotes filed'",
-		).toMatch(/^Mason: \d+ footnotes? filed$/);
-	});
-
-	// W1: fallback branch — selection command with a plan that has NO footnote defs.
-	// When countFootnoteDefs returns 0 the Notice must match /^Mason: \d+ changes?$/.
-	// This test deliberately fails if the else-branch in _runScriptOnSelection is removed.
-	it("selection command shows change-count Notice ('Mason: N change(s)') when plan has no footnote defs (W1 fallback branch)", async () => {
-		const plugin = await makePluginAndFireLayout();
-		const doc = "# My Note\n\nSelected text.";
-		const editor = makeSelectionEditorStub(doc);
-
-		const applyPlanSpy = vi.fn();
-
-		// A script that returns a non-empty EditPlan with a plain-text insert — no [^n]: defs.
-		// countFootnoteDefs will return 0, so the fallback Notice branch fires.
-		plugin._commandInjection = {
-			applyPlan: applyPlanSpy,
-			scriptOverride: () => [{ from: 0, to: 0, insert: "plain text insert" }],
-		};
-
-		const cmd = findCommand(plugin, "mason.script.perplexity-app");
-		expect(cmd).toBeDefined();
-
-		clearNoticeLog();
-		await cmd.editorCallback(editor);
-
-		// Script produced a non-empty EditPlan → applyPlan called (pre-condition for Notice)
-		expect(applyPlanSpy, "applyPlan must be called before we check the Notice").toHaveBeenCalledOnce();
-
-		// The fallback Notice must report edit count, not footnotes
-		const notices = noticeLog();
-		expect(notices, "exactly one count Notice must fire on apply success").toHaveLength(1);
-		expect(
-			notices[0],
-			"fallback Notice must match 'Mason: N change(s)' when plan has no footnote defs",
-		).toMatch(/^Mason: \d+ changes?$/);
-	});
-
-	it("selection command throw path: rawFallback is no-op, applyPlan not called, Notice shown", async () => {
-		// When the script throws, the runner triggers rawFallback (a no-op for selection)
-		// and must NOT call applyPlan (atomicity). A Notice must be shown.
-		const plugin = await makePluginAndFireLayout();
-		const doc = "# My Note\n\nSelected text.";
-		const editor = makeSelectionEditorStub(doc);
-
-		const applyPlanSpy = vi.fn();
-
-		plugin._commandInjection = {
-			applyPlan: applyPlanSpy,
-			scriptOverride: () => { throw new Error("forced selection failure"); },
-		};
-
-		const cmd = findCommand(plugin, "mason.script.perplexity-app");
-		await cmd.editorCallback(editor);
-
-		// rawFallback for selection is a no-op — replaceSelection must NOT be called
-		expect(
-			editor._replaced,
-			"rawFallback must be a no-op for selection commands (doc unchanged)",
-		).toHaveLength(0);
-
-		// applyPlan must NOT be called (atomicity: applyPlan XOR rawFallback)
-		expect(
-			applyPlanSpy,
-			"applyPlan must NOT be called when script throws (atomicity)",
-		).not.toHaveBeenCalled();
-
-		// A Notice must be shown to inform the user of the failure
-		const notices = noticeLog();
-		expect(notices.length, "expected at least one Notice on selection script failure").toBeGreaterThan(0);
-	});
+	for (const id of RETIRED_IDS) {
+		it(`${id} is NOT registered after onLayoutReady`, async () => {
+			const plugin = await makePluginAndFireLayout();
+			const cmd = findCommand(plugin, id);
+			expect(cmd, `${id} must NOT be registered (curated scripts are catalog entries, not compiled-in commands)`).toBeUndefined();
+		});
+	}
 });

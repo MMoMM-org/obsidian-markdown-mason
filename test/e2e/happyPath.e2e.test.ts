@@ -33,9 +33,9 @@ import { applyToString } from "../../src/core/applyToString";
 import { loadFixture } from "../fixtures";
 import { noticeLog, clearNoticeLog } from "../__mocks__/obsidian";
 
-import { perplexityAppScript } from "../../src/scripts/library/perplexityApp";
-import { perplexityWebScript } from "../../src/scripts/library/perplexityWeb";
-import { perplexityWebDownloadScript } from "../../src/scripts/library/perplexityWebDownload";
+import { perplexityAppScript } from "../../catalog/scripts/perplexityApp";
+import { perplexityWebScript } from "../../catalog/scripts/perplexityWeb";
+import { perplexityWebDownloadScript } from "../../catalog/scripts/perplexityWebDownload";
 
 import type { EditPlan, OperationContext, MasonSettings } from "../../src/core/types";
 import type { ScriptFunction } from "../../src/scripts/context";

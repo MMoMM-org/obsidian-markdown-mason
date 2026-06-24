@@ -31,7 +31,7 @@ phase: 5
 
 This phase delivers the developer loop, the production-safety build guarantee, the migrated curated catalog, and end-to-end proof of the headline flows.
 
-- [ ] **T5.1 Build flag + `devDirAdapter` (DCE)** `[activity: build-platform]`
+- [x] **T5.1 Build flag + `devDirAdapter` (DCE)** `[activity: build-platform]`
 
   1. Prime: Read ADR-15 + the DCE gotcha `[ref: SDD/ADR-15; SDD/Implementation Gotchas]`; current `esbuild.config.mjs:43-69`.
   2. Test (RED): dev build with override configured → curated code read from the local working-tree dir via `devDirAdapter`; a **prod-bundle assertion test** confirms the built `main.js` string contains no dev-adapter marker; override value is never written to `data.json`.
@@ -39,7 +39,7 @@ This phase delivers the developer loop, the production-safety build guarantee, t
   4. Validate: unit + prod-bundle test; `npm run build`; lint; types.
   - Success: dev reads local dir; prod physically omits the path `[ref: PRD/Should; SDD/ADR-15]`.
 
-- [ ] **T5.2 Migrate Perplexity scripts to catalog entries** `[activity: domain-modeling]`
+- [x] **T5.2 Migrate Perplexity scripts to catalog entries** `[activity: domain-modeling]`
 
   1. Prime: Read each `parsers/perplexity*.ts` `canParse` + `library/perplexity*.ts` `run` + the migration note `[ref: SDD/Directory Map; PRD/F11]`.
   2. Test (RED): each migrated envelope exports `{ run, paste:{canHandle, priority} }` with `canHandle === canParse` behavior and the correct priority; an `index.json` with `{version, checksum, path}` validates against the catalog schema; checksums are byte-exact over the published `.cjs`.

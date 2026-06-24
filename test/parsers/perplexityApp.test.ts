@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { InlineMarker } from "../../src/core/types";
 import { loadFixture } from "../fixtures";
-import { perplexityApp } from "../../src/parsers/perplexityApp";
+import { perplexityApp } from "../../catalog/parsers/perplexityApp";
 
 // ---------------------------------------------------------------------------
 // Fixture

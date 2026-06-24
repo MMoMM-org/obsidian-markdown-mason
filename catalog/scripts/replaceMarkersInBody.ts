@@ -1,8 +1,8 @@
 // Shared helper for web and web-download scripts.
 // No obsidian import — pure utility.
 
-import type { EditPlan, FootnoteRef, InlineMarker } from "../../core/types";
-import { applyToString } from "../../core/applyToString";
+import type { EditPlan, FootnoteRef, InlineMarker } from "../../src/core/types";
+import { applyToString } from "../../src/core/applyToString";
 
 /**
  * Filter sources to those whose incomingId appears at least once in the

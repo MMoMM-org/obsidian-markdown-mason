@@ -27,18 +27,18 @@
 // 5. cascade with ctx.op.input = finalBody → one insert at cursor in doc
 // 6. moveToResources(ctx.op, compactRefDefinitions(newRefs)) → insert single-line defs into Resources
 
-import type { ScriptContext, ScriptFunction } from "../context";
-import type { EditPlan } from "../../core/types";
-import { perplexityWeb } from "../../parsers/perplexityWeb";
+import type { ScriptContext, ScriptFunction } from "../../src/scripts/context";
+import type { EditPlan } from "../../src/core/types";
+import { perplexityWeb } from "../parsers/perplexityWeb";
 import {
 	resolveFootnoteIdentity,
 	applyFootnoteInlineRename,
 	compactRefDefinitions,
 	moveToResources,
 	scanExistingRefs,
-} from "../../core/footnotes";
-import { applyToString } from "../../core/applyToString";
-import { cascade } from "../../core/headings";
+} from "../../src/core/footnotes";
+import { applyToString } from "../../src/core/applyToString";
+import { cascade } from "../../src/core/headings";
 import { replaceMarkersInBody } from "./replaceMarkersInBody";
 
 /**

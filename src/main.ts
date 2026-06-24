@@ -4,17 +4,12 @@ import { DEFAULT_SETTINGS, type MasonSettings } from "./core/types";
 import type { EditPlan } from "./core/types";
 import { registerCommands, countNoticeMessage } from "./commands";
 import { pasteContext } from "./sources/paste";
-import { selectionContext } from "./sources/selection";
 import { applyEditPlan } from "./sources/apply";
 import { buildScriptContext, buildGatedLogger } from "./scripts/context";
 import { ScriptRunner } from "./scripts/runner";
 import type { RunnerEffects } from "./scripts/runner";
-import type { ScriptFunction } from "./scripts/context";
 import { buildRegistry } from "./core/registry";
 import { countFootnoteDefs } from "./core/footnotes";
-import { perplexityAppScript } from "./scripts/library/perplexityApp";
-import { perplexityWebScript } from "./scripts/library/perplexityWeb";
-import { perplexityWebDownloadScript } from "./scripts/library/perplexityWebDownload";
 import { ScriptStore } from "./scripts/store";
 import { buildPasteChain } from "./scripts/paste/buildPasteChain";
 import type { LoadedScript } from "./scripts/paste/buildPasteChain";
@@ -73,9 +68,8 @@ export async function buildCatalogSource(): Promise<CatalogSource> {
 //
 // Fields:
 //   clipboardReader  — replaces navigator.clipboard.readText() (paste only)
-//   applyPlan        — replaces the CM6 applyEditPlan side-effect (paste + selection)
+//   applyPlan        — replaces the CM6 applyEditPlan side-effect (paste only)
 //   failScript       — when true, forces the paste script to throw (paste rawFallback tests)
-//   scriptOverride   — when set, replaces the script for SELECTION commands only
 //   pasteScripts     — when set, replaces the enabled paste-script set fed to the
 //                      data-driven paste chain (paste only)
 // ---------------------------------------------------------------------------
@@ -87,8 +81,6 @@ export interface CommandInjection {
 	applyPlan?: (plan: EditPlan) => void;
 	/** When true, forces the paste script to throw (for paste rawFallback tests). */
 	failScript?: boolean;
-	/** When set, replaces the script function for SELECTION commands only. */
-	scriptOverride?: ScriptFunction;
 	/**
 	 * When set, replaces the enabled paste-script set passed to buildPasteChain
 	 * (paste command only). Production passes _buildEnabledPasteScripts().
@@ -164,7 +156,6 @@ export class MarkdownMasonPlugin extends Plugin {
 		}
 		registerCommands(this);
 		this._registerPasteCommand();
-		this._registerScriptCommands();
 		this._registerRunScriptLauncher();
 	}
 
@@ -232,41 +223,16 @@ export class MarkdownMasonPlugin extends Plugin {
 	}
 
 	// -------------------------------------------------------------------------
-	// Mason: <Script name> — per-script selection commands
+	// Curated scripts are NO LONGER compiled-in selection commands.
 	//
-	// Each bundled library script is registered as a command that runs on the
-	// current selection.  The selection text is passed as ctx.input; the script
-	// may inspect or transform it and return an EditPlan.
-	//
-	// RAW FALLBACK FOR SELECTION: unlike paste, where rawFallback re-inserts the
-	// clipboard text, a selection-run raw fallback is a NO-OP — the selected text
-	// already lives in the document.  Calling replaceSelection with the original
-	// text would re-insert it unchanged, which is safe but redundant; the
-	// intentional choice is to leave the selection intact on failure.
-	//
-	// Shared helper: _runScriptOnSelection factors out effects wiring + runner
-	// creation so each per-script command is a one-liner editorCallback.
+	// In v0.1 each bundled library script (Perplexity app / web / web-download)
+	// was registered here as a per-script selection command. As of the catalog
+	// migration (T5.2, PRD F11 / ADR-16) curated scripts ship as standalone
+	// catalog .cjs entries, materialized into the vault and enabled via the
+	// Scripts settings tab (Phase 4 UI) — not compiled into the plugin bundle.
+	// The paste path consumes them through the data-driven paste chain; the
+	// command path goes through the CommandManager launcher below.
 	// -------------------------------------------------------------------------
-
-	private _registerScriptCommands(): void {
-		const scripts: Array<{ id: string; name: string; script: ScriptFunction }> = [
-			{ id: "mason.script.perplexity-app", name: "Perplexity app", script: perplexityAppScript },
-			{ id: "mason.script.perplexity-web", name: "Perplexity web", script: perplexityWebScript },
-			{ id: "mason.script.perplexity-web-download", name: "Perplexity web download", script: perplexityWebDownloadScript },
-		];
-
-		for (const { id, name, script } of scripts) {
-			this.addCommand({
-				id,
-				name,
-				// _commandInjection is the shared test seam for both paste and selection commands.
-				// scriptOverride (for selection throw-path tests) and applyPlan are read here.
-				editorCallback: (editor: Editor): Promise<void> => {
-					return this._runScriptOnSelection(editor, script, this._commandInjection);
-				},
-			});
-		}
-	}
 
 	// -------------------------------------------------------------------------
 	// Mason: Run script… — built-in launcher (T4.4 ADR-17)
@@ -305,70 +271,6 @@ export class MarkdownMasonPlugin extends Plugin {
 				modal.open();
 			},
 		});
-	}
-
-	/**
-	 * Run a library script against the current selection.
-	 * Shared by all per-script selection commands.
-	 *
-	 * RAW FALLBACK: on failure, the selection is left intact (no-op).
-	 * The selected text already exists in the document — unlike paste,
-	 * there is nothing to "re-insert" on failure.
-	 *
-	 * The `injection` parameter is the shared test seam (_commandInjection).
-	 * Tests set plugin._commandInjection.applyPlan to spy on applyEditPlan.
-	 * Tests set plugin._commandInjection.scriptOverride to force a specific script
-	 * (e.g. a throwing script) for selection throw-path coverage.
-	 */
-	private async _runScriptOnSelection(
-		editor: Editor,
-		script: ScriptFunction,
-		injection?: CommandInjection,
-	): Promise<void> {
-		const op = selectionContext(editor, this.settings);
-		const { api: mason } = buildRegistry();
-		const ctx = buildScriptContext({
-			input: op.input ?? op.doc,
-			source: "selection",
-			op,
-			mason,
-			logger: buildGatedLogger(this.settings.debugLogging),
-		});
-
-		const applyPlanFn: (plan: EditPlan) => void =
-			injection?.applyPlan ?? ((plan: EditPlan): void => applyEditPlan(editor, plan));
-
-		const effects: RunnerEffects = {
-			applyPlan: (plan: EditPlan): void => { applyPlanFn(plan); },
-			// Raw fallback for selection: leave the selection intact (no-op).
-			// The selected text already lives in the document; unlike paste,
-			// there is no clipboard text to re-insert on failure.
-			rawFallback: (): void => { /* selection raw fallback: leave intact */ },
-			notify: (msg: string): void => { new Notice(msg); },
-		};
-
-		const activeScript = injection?.scriptOverride ?? script;
-		// SEC-006: policy "enabled" bypasses the per-checksum consent gate because these are
-		// FIRST-PARTY bundled library scripts compiled into the plugin bundle. Their sha256 is
-		// fixed at build time and there is no external file that an attacker can tamper with.
-		// The consent model (ScriptStore + disclosure modal) protects user-imported external
-		// .cjs files; it does not apply to code shipped inside the plugin itself.
-		const runner = new ScriptRunner(effects, { policy: "enabled" });
-		const outcome = await runner.run(activeScript, ctx);
-		// PRD F8-AC2 / F7-AC3: fire a Notice when the script applies changes.
-		// Prefer footnote-count ("N footnotes filed") when the plan contains defs;
-		// fall back to edit-count ("N change(s)") for non-footnote plans.
-		if (outcome.kind === "applied") {
-			if (this.settings.debugLogging) {
-				console.debug(`[MarkdownMason] selection outcome: ${outcome.kind} (${outcome.count} edits)`);
-			}
-			const fn = countFootnoteDefs(outcome.plan);
-			effects.notify(
-				fn > 0
-					? `Mason: ${fn} footnote${fn === 1 ? "" : "s"} filed`
-					: countNoticeMessage(outcome.count),
-			);
-		}
 	}
 }
 

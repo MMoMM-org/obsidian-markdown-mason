@@ -16,8 +16,8 @@
 //                 reference after deduplication/renumbering.
 // ---------------------------------------------------------------------------
 
-import type { FootnoteRef, InlineMarker, ParseResult } from "../core/types";
-import type { CitationParser } from "./types";
+import type { FootnoteRef, InlineMarker, ParseResult } from "../../src/core/types";
+import type { CitationParser } from "../../src/parsers/types";
 
 // Matches a Markdown inline link: [text](url)
 // Negative lookbehind (?<!!) excludes image syntax ![alt](url).

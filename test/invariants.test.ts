@@ -41,7 +41,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { App } from "obsidian";
-import type { Editor, EditorPosition, EditorSelection } from "obsidian";
+import type { Editor, EditorPosition } from "obsidian";
 import { noticeLog, clearNoticeLog } from "./__mocks__/obsidian";
 
 import { ScriptRunner } from "../src/scripts/runner";
@@ -49,7 +49,7 @@ import type { RunnerEffects, RunOptions } from "../src/scripts/runner";
 import type { ScriptFunction } from "../src/scripts/context";
 import { buildScriptContext } from "../src/scripts/context";
 import { buildRegistry } from "../src/core/registry";
-import { perplexityAppScript } from "../src/scripts/library/perplexityApp";
+import { perplexityAppScript } from "../catalog/scripts/perplexityApp";
 import { applyToString } from "../src/core/applyToString";
 import { ScriptStore } from "../src/scripts/store";
 import type { PluginDataPort } from "../src/scripts/store";
@@ -178,54 +178,6 @@ function makePasteEditor(doc: string): Editor & { _replaced: string[] } {
 	} as unknown as Editor & { _replaced: string[] };
 }
 
-/** Editor stub for selection-command tests. */
-function makeSelectionEditor(doc: string): Editor & { _replaced: string[] } {
-	const lines = doc.split("\n");
-	const replaced: string[] = [];
-	const lastLine = lines.length - 1;
-	const lastCh = lines[lastLine]?.length ?? 0;
-	const selections: EditorSelection[] = [
-		{ anchor: { line: 0, ch: 0 } as EditorPosition, head: { line: lastLine, ch: lastCh } as EditorPosition },
-	];
-	return {
-		_replaced: replaced,
-		getValue: () => doc,
-		getCursor: () => ({ line: lastLine, ch: lastCh } as EditorPosition),
-		posToOffset: (pos: EditorPosition): number => {
-			let off = 0;
-			for (let i = 0; i < pos.line; i++) off += (lines[i]?.length ?? 0) + 1;
-			return off + pos.ch;
-		},
-		listSelections: (): EditorSelection[] => selections,
-		replaceSelection: (text: string): void => { replaced.push(text); },
-		getSelection: () => doc,
-		replaceRange: () => undefined,
-		setCursor: () => undefined, setSelection: () => undefined, setSelections: () => undefined,
-		setValue: () => undefined,
-		getLine: (n: number) => lines[n] ?? "",
-		lineCount: () => lines.length,
-		lastLine: () => lastLine,
-		somethingSelected: () => true,
-		getRange: () => "",
-		refresh: () => undefined, focus: () => undefined, blur: () => undefined,
-		hasFocus: () => false, getScrollInfo: () => ({ top: 0, left: 0 }),
-		scrollTo: () => undefined, scrollIntoView: () => undefined,
-		undo: () => undefined, redo: () => undefined, exec: () => undefined,
-		transaction: () => undefined, wordAt: () => null,
-		offsetToPos: (offset: number): EditorPosition => {
-			let rem = offset;
-			for (let i = 0; i < lines.length; i++) {
-				const len = (lines[i]?.length ?? 0) + 1;
-				if (rem < len) return { line: i, ch: rem } as EditorPosition;
-				rem -= len;
-			}
-			return { line: lastLine, ch: lastCh } as EditorPosition;
-		},
-		processLines: () => undefined,
-		getDoc: function () { return this as unknown as typeof this; },
-		setLine: () => undefined,
-	} as unknown as Editor & { _replaced: string[] };
-}
 
 async function makePlugin() {
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -617,95 +569,6 @@ describe("I3 — Empty clipboard → Notice no-op (paste command)", () => {
 	});
 });
 
-describe("I3 — Unrecognized selection input → script noop (selection command)", () => {
-	beforeEach(() => clearNoticeLog());
-
-	it("script returning undefined for unrecognized input calls neither applyPlan nor replaceSelection", async () => {
-		const plugin = await makePlugin();
-		// Non-empty but unrecognized plain text — perplexityAppScript returns undefined (noop)
-		// because perplexityApp.canParse finds no Sources/Citations marker block.
-		// The no-op comes from the script returning undefined, not an empty-selection guard.
-		const doc = "# My Note\n\nPlain text with no Perplexity format.";
-		const editor = makeSelectionEditor(doc);
-		const applyPlanSpy = vi.fn();
-
-		plugin._commandInjection = { applyPlan: applyPlanSpy };
-
-		const cmd = findCommand(plugin, "mason.script.perplexity-app");
-		await cmd.editorCallback(editor);
-
-		expect(applyPlanSpy, "applyPlan must not be called for noop selection").not.toHaveBeenCalled();
-		expect(editor._replaced, "replaceSelection must not be called for noop selection").toHaveLength(0);
-	});
-
-	it("empty selection (anchor === head) → script receives empty string → returns undefined → noop", async () => {
-		// Production path: selectionContext computes input = doc.slice(from, to).
-		// When anchor === head (no actual selection), from === to and input === "".
-		// _runScriptOnSelection passes input via `op.input ?? op.doc`; since ""
-		// is not null/undefined, the script receives "" as its input.
-		// perplexityAppScript returns undefined for empty input → runner emits no
-		// plan → applyPlan and replaceSelection are both never called.
-		const plugin = await makePlugin();
-
-		// An editor whose anchor and head resolve to the same offset (no selection).
-		// We set getSelection to "" and somethingSelected to false to reflect no
-		// active selection; listSelections returns anchor===head at offset 0.
-		const doc = "# My Note\n\nSome text here.";
-		const lines = doc.split("\n");
-		const emptySelectionEditor = {
-			getValue: () => doc,
-			getCursor: () => ({ line: 0, ch: 0 }),
-			posToOffset: (pos: { line: number; ch: number }): number => {
-				let off = 0;
-				for (let i = 0; i < pos.line; i++) off += (lines[i]?.length ?? 0) + 1;
-				return off + pos.ch;
-			},
-			listSelections: () => [
-				{ anchor: { line: 0, ch: 0 }, head: { line: 0, ch: 0 } },
-			],
-			replaceSelection: vi.fn(),
-			getSelection: () => "",
-			replaceRange: () => undefined,
-			setCursor: () => undefined, setSelection: () => undefined, setSelections: () => undefined,
-			setValue: () => undefined,
-			getLine: (n: number) => lines[n] ?? "",
-			lineCount: () => lines.length,
-			lastLine: () => lines.length - 1,
-			somethingSelected: () => false,
-			getRange: () => "",
-			refresh: () => undefined, focus: () => undefined, blur: () => undefined,
-			hasFocus: () => false, getScrollInfo: () => ({ top: 0, left: 0 }),
-			scrollTo: () => undefined, scrollIntoView: () => undefined,
-			undo: () => undefined, redo: () => undefined, exec: () => undefined,
-			transaction: () => undefined, wordAt: () => null,
-			offsetToPos: (offset: number) => {
-				let rem = offset;
-				for (let i = 0; i < lines.length; i++) {
-					const len = (lines[i]?.length ?? 0) + 1;
-					if (rem < len) return { line: i, ch: rem };
-					rem -= len;
-				}
-				return { line: lines.length - 1, ch: lines[lines.length - 1]?.length ?? 0 };
-			},
-			processLines: () => undefined,
-			getDoc: function () { return this as unknown as typeof this; },
-			setLine: () => undefined,
-		} as unknown as import("obsidian").Editor & { replaceSelection: ReturnType<typeof vi.fn> };
-
-		const applyPlanSpy = vi.fn();
-		plugin._commandInjection = { applyPlan: applyPlanSpy };
-
-		const cmd = findCommand(plugin, "mason.script.perplexity-app");
-		await cmd.editorCallback(emptySelectionEditor);
-
-		expect(applyPlanSpy, "applyPlan must not be called when selection is empty").not.toHaveBeenCalled();
-		expect(
-			emptySelectionEditor.replaceSelection,
-			"replaceSelection must not be called when selection is empty (selection raw-fallback is a no-op)",
-		).not.toHaveBeenCalled();
-	});
-});
-
 // ---------------------------------------------------------------------------
 // I4. `disabled` script never runs
 //     (Re-asserted from runner.test.ts policy-disabled suite)
@@ -872,64 +735,6 @@ describe("I6 — Throwing script → raw fallback (paste command)", () => {
 		expect(effects.fallbackCount).toBe(1);
 		expect(effects.appliedPlans).toHaveLength(0);
 		expect(effects.notices.length).toBeGreaterThan(0);
-	});
-});
-
-describe("I6 — Throwing script → raw fallback (selection command)", () => {
-	beforeEach(() => clearNoticeLog());
-
-	it("selection: throwing script — rawFallback is a no-op (replaceSelection not called; selection left intact)", async () => {
-		const plugin = await makePlugin();
-		const doc = "# My Note\n\nSelected text.";
-		const editor = makeSelectionEditor(doc);
-		const applyPlanSpy = vi.fn();
-
-		plugin._commandInjection = {
-			applyPlan: applyPlanSpy,
-			scriptOverride: (): never => { throw new Error("forced selection failure"); },
-		};
-
-		const cmd = findCommand(plugin, "mason.script.perplexity-app");
-		await cmd.editorCallback(editor);
-
-		// Raw fallback for selection is a no-op — replaceSelection must NOT be called
-		expect(
-			editor._replaced,
-			"selection rawFallback must be a no-op (replaceSelection must not be called)",
-		).toHaveLength(0);
-	});
-
-	it("selection: throwing script — applyPlan is NEVER called (atomicity)", async () => {
-		const plugin = await makePlugin();
-		const doc = "# My Note\n\nSelected text.";
-		const editor = makeSelectionEditor(doc);
-		const applyPlanSpy = vi.fn();
-
-		plugin._commandInjection = {
-			applyPlan: applyPlanSpy,
-			scriptOverride: (): never => { throw new Error("forced selection failure"); },
-		};
-
-		const cmd = findCommand(plugin, "mason.script.perplexity-app");
-		await cmd.editorCallback(editor);
-
-		expect(applyPlanSpy, "applyPlan must NOT be called when selection script throws").not.toHaveBeenCalled();
-	});
-
-	it("selection: throwing script — a Notice is shown (error is surfaced, not silent)", async () => {
-		const plugin = await makePlugin();
-		const doc = "# My Note\n\nSelected text.";
-		const editor = makeSelectionEditor(doc);
-
-		plugin._commandInjection = {
-			applyPlan: vi.fn(),
-			scriptOverride: (): never => { throw new Error("forced selection failure"); },
-		};
-
-		const cmd = findCommand(plugin, "mason.script.perplexity-app");
-		await cmd.editorCallback(editor);
-
-		expect(noticeLog().length, "a Notice must be shown on selection script failure").toBeGreaterThan(0);
 	});
 });
 

@@ -1,7 +1,7 @@
 // No obsidian import — this module is pure domain; unit-testable without Obsidian.
 
 import { describe, expect, it } from "vitest";
-import { perplexityWeb } from "../../src/parsers/perplexityWeb";
+import { perplexityWeb } from "../../catalog/parsers/perplexityWeb";
 import { loadFixture } from "../fixtures";
 
 // ---------------------------------------------------------------------------

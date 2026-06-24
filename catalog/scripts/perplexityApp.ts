@@ -27,9 +27,9 @@
 // 6. cascade with ctx.op.input = finalBody → one insert at cursor in doc
 // 7. moveToResources(ctx.op, newRefDefinitions(newRefs)) → insert defs into Resources
 
-import type { ScriptContext, ScriptFunction } from "../context";
-import type { EditPlan } from "../../core/types";
-import { perplexityApp } from "../../parsers/perplexityApp";
+import type { ScriptContext, ScriptFunction } from "../../src/scripts/context";
+import type { EditPlan } from "../../src/core/types";
+import { perplexityApp } from "../parsers/perplexityApp";
 import {
 	fromCitations,
 	resolveFootnoteIdentity,
@@ -37,9 +37,9 @@ import {
 	newRefDefinitions,
 	moveToResources,
 	scanExistingRefs,
-} from "../../core/footnotes";
-import { applyToString } from "../../core/applyToString";
-import { cascade } from "../../core/headings";
+} from "../../src/core/footnotes";
+import { applyToString } from "../../src/core/applyToString";
+import { cascade } from "../../src/core/headings";
 import { filterCitedSources } from "./replaceMarkersInBody";
 
 /**
