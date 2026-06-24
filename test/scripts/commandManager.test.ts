@@ -27,12 +27,14 @@ import type { Editor, EditorPosition, EditorSelection } from "obsidian";
 import type { ScriptRecord } from "../../src/scripts/store";
 import type { LifecycleState } from "../../src/scripts/lifecycle";
 import { DEFAULT_SETTINGS } from "../../src/core/types";
+import type { EditPlan } from "../../src/core/types";
 
 // ---------------------------------------------------------------------------
 // Import under test
 // ---------------------------------------------------------------------------
 
 const { CommandManager } = await import("../../src/scripts/commandManager");
+import type { CommandManagerInjection } from "../../src/scripts/commandManager";
 
 // ---------------------------------------------------------------------------
 // Helpers — minimal plugin surface double
@@ -58,7 +60,7 @@ function makePluginSurface(pluginId = "markdown-mason"): MockPluginSurface {
 		},
 		removeCommand(fullId: string): void {
 			removed.push(fullId);
-			const idx = commands.findIndex(c => `${pluginId}:${c.id}` === fullId || c.id === fullId);
+			const idx = commands.findIndex(c => `${pluginId}:${c.id}` === fullId);
 			if (idx !== -1) {
 				commands.splice(idx, 1);
 			}
@@ -347,5 +349,36 @@ describe("CommandManager — fail-safe (stale command)", () => {
 
 		// Script should have been invoked
 		expect(script).toHaveBeenCalled();
+	});
+
+	it("(k) invoking command when script returns a non-empty EditPlan applies the plan", async () => {
+		// W2: this test was written to expose the W1 no-op bug.
+		// Before the W1 fix, effects.applyPlan is a no-op and the spy is never called.
+		// After the fix, effects.applyPlan calls the injected applyPlan spy with the plan.
+		const surface = makePluginSurface("markdown-mason");
+		const store = makeStore({ "plan-script": makeRecord() });
+
+		const expectedPlan: EditPlan = [{ from: 0, to: 0, insert: "x" }];
+		const planSpy = vi.fn<(editor: Editor, plan: EditPlan) => void>();
+
+		const injection: CommandManagerInjection = { applyPlan: planSpy };
+		const manager = new CommandManager(surface, store, DEFAULT_SETTINGS, injection);
+
+		// Script that returns a non-empty EditPlan
+		const script = vi.fn().mockResolvedValue(expectedPlan);
+
+		manager.register(
+			"plan-script",
+			"Plan Script",
+			script,
+			makeStateResolver({ kind: "Active" }),
+		);
+
+		const cmd = surface._commands.find(c => c.id === "plan-script");
+		await cmd!.editorCallback!(makeMinimalEditor("hello world"));
+
+		// The injected applyPlan spy must have been called with the returned plan
+		expect(planSpy).toHaveBeenCalledOnce();
+		expect(planSpy.mock.calls[0][1]).toEqual(expectedPlan);
 	});
 });

@@ -31,7 +31,7 @@
 // other record fields.
 
 import { Notice } from "obsidian";
-import type { MasonSettings } from "../core/types";
+import type { MasonSettings, EditPlan } from "../core/types";
 import { DEFAULT_SETTINGS } from "../core/types";
 import { ScriptRunner } from "./runner";
 import type { RunnerEffects } from "./runner";
@@ -42,6 +42,7 @@ import type { ScriptStore } from "./store";
 import { selectionContext } from "../sources/selection";
 import { buildRegistry } from "../core/registry";
 import type { Editor } from "obsidian";
+import { applyEditPlan } from "../sources/apply";
 
 // ---------------------------------------------------------------------------
 // Public surface — minimal plugin surface needed from the caller
@@ -73,6 +74,15 @@ export interface PluginCommandSurface {
 /** A function that derives the current lifecycle state of a script by id. */
 export type StateResolver = (id: string) => LifecycleState;
 
+/**
+ * Optional injection seam for testing — mirrors main.ts _commandInjection pattern.
+ * Production code leaves this undefined; tests inject a spy for applyPlan.
+ */
+export interface CommandManagerInjection {
+	/** Override for applyEditPlan — receives (editor, plan). Injected by tests. */
+	applyPlan?: (editor: Editor, plan: EditPlan) => void;
+}
+
 // ---------------------------------------------------------------------------
 // CommandManager
 // ---------------------------------------------------------------------------
@@ -89,6 +99,7 @@ export class CommandManager {
 	private readonly _surface: PluginCommandSurface;
 	private readonly _store: Pick<ScriptStore, "getScripts" | "setRecord">;
 	private readonly _settings: MasonSettings;
+	private readonly _injection: CommandManagerInjection | undefined;
 	/** Set of script ids that currently have a registered command. */
 	private readonly _registered: Set<string> = new Set();
 
@@ -96,10 +107,12 @@ export class CommandManager {
 		surface: PluginCommandSurface,
 		store: Pick<ScriptStore, "getScripts" | "setRecord">,
 		settings: MasonSettings = DEFAULT_SETTINGS,
+		injection?: CommandManagerInjection,
 	) {
 		this._surface = surface;
 		this._store = store;
 		this._settings = settings;
+		this._injection = injection;
 	}
 
 	/**
@@ -217,16 +230,21 @@ export class CommandManager {
 		const op = selectionContext(editor, this._settings);
 		const { api: mason } = buildRegistry();
 		const ctx = buildScriptContext({
-			input: op.input ?? "",
+			// Parity with _runScriptOnSelection: fall back to full doc when no selection.
+			input: op.input ?? op.doc,
 			source: "command",
 			op,
 			mason,
 			logger: buildGatedLogger(this._settings.debugLogging),
 		});
 
+		const applyPlanFn: (editor: Editor, plan: EditPlan) => void =
+			this._injection?.applyPlan ?? ((ed: Editor, plan: EditPlan): void => applyEditPlan(ed, plan));
+
 		const effects: RunnerEffects = {
-			applyPlan: (): void => { /* command: no apply in basic runner — no-op for now */ },
-			rawFallback: (): void => { /* command: no raw fallback */ },
+			applyPlan: (plan: EditPlan): void => { applyPlanFn(editor, plan); },
+			// Raw fallback for command: selection already lives in the document — leave intact.
+			rawFallback: (): void => { /* command raw fallback: leave intact */ },
 			notify: (msg: string): void => { new Notice(msg); },
 		};
 
