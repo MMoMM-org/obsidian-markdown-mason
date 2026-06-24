@@ -88,12 +88,12 @@ function render(items: ScriptItem[], ops: LifecycleOps): MockHTMLElement {
 }
 
 // The render path constructs `new Menu()` on ⋯ click then calls
-// showAtMouseEvent. We capture each shown instance so the test can read the
+// showAtMouseEvent. We capture the last shown instance so the test can read the
 // items it received. Patch the prototype once at module load.
-const _lastMenus: Menu[] = [];
+let _lastMenu: Menu | undefined;
 const _origShow = Menu.prototype.showAtMouseEvent;
 Menu.prototype.showAtMouseEvent = function (this: Menu, evt: unknown): void {
-	_lastMenus.push(this);
+	_lastMenu = this;
 	_origShow.call(this, evt);
 };
 
@@ -102,7 +102,7 @@ function openCardMenu(container: MockHTMLElement): Menu {
 	const menuBtn = container._findButtonByText("⋯");
 	expect(menuBtn).toBeDefined();
 	menuBtn!._click();
-	return _lastMenus[_lastMenus.length - 1];
+	return _lastMenu!;
 }
 
 // ---------------------------------------------------------------------------

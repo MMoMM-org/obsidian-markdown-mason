@@ -249,7 +249,7 @@ export class MasonSettingTab extends PluginSettingTab {
 	 * Phase 5 (T5.x); replace these notice bodies with the live calls there.
 	 */
 	private _buildLifecycleOps(containerEl: HTMLElement): LifecycleOps {
-		const rerender = (): void => { void this._reRenderScripts(containerEl); };
+		const rerender = (): void => { void this._selectSegment(containerEl, "Scripts"); };
 		const store = this._plugin.store;
 
 		const setEnabled = async (id: string, enabled: boolean): Promise<void> => {
@@ -289,14 +289,6 @@ export class MasonSettingTab extends PluginSettingTab {
 		const suffix = id === undefined ? "" : ` for "${id}"`;
 		new Notice(`Mason: ${action}${suffix} is coming soon.`);
 		console.debug(`[MarkdownMason] P5 action not yet wired: ${action}${suffix}`);
-	}
-
-	/** Re-render only the Scripts section in place (after an op mutates state). */
-	private async _reRenderScripts(containerEl: HTMLElement): Promise<void> {
-		containerEl.empty();
-		new HeaderSection({ manifest: this._plugin.manifest }).render(containerEl);
-		this._renderSegmentNav(containerEl);
-		await this._renderScriptsSection(containerEl);
 	}
 
 	// -------------------------------------------------------------------------

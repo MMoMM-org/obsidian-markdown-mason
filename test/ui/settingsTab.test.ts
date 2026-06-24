@@ -632,6 +632,54 @@ describe("MasonSettingTab — concurrent render guard", () => {
 		// The container must be non-empty: at least one setting must be rendered.
 		expect(settings.length).toBeGreaterThan(0);
 	});
+
+	it("two synchronous lifecycle op toggles re-render exactly one valid Scripts view", async () => {
+		// Use two disabled scripts so both cards render a toggle control.
+		const plugin = makePlugin();
+		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
+		clearCapturedSettings();
+		await tab.display();
+
+		// Navigate to the Scripts segment and wait for the async render to settle.
+		const scriptsButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Scripts");
+		expect(scriptsButton).toBeDefined();
+		scriptsButton!._click();
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+
+		// Find the toggle input for one of the script cards (perplexity-web is Disabled
+		// and therefore shows a toggle; find it in the rendered container).
+		const container = tab.containerEl as unknown as MockHTMLElement;
+		const toggle = container._findToggle();
+		expect(toggle).toBeDefined();
+
+		// Fire the toggle twice synchronously — simulates two rapid ops (enable/disable)
+		// before the first re-render can complete. Without the _rendering guard routing
+		// through _selectSegment, the second op calls containerEl.empty() mid-render,
+		// tearing the Scripts tab DOM.
+		clearCapturedSettings();
+		toggle!.setValue(true);
+		toggle!.setValue(false);
+
+		// Drain microtasks — Scripts async depth: getScripts() + setRecord() + rerender
+		// chain each add a microtask tick; three passes are sufficient to settle.
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+
+		const settings = capturedSettings() as unknown as CapturedSetting[];
+		const container2 = tab.containerEl as unknown as MockHTMLElement;
+
+		// The Scripts heading must appear exactly once (no duplication, no blank).
+		const scriptsHeadings = settings.filter((s) => s.isHeading && s.name === "Scripts");
+		expect(scriptsHeadings).toHaveLength(1);
+
+		// Both script ids must still be present in the rendered container text.
+		const text = container2._collectText();
+		expect(text).toContain("perplexity-auto");
+		expect(text).toContain("perplexity-web");
+	});
 });
 
 // ---------------------------------------------------------------------------

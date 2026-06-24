@@ -309,6 +309,7 @@ function menuActions(item: ScriptItem, ops: LifecycleOps): MenuAction[] {
 
 	switch (item.state.kind) {
 		case "Active":
+			// Re-review is always safe here: Active guarantees okayed !== null (evaluateState invariant).
 			actions.push(reReviewAction(item, ops));
 			break;
 		case "UpdateAvailable":
