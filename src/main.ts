@@ -21,9 +21,43 @@ import type { LoadedScript } from "./scripts/paste/buildPasteChain";
 import { MasonSettingTab } from "./ui/settingsTab";
 import { CommandManager } from "./scripts/commandManager";
 import { RunScriptModal } from "./ui/runScriptModal";
+import type { CatalogSource } from "./scripts/catalog/catalogSource";
+import { createCatalogSource } from "./scripts/catalog/requestUrlAdapter";
 
 // Re-export so consumers that import from "src/main" still resolve.
 export { DEFAULT_SETTINGS, type MasonSettings };
+
+// ---------------------------------------------------------------------------
+// ADR-15: build-time catalog source selection
+//
+// `__MASON_DEV__` is injected by esbuild as a literal boolean at bundle time:
+//   - "false" in production → esbuild eliminates the dev branch + DevDirAdapter import
+//   - "true"  in dev        → DevDirAdapter reads local working-tree files
+//
+// IMPORTANT: the dynamic import + createDevDirAdapter() call MUST be inside the
+// `if (__MASON_DEV__)` block so esbuild can tree-shake the entire devDirAdapter
+// module (class + factory) from the production bundle.
+// ---------------------------------------------------------------------------
+
+/**
+ * ADR-15: build-time catalog source selection.
+ * Exported so Phase-5 wiring (Materializer consumers) can call without re-implementing
+ * the dev/prod gate. The `if (__MASON_DEV__)` guard ensures esbuild tree-shakes
+ * DevDirAdapter and its Node fs imports entirely from the production bundle.
+ *
+ * P5 TODO: call this from the sync/materialize flow once it lands.
+ */
+export async function buildCatalogSource(): Promise<CatalogSource> {
+	if (__MASON_DEV__) {
+		// Dev-only path: dynamically import so esbuild sees no static reference
+		// to devDirAdapter from outside the guarded branch. The dynamic import
+		// is inlined at build time when __MASON_DEV__ is "true" and eliminated
+		// entirely when it is "false".
+		const { createDevDirAdapter } = await import("./scripts/catalog/devDirAdapter");
+		return createDevDirAdapter();
+	}
+	return createCatalogSource();
+}
 
 // ---------------------------------------------------------------------------
 // CommandInjection — test seam for paste AND selection commands

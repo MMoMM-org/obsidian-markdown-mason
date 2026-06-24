@@ -50,6 +50,10 @@ const context = await esbuild.context({
 	sourcemap: isProd ? false : "inline",
 	treeShaking: true,
 	minify: isProd,
+	// ADR-15: dead-code elimination gate for DevDirAdapter and other dev-only paths.
+	// "false" in production → esbuild eliminates all `if (__MASON_DEV__)` branches.
+	// "true" in dev → branch is live and DevDirAdapter is bundled for local testing.
+	define: { __MASON_DEV__: isProd ? "false" : "true" },
 	external: [
 		"obsidian",
 		"electron",

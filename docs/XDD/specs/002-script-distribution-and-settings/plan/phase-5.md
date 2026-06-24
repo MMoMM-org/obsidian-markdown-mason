@@ -1,6 +1,6 @@
 ---
 title: "Phase 5: Dev Override, Catalog Migration & E2E"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 5
 ---
