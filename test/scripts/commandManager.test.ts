@@ -351,6 +351,29 @@ describe("CommandManager — fail-safe (stale command)", () => {
 		expect(script).toHaveBeenCalled();
 	});
 
+	it("(l) calling runScript directly when script is Disabled does NOT execute and notifies", async () => {
+		const surface = makePluginSurface("markdown-mason");
+		const store = makeStore({ "direct-script": makeRecord() });
+		const manager = new CommandManager(surface, store, DEFAULT_SETTINGS);
+		const script = makeScript();
+
+		await manager.runScript(
+			"direct-script",
+			"Direct Script",
+			script,
+			makeStateResolver({ kind: "Disabled" }),
+			makeMinimalEditor(),
+		);
+
+		// Script must NOT have been called
+		expect(script).not.toHaveBeenCalled();
+
+		// A notice must have been shown containing "disabled"
+		const notices = noticeLog();
+		expect(notices).toHaveLength(1);
+		expect(notices[0]).toMatch(/disabled/i);
+	});
+
 	it("(k) invoking command when script returns a non-empty EditPlan applies the plan", async () => {
 		// W2: this test was written to expose the W1 no-op bug.
 		// Before the W1 fix, effects.applyPlan is a no-op and the spy is never called.

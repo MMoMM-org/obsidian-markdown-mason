@@ -230,8 +230,9 @@ describe("RunScriptModal — Active script listing", () => {
 		await Promise.resolve();
 
 		expect(cm.runScript).toHaveBeenCalledOnce();
-		const [id] = cm.runScript.mock.calls[0];
+		const [id,,,, passedEditor] = cm.runScript.mock.calls[0];
 		expect(id).toBe("perplexity-app");
+		expect(passedEditor).toBe(editor);
 	});
 });
 
