@@ -38,7 +38,7 @@ This phase delivers the user-facing surface: the segmented settings, script card
   4. Validate: update `test/ui/settingsTab.test.ts`; `npm run compliance`; lint; types.
   - Success: four-segment nav, no control loss `[ref: PRD/F7]`.
 
-- [ ] **T4.2 Scripts tab — card rows + ⋯ menu + toolbar** `[activity: frontend-ui]`
+- [x] **T4.2 Scripts tab — card rows + ⋯ menu + toolbar** `[activity: frontend-ui]`
 
   1. Prime: Read the card wireframe + state→action mapping `[ref: SDD/User Interface & UX]`.
   2. Test (RED): each script renders name, provenance badge, status pill (Active/Disabled/Update/Blocked), version, toggle; ⋯ exposes only valid actions per state (update only when UpdateAvailable, retry only when Blocked, view-source curated=repo link/imported=reveal); Blocked shows reason+recovery inline; toolbar has Import/Browse official; meaningful empty state (no misleading "No scripts installed yet").
@@ -46,7 +46,7 @@ This phase delivers the user-facing surface: the segmented settings, script card
   4. Validate: new `test/ui/scriptsTab.test.ts`; `npm run compliance` (XSS/sentence-case); lint; types.
   - Success: cards + contextual actions + inline Blocked `[ref: PRD/F1, F6, F8]`; UpdateAvailable badge `[ref: PRD/F4]`.
 
-- [ ] **T4.3 CommandManager (register/unregister + cleanup)** `[activity: backend-api]`
+- [x] **T4.3 CommandManager (register/unregister + cleanup)** `[activity: backend-api]`
 
   1. Prime: Read Templater-model decision + command-unregister gotcha `[ref: SDD/ADR-17; SDD/Implementation Gotchas]`; verify the current Obsidian command unregister API (claude-code-guide/obsidian-plugin skill).
   2. Test (RED): toggling `command` on registers an Obsidian command (no default hotkey); off unregisters; disabling/removing a script unregisters and clears `command` state; a command invoked against a non-Active script notifies the Blocked/disabled reason and does not execute.

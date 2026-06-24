@@ -18,13 +18,6 @@ import { describe, it, expect, vi } from "vitest";
 import { App } from "obsidian";
 import type { ScriptRecord } from "../../src/scripts/store";
 
-// TODO(T4.2): the "Scripts section" suite below asserts removed v0.1 store
-// semantics (store.setEnabled + the manifest/device shape). settingsTab.ts was
-// minimally migrated onto the ScriptRecord store in T1.4 and is fully rebuilt
-// (Command Management) in T4.2. That suite is describe.skip until then. The
-// General/Advanced/headings/sentence-case/idempotency suites stay ACTIVE — they
-// are store-shape-agnostic and the test double now exposes getScripts/setRecord.
-
 // ---------------------------------------------------------------------------
 // Pull in test helpers from the mock (populated by the Setting extension).
 // Imported via the relative path so TypeScript resolves our mock types
@@ -477,102 +470,61 @@ describe("MasonSettingTab — General section", () => {
 // SCRIPTS SECTION (transitional — accessible via segment click)
 // ---------------------------------------------------------------------------
 
-// Three cases that work against the migrated getScripts/ScriptRecord store double.
-describe("MasonSettingTab — Scripts section (transitional)", () => {
-	async function renderScriptsSegment(plugin: ReturnType<typeof makePlugin>): Promise<CapturedSetting[]> {
+// T4.2: the Scripts segment now renders the card-based Scripts tab (scriptsTab.ts)
+// into the container directly — NOT via Setting rows. These integration tests
+// assert the segment heading is still a Setting heading, and that the card DOM
+// (names, pills, toolbar buttons) appears in the container. Card-level behaviour
+// (⋯ menu, toggle wiring, ops) is exhaustively covered in scriptsTab.test.ts.
+describe("MasonSettingTab — Scripts section (card tab integration)", () => {
+	async function renderScriptsSegment(
+		plugin: ReturnType<typeof makePlugin>,
+	): Promise<{ settings: CapturedSetting[]; container: MockHTMLElement }> {
 		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
 		clearCapturedSettings();
 		await tab.display();
 
-		// Select the Scripts segment.
-		const scriptsButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Scripts");
+		const container = tab.containerEl as unknown as MockHTMLElement;
+		const scriptsButton = container._findButtonByText("Scripts");
 		clearCapturedSettings();
 		scriptsButton!._click();
 		await Promise.resolve();
 
-		return capturedSettings() as unknown as CapturedSetting[];
+		return { settings: capturedSettings() as unknown as CapturedSetting[], container };
 	}
 
-	it("lists each installed script from the store", async () => {
+	it("renders the Scripts heading as a Setting heading", async () => {
 		const plugin = makePlugin();
-		const allSettings = await renderScriptsSegment(plugin);
-
-		// Find settings that correspond to scripts (have toggles or buttons, non-heading)
-		const scriptSettings = allSettings.filter(
-			(s) => !s.isHeading && (s.toggleControls.length > 0 || s.buttonControls.length > 0),
-		);
-
-		// We injected two scripts: perplexity-auto and perplexity-web
-		expect(scriptSettings.length).toBeGreaterThanOrEqual(2);
+		const { settings } = await renderScriptsSegment(plugin);
+		const heading = settings.find((s) => s.isHeading && s.name === "Scripts");
+		expect(heading).toBeDefined();
 	});
 
-	it("each script row has an enable/disable toggle", async () => {
+	it("lists each installed script from the store as a card", async () => {
 		const plugin = makePlugin();
-		const allSettings = await renderScriptsSegment(plugin);
-
-		// Isolate the scripts section: settings between the "Scripts" heading and end
-		const scriptsHeadingIdx = allSettings.findIndex((s) => s.isHeading && s.name === "Scripts");
-		const scriptSection = allSettings.slice(scriptsHeadingIdx + 1);
-		const toggleRows = scriptSection.filter((s) => s.toggleControls.length > 0);
-		expect(toggleRows.length).toBeGreaterThanOrEqual(2);
+		const { container } = await renderScriptsSegment(plugin);
+		const text = container._collectText();
+		// Both injected scripts appear by id.
+		expect(text).toContain("perplexity-auto");
+		expect(text).toContain("perplexity-web");
 	});
 
-	it("each script row has an import control (button)", async () => {
+	it("each card carries a status pill label", async () => {
 		const plugin = makePlugin();
-		const allSettings = await renderScriptsSegment(plugin);
-
-		const scriptsHeadingIdx = allSettings.findIndex((s) => s.isHeading && s.name === "Scripts");
-		const scriptSection = allSettings.slice(scriptsHeadingIdx + 1);
-
-		const buttonRows = scriptSection.filter((s) => s.buttonControls.length > 0);
-		expect(buttonRows.length).toBeGreaterThanOrEqual(2);
-	});
-});
-
-// TODO(T4.2): re-enable after settingsTab.ts Scripts section rebuilt onto the
-// ScriptRecord store (store.setRecord, getScripts). These assert the removed
-// store.setEnabled + getManifest.mockResolvedValue({}) v0.1 API (T1.4 rewrite).
-describe.skip("MasonSettingTab — Scripts section (obsolete v0.1 assertions)", () => {
-	it("enable toggle calls store.setEnabled with the script id and new value", async () => {
-		const plugin = makePlugin();
-		const allSettings = await renderTab(plugin);
-
-		const scriptsHeadingIdx = allSettings.findIndex((s) => s.isHeading && s.name === "Scripts");
-		const advancedHeadingIdx = allSettings.findIndex((s) => s.isHeading && s.name === "Advanced");
-		const scriptSection = allSettings.slice(scriptsHeadingIdx + 1, advancedHeadingIdx);
-		const toggleRows = scriptSection.filter((s) => s.toggleControls.length > 0);
-
-		// The first script row in the manifest is "perplexity-auto", which is enabled (true).
-		// Toggling it should call setEnabled("perplexity-auto", false).
-		const firstRow = toggleRows[0];
-		const firstToggle = firstRow.toggleControls[0];
-		const previousValue = firstToggle.getValue();
-		firstToggle.setValue(!previousValue);
-
-		// store.setEnabled must have been called with the exact script id and toggled value.
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		expect((plugin.store as any).setEnabled).toHaveBeenCalledWith("perplexity-auto", !previousValue);
+		const { container } = await renderScriptsSegment(plugin);
+		const text = container._collectText();
+		// perplexity-web is disabled → Disabled pill. perplexity-auto is enabled +
+		// consented, but with the T4.2 P5 inputs (local:null, online:false) it
+		// resolves to Blocked(offline) until the live catalog/materializer wire in.
+		expect(text).toContain("Disabled");
+		expect(text).toContain("Blocked");
 	});
 
-	it("renders empty-state row when manifest has no scripts", async () => {
+	it("renders the toolbar (import / browse) and a ⋯ menu button per card", async () => {
 		const plugin = makePlugin();
-		// Replace the store with one that returns an empty manifest.
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		(plugin.store as any).getManifest.mockResolvedValue({});
-
-		const allSettings = await renderTab(plugin);
-
-		const scriptsHeadingIdx = allSettings.findIndex((s) => s.isHeading && s.name === "Scripts");
-		const advancedHeadingIdx = allSettings.findIndex((s) => s.isHeading && s.name === "Advanced");
-		const scriptSection = allSettings.slice(scriptsHeadingIdx + 1, advancedHeadingIdx);
-
-		// Exactly one row should appear: the "No scripts installed" informational row.
-		expect(scriptSection).toHaveLength(1);
-		expect(scriptSection[0].name).toBe("No scripts installed");
-
-		// No toggles or buttons should be rendered in the empty state.
-		expect(scriptSection[0].toggleControls).toHaveLength(0);
-		expect(scriptSection[0].buttonControls).toHaveLength(0);
+		const { container } = await renderScriptsSegment(plugin);
+		expect(container._findButtonByText("Import from vault")).toBeDefined();
+		expect(container._findButtonByText("Browse official")).toBeDefined();
+		expect(container._findButtonByText("⋯")).toBeDefined();
 	});
 });
 

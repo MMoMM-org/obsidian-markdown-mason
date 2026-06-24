@@ -1,8 +1,11 @@
 import { App, Notice, Plugin, PluginSettingTab, Setting } from "obsidian";
 import type { PluginManifest } from "obsidian";
 import type { MasonSettings } from "../core/types";
-import type { ScriptStore } from "../scripts/store";
+import type { ScriptRecord, ScriptStore } from "../scripts/store";
+import { evaluateState } from "../scripts/lifecycle";
 import { HeaderSection } from "./HeaderSection";
+import { renderScriptsTab } from "./scriptsTab";
+import type { ScriptItem, LifecycleOps } from "./scriptsTab";
 
 // ---------------------------------------------------------------------------
 // Minimal plugin interface — avoids a hard import cycle with main.ts
@@ -47,7 +50,7 @@ const SEGMENTS: readonly Segment[] = ["General", "Scripts", "Commands", "Advance
  *
  * Segments:
  *   1. General  — resourcesName text field, numericOnly toggle
- *   2. Scripts  — per-script enable toggle + import button (transitional)
+ *   2. Scripts  — card rows (status pill, ⋯ menu, inline recovery) + toolbar
  *   3. Commands — placeholder heading (T4.4 seam)
  *   4. Advanced — debugLogging toggle
  */
@@ -184,52 +187,116 @@ export class MasonSettingTab extends PluginSettingTab {
 	// Scripts section
 	// -------------------------------------------------------------------------
 
-	/** Render the Scripts section heading and per-script controls. */
+	/**
+	 * Render the Scripts section: a heading plus the card-based Scripts tab
+	 * (scriptsTab.ts). This method is the thin CONTROLLER: it resolves each
+	 * ScriptRecord into a ScriptItem (computing LifecycleState via evaluateState),
+	 * builds a concrete LifecycleOps action seam, then hands BOTH to the
+	 * synchronous, rendering-focused renderScriptsTab(). All async I/O lives here;
+	 * the render path stays pure and unit-testable.
+	 */
 	private async _renderScriptsSection(containerEl: HTMLElement): Promise<void> {
-		// TRANSITIONAL (T1.4): minimal transcription onto the ScriptRecord store.
-		// Full Scripts-tab rebuild (Command Management, import lifecycle) lands in T4.2.
 		new Setting(containerEl).setName("Scripts").setHeading();
 
 		const scripts = await this._plugin.store.getScripts();
+		const items = this._buildScriptItems(scripts);
+		renderScriptsTab(containerEl, items, this._buildLifecycleOps(containerEl));
+	}
 
-		const ids = Object.keys(scripts);
+	/**
+	 * Resolve persisted records into rendered ScriptItems.
+	 *
+	 * P5: The live catalog is not wired in T4.2, so the inputs that need it are
+	 * the safe-default unknowns: `local: null` (materialization status is resolved
+	 * by the materializer in a later phase), `catalogVersion: undefined`, and
+	 * `online: false`. evaluateState fails closed on these (no false Active). The
+	 * real catalog adapter that supplies local/catalogVersion/online lands in P5
+	 * (T5.x); this resolver is the single place those inputs plug in.
+	 */
+	private _buildScriptItems(scripts: Record<string, ScriptRecord>): ScriptItem[] {
+		return Object.entries(scripts).map(([id, record]) => {
+			const state = evaluateState({
+				record,
+				inCatalog: record.provenance === "curated",
+				local: null, // P5: materializer/catalog supplies the local fingerprint
+				catalogVersion: undefined, // P5: live catalog supplies the latest version
+				online: false, // P5: live network probe
+			});
+			return {
+				id,
+				displayName: id,
+				description: `Source: ${record.source}`,
+				record,
+				state,
+				version: record.okayed?.version ?? 0,
+				provenance: record.provenance,
+				catalogVersion: undefined, // P5: live catalog
+			};
+		});
+	}
 
-		if (ids.length === 0) {
-			// No scripts installed — show an informational row.
-			new Setting(containerEl)
-				.setName("No scripts installed")
-				.setDesc("No scripts installed yet.");
-			return;
-		}
+	/**
+	 * Build the concrete LifecycleOps action seam.
+	 *
+	 * What EXISTS now is wired directly:
+	 *   enable/disable → store.setRecord (toggle the persisted record), then
+	 *                    re-render so the card reflects the new state.
+	 *   remove         → clear the record's consent + disable, then re-render.
+	 *
+	 * P5: actions that require the LIVE catalog (browseOfficial, and the network
+	 * fetch inside update/retry/reReview's materialization) are backed by a
+	 * "coming soon" Notice seam. The real catalog adapter + browse modal land in
+	 * Phase 5 (T5.x); replace these notice bodies with the live calls there.
+	 */
+	private _buildLifecycleOps(containerEl: HTMLElement): LifecycleOps {
+		const rerender = (): void => { void this._reRenderScripts(containerEl); };
+		const store = this._plugin.store;
 
-		for (const id of ids) {
-			const rec = scripts[id];
-			const version = rec.okayed?.version ?? "—";
+		const setEnabled = async (id: string, enabled: boolean): Promise<void> => {
+			const rec = (await store.getScripts())[id];
+			if (rec === undefined) return;
+			await store.setRecord(id, { ...rec, enabled });
+			rerender();
+		};
 
-			new Setting(containerEl)
-				.setName(id)
-				.setDesc(`Source: ${rec.source}  ·  v${version}`)
-				.addToggle((toggle) => {
-					toggle
-						.setValue(rec.enabled)
-						.onChange(async (value) => {
-							await this._plugin.store.setRecord(id, { ...rec, enabled: value });
-						});
-				})
-				.addButton((button) => {
-					button
-						.setButtonText("Import from vault…")
-						.onClick(async () => {
-							// v0.1 placeholder: a full file-picker is out of scope.
-							// The control exists and is wired; a Notice informs the user.
-							new Notice(
-								`Mason: use the vault import command to import "${id}" ` +
-								`from your vault. File-picker UI is planned for a future release.`,
-							);
-							console.debug(`[MarkdownMason] import button clicked for script: ${id}`);
-						});
-				});
-		}
+		return {
+			enable: (id) => setEnabled(id, true),
+			disable: (id) => setEnabled(id, false),
+			remove: async (id) => {
+				const rec = (await store.getScripts())[id];
+				if (rec === undefined) return;
+				// Clear consent + disable (single-store removal of the active decision).
+				await store.setRecord(id, { ...rec, enabled: false, okayed: null });
+				rerender();
+			},
+			// P5: retry/update require the live catalog (materializer fetch path).
+			retry: (id) => { this._comingSoon("retry", id); },
+			update: (id) => { this._comingSoon("update", id); },
+			// P5: re-review re-shows the disclosure modal once materialization metadata
+			// (size/checksum/version) is available from the catalog/materializer.
+			reReview: (id) => { this._comingSoon("re-review consent", id); },
+			// P5: view source — curated→repo link, imported→reveal in vault.
+			viewSource: (id) => { this._comingSoon("view source", id); },
+			// P5: import-from-vault file picker.
+			importFromVault: () => { this._comingSoon("import from vault"); },
+			// P5: browse-official catalog modal.
+			browseOfficial: () => { this._comingSoon("browse official"); },
+		};
+	}
+
+	/** P5 seam: surface a sentence-case "coming soon" Notice for unwired actions. */
+	private _comingSoon(action: string, id?: string): void {
+		const suffix = id === undefined ? "" : ` for "${id}"`;
+		new Notice(`Mason: ${action}${suffix} is coming soon.`);
+		console.debug(`[MarkdownMason] P5 action not yet wired: ${action}${suffix}`);
+	}
+
+	/** Re-render only the Scripts section in place (after an op mutates state). */
+	private async _reRenderScripts(containerEl: HTMLElement): Promise<void> {
+		containerEl.empty();
+		new HeaderSection({ manifest: this._plugin.manifest }).render(containerEl);
+		this._renderSegmentNav(containerEl);
+		await this._renderScriptsSection(containerEl);
 	}
 
 	// -------------------------------------------------------------------------

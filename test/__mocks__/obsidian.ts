@@ -122,6 +122,25 @@ export class MockHTMLElement {
 		this._focused = true;
 	}
 
+	/**
+	 * Checkbox-style value (T4.2). The Scripts tab renders its enable toggle as a
+	 * `<input type="checkbox">`; `checked` mirrors the DOM property. setValue() is
+	 * a test convenience that sets `checked` and fires registered "change"
+	 * listeners so onChange-style wiring is observable.
+	 */
+	checked: boolean = false;
+
+	/** Mirror of MockHTMLElement.checked, surfaced as _value for assertion parity. */
+	get _value(): boolean {
+		return this.checked;
+	}
+
+	/** Test helper: set checked and dispatch a "change" event. */
+	setValue(v: boolean): void {
+		this.checked = v;
+		this._dispatch({ type: "change" });
+	}
+
 	// -------------------------------------------------------------------------
 	// Test helpers
 	// -------------------------------------------------------------------------
@@ -145,6 +164,25 @@ export class MockHTMLElement {
 				return child;
 			}
 			const found = child._findButtonByText(label);
+			if (found) {
+				return found;
+			}
+		}
+		return undefined;
+	}
+
+	/** Returns the value of a stored attribute, or undefined. */
+	_attr(key: string): string | undefined {
+		return this._attrs.get(key);
+	}
+
+	/** Find the first descendant checkbox input (the Scripts-tab enable toggle). */
+	_findToggle(): MockHTMLElement | undefined {
+		for (const child of this._children) {
+			if (child.tagName === "input" && child._attr("type") === "checkbox") {
+				return child;
+			}
+			const found = child._findToggle();
 			if (found) {
 				return found;
 			}
@@ -269,6 +307,85 @@ export class Notice {
 	constructor(message: string, _timeout?: number) {
 		this.message = message;
 		_noticeMessages.push(message);
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Menu — minimal stub for the ⋯ action menu (T4.2)
+//
+// Obsidian API surface used by scriptsTab.ts:
+//   const m = new Menu();
+//   m.addItem(item => item.setTitle("…").setIcon("…").onClick(() => {…}));
+//   m.showAtMouseEvent(evt);
+//
+// Test-only helpers:
+//   _items      — captured MockMenuItem list (title/icon/onClick)
+//   _titles()   — convenience: array of every item title
+//   _click(t)   — invoke the onClick of the item whose title === t
+//   _shown      — true once showAtMouseEvent / showAtPosition was called
+// ---------------------------------------------------------------------------
+
+export class MockMenuItem {
+	_title: string = "";
+	_icon: string = "";
+	_onClick: (() => void | Promise<void>) | null = null;
+	_disabled: boolean = false;
+
+	setTitle(title: string): this {
+		this._title = title;
+		return this;
+	}
+
+	setIcon(icon: string): this {
+		this._icon = icon;
+		return this;
+	}
+
+	setDisabled(disabled: boolean): this {
+		this._disabled = disabled;
+		return this;
+	}
+
+	onClick(cb: () => void | Promise<void>): this {
+		this._onClick = cb;
+		return this;
+	}
+}
+
+export class Menu {
+	readonly _items: MockMenuItem[] = [];
+	_shown: boolean = false;
+
+	addItem(cb: (item: MockMenuItem) => void): this {
+		const item = new MockMenuItem();
+		this._items.push(item);
+		cb(item);
+		return this;
+	}
+
+	addSeparator(): this {
+		return this;
+	}
+
+	showAtMouseEvent(_evt: unknown): void {
+		this._shown = true;
+	}
+
+	showAtPosition(_pos: unknown): void {
+		this._shown = true;
+	}
+
+	/** Test helper: titles of all captured items, in order. */
+	_titles(): string[] {
+		return this._items.map((i) => i._title);
+	}
+
+	/** Test helper: invoke the onClick of the item whose title matches. */
+	async _click(title: string): Promise<void> {
+		const item = this._items.find((i) => i._title === title);
+		if (item?._onClick) {
+			await item._onClick();
+		}
 	}
 }
 
