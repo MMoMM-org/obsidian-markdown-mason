@@ -249,6 +249,21 @@ export class MockHTMLElement {
 // final resolution is the button's decision.
 // ---------------------------------------------------------------------------
 
+// Module-level capture: the last modal instance whose open() was called.
+// Tests that need to inspect a modal opened deep inside tested code can
+// call lastOpenedModal() after draining microtasks.
+let _lastOpenedModal: Modal | undefined;
+
+/** Test helper: returns the last Modal whose open() was called, or undefined. */
+export function lastOpenedModal(): Modal | undefined {
+	return _lastOpenedModal;
+}
+
+/** Test helper: clears the last-opened-modal capture. Call in beforeEach. */
+export function clearLastOpenedModal(): void {
+	_lastOpenedModal = undefined;
+}
+
 export class Modal {
 	app: App;
 	contentEl: MockHTMLElement;
@@ -260,8 +275,9 @@ export class Modal {
 		this.titleEl = new MockHTMLElement("div");
 	}
 
-	/** Open the modal — calls onOpen() synchronously. */
+	/** Open the modal — calls onOpen() synchronously and captures this as the last opened modal. */
 	open(): void {
+		_lastOpenedModal = this;
 		this.onOpen();
 	}
 

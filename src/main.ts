@@ -300,16 +300,24 @@ export class MarkdownMasonPlugin extends Plugin {
 		this.addCommand({
 			id: "mason.runScript",
 			name: "Run script…",
-			editorCallback: (editor: Editor): void => {
+			// T6.1: editorCallback is async so we can await the resolver before
+			// constructing the modal. States are pre-resolved into a Map and a sync
+			// getState facade is passed to RunScriptModal. Falls back to fail-closed
+			// Disabled when the resolver is absent.
+			editorCallback: async (editor: Editor): Promise<void> => {
 				const resolver = this.lifecycleResolver;
-				// T6.1: use live resolver when available; fail-closed to Disabled when absent.
-				const getState = (id: string): import("./scripts/lifecycle").LifecycleState => {
-					if (resolver === undefined) return { kind: "Disabled" };
-					// resolveInput is async but RunScriptModal's getState is sync.
-					// Return Disabled as conservative sync fallback; T6.3 wires the async path.
-					void id;
-					return { kind: "Disabled" };
-				};
+				let getState: (id: string) => import("./scripts/lifecycle").LifecycleState;
+
+				if (resolver !== undefined) {
+					const scripts = await this.store.getScripts();
+					const items = await resolver.resolveItems(scripts);
+					const stateMap = new Map(items.map((item) => [item.id, item.state]));
+					getState = (id: string) => stateMap.get(id) ?? { kind: "Disabled" };
+					console.debug("[MarkdownMason] Run script launcher: pre-resolved state map", stateMap.size, "entries");
+				} else {
+					getState = () => ({ kind: "Disabled" });
+				}
+
 				// T6.3: resolveScriptFn placeholder — real module loader wires in at T6.3.
 				const resolveScriptFn = (): import("./scripts/context").ScriptFunction => {
 					return (): undefined => undefined;

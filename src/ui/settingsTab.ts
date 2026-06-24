@@ -316,9 +316,11 @@ export class MasonSettingTab extends PluginSettingTab {
 	/**
 	 * Render the Commands section heading and the Commands tab.
 	 *
-	 * T6.1: getState is wired to the live resolver when available, falling back
-	 * to the fail-closed Disabled stub. resolveScriptFn remains a stub until T6.3
-	 * (module loader) lands.
+	 * T6.1: when a live resolver is present, all script states are pre-resolved
+	 * into a Map<id, LifecycleState> before rendering. A sync getState facade
+	 * backed by that Map is passed to renderCommandsTab. Falls back to
+	 * fail-closed Disabled when the resolver is absent.
+	 * resolveScriptFn remains a T6.3 placeholder (no change here).
 	 */
 	private async _renderCommandsSection(containerEl: HTMLElement): Promise<void> {
 		new Setting(containerEl).setName("Commands").setHeading();
@@ -328,19 +330,22 @@ export class MasonSettingTab extends PluginSettingTab {
 			return (): undefined => undefined;
 		};
 
-		// T6.1: getState uses the live resolver when wired; fails closed to Disabled
-		// when absent. The resolver's async resolveInput is wrapped in a sync facade
-		// that returns Disabled immediately (safe default); the async result is not
-		// awaited here since CommandsTab renders synchronously.
+		// T6.1: pre-resolve all script states into a Map so getState can be sync.
+		// resolveItems fetches the catalog index once and returns one entry per
+		// script record; we key the map by id and fall back to Disabled for any
+		// id not returned by the resolver. When resolver is absent, fail closed.
 		const resolver = this._plugin.lifecycleResolver;
-		const getState: StateResolver = (id: string) => {
-			if (resolver === undefined) return { kind: "Disabled" };
-			// resolveInput is async; return sync Disabled until T6.3 provides
-			// a sync-capable lookup (e.g. pre-computed state cache). For now
-			// the resolver is used for the Scripts tab (async) only.
-			void id;
-			return { kind: "Disabled" };
-		};
+		let getState: StateResolver;
+
+		if (resolver !== undefined) {
+			const scripts = await this._plugin.store.getScripts();
+			const items = await resolver.resolveItems(scripts);
+			const stateMap = new Map(items.map((item) => [item.id, item.state]));
+			getState = (id: string) => stateMap.get(id) ?? { kind: "Disabled" };
+			console.debug("[MarkdownMason] Commands tab: pre-resolved state map", stateMap.size, "entries");
+		} else {
+			getState = () => ({ kind: "Disabled" });
+		}
 
 		await renderCommandsTab(
 			containerEl,

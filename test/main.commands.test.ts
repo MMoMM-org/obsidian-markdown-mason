@@ -11,10 +11,13 @@
  * No vi.mock() factory is needed — the file alias IS the mock.
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { App } from "obsidian";
 import type { Editor, EditorPosition, EditorSelection } from "obsidian";
-import { clearNoticeLog, noticeLog } from "./__mocks__/obsidian";
+import { clearNoticeLog, noticeLog, lastOpenedModal, clearLastOpenedModal } from "./__mocks__/obsidian";
+import type { MockHTMLElement } from "./__mocks__/obsidian";
+import type { LifecycleResolver } from "../src/scripts/lifecycleResolver";
+import type { ScriptRecord } from "../src/scripts/store";
 import { EditorState, type TransactionSpec } from "@codemirror/state";
 import { history, undo } from "@codemirror/commands";
 
@@ -874,5 +877,114 @@ describe("C-1 regression — preset.formatSelection: no overlapping CM6 edits, s
 			editor.getValue(),
 			"one undo must fully restore the original doc (single-transaction proof)",
 		).toBe(doc);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// T6.1 — Run-script launcher modal getState backed by live resolver state map
+//
+// _registerRunScriptLauncher must pre-resolve states into a Map before
+// constructing RunScriptModal, so the modal's getState reflects LIVE resolver
+// state rather than unconditionally returning Disabled.
+//
+// These tests FAIL against the current stub (unconditional Disabled) and PASS
+// after the async-to-sync bridge fix lands.
+// ---------------------------------------------------------------------------
+
+describe("T6.1 — launcher modal getState backed by live resolver (Run script…)", () => {
+	beforeEach(() => {
+		clearNoticeLog();
+		clearLastOpenedModal();
+	});
+
+	/** Build a fake resolver whose getState returns Active for given ids. */
+	function makeFakeResolver(activeIds: string[]): LifecycleResolver {
+		return {
+			resolveItems: vi.fn().mockImplementation((records: Record<string, ScriptRecord>) => {
+				return Promise.resolve(
+					Object.keys(records).map((id) => ({
+						id,
+						displayName: id,
+						description: "",
+						record: records[id],
+						state: activeIds.includes(id) ? { kind: "Active" } : { kind: "Disabled" },
+						version: 1,
+						provenance: "curated" as const,
+						catalogVersion: undefined,
+					})),
+				);
+			}),
+			getState: vi.fn(),
+			resolveInput: vi.fn(),
+			clearCache: vi.fn(),
+		} as unknown as LifecycleResolver;
+	}
+
+	/** Minimal fake editor for editorCallback invocation. */
+	function makeFakeEditor(): Editor {
+		return {
+			replaceSelection: vi.fn(),
+			getSelection: vi.fn().mockReturnValue(""),
+			getValue: vi.fn().mockReturnValue(""),
+			setValue: vi.fn(),
+			getCursor: vi.fn().mockReturnValue({ line: 0, ch: 0 }),
+			listSelections: vi.fn().mockReturnValue([]),
+		} as unknown as Editor;
+	}
+
+	it("launcher modal lists only the Active script when resolver marks one Active, one Disabled", async () => {
+		const plugin = makePlugin();
+		await plugin.onload();
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		(plugin.app as any).workspace._fireLayoutReady();
+
+		// Seed the store with two scripts: perplexity-auto (enabled) and perplexity-web (enabled)
+		const records: Record<string, ScriptRecord> = {
+			"perplexity-auto": {
+				provenance: "curated", enabled: true,
+				okayed: { version: 1, checksum: "sha256:abc" },
+				source: "vault/perplexity-auto.cjs", command: false,
+			},
+			"perplexity-web": {
+				provenance: "curated", enabled: true,
+				okayed: { version: 1, checksum: "sha256:def" },
+				source: "vault/perplexity-web.cjs", command: false,
+			},
+		};
+
+		// Inject: in-memory store with both scripts
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		(plugin as any).store = {
+			getScripts: vi.fn().mockResolvedValue(records),
+			setRecord: vi.fn().mockResolvedValue(undefined),
+		};
+
+		// Inject: resolver says perplexity-auto Active, perplexity-web Disabled
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		(plugin as any).lifecycleResolver = makeFakeResolver(["perplexity-auto"]);
+
+		// Find the mason.runScript command
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const cmd = (plugin as any)._commands.find((c: any) => c.id === "mason.runScript") as {
+			editorCallback: (editor: Editor) => Promise<void>;
+		} | undefined;
+		expect(cmd).toBeDefined();
+
+		// Invoke the launcher — after the fix this is async (awaits resolver)
+		await cmd!.editorCallback(makeFakeEditor());
+
+		// Drain RunScriptModal._loadContent microtasks
+		await Promise.resolve();
+		await Promise.resolve();
+
+		const modal = lastOpenedModal();
+		expect(modal).toBeDefined();
+
+		const text = (modal!.contentEl as unknown as MockHTMLElement)._collectText();
+
+		// With the fix: Active script appears, Disabled script does NOT
+		// With the old stub: getState always returns Disabled → both absent → only empty-state text
+		expect(text).toContain("perplexity-auto");
+		expect(text).not.toContain("perplexity-web");
 	});
 });

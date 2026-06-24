@@ -17,6 +17,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { App } from "obsidian";
 import type { ScriptRecord } from "../../src/scripts/store";
+import type { LifecycleState } from "../../src/scripts/lifecycle";
+import type { LifecycleResolver } from "../../src/scripts/lifecycleResolver";
 
 // ---------------------------------------------------------------------------
 // Pull in test helpers from the mock (populated by the Setting extension).
@@ -88,6 +90,7 @@ function makePlugin(overrides?: {
 	resourcesName?: string;
 	debugLogging?: boolean;
 	numericOnly?: boolean;
+	lifecycleResolver?: LifecycleResolver;
 }) {
 	const app = new App();
 	const settings = {
@@ -132,7 +135,9 @@ function makePlugin(overrides?: {
 		disableScript: vi.fn().mockResolvedValue(undefined),
 	};
 
-	return { app, settings, saveSettings, store, manifest: pluginManifest, commandManager } as const;
+	const lifecycleResolver = overrides?.lifecycleResolver;
+
+	return { app, settings, saveSettings, store, manifest: pluginManifest, commandManager, lifecycleResolver } as const;
 }
 
 /**
@@ -709,5 +714,138 @@ describe("MasonSettingTab — display() idempotency", () => {
 		const secondCount = capturedSettings().length;
 
 		expect(secondCount).toBe(firstCount);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// T6.1 — Commands tab getState backed by live resolver state map
+//
+// When a lifecycleResolver is injected into the plugin, _renderCommandsSection
+// must pre-resolve all script states and pass a sync getState backed by that
+// Map to renderCommandsTab — NOT unconditionally return {kind:"Disabled"}.
+//
+// These tests FAIL against the current stub (unconditional Disabled) and PASS
+// after the async-to-sync bridge fix lands.
+// ---------------------------------------------------------------------------
+
+describe("MasonSettingTab — T6.1 live resolver state map (Commands tab)", () => {
+	/** Build a fake LifecycleResolver whose resolveItems returns known states. */
+	function makeFakeResolver(states: Record<string, LifecycleState>): LifecycleResolver {
+		return {
+			resolveItems: vi.fn().mockImplementation((records: Record<string, unknown>) => {
+				return Promise.resolve(
+					Object.keys(records).map((id) => ({
+						id,
+						displayName: id,
+						description: "",
+						record: records[id],
+						state: states[id] ?? { kind: "Disabled" },
+						version: 1,
+						provenance: "curated",
+						catalogVersion: undefined,
+					})),
+				);
+			}),
+			// other methods are not called by _renderCommandsSection
+			getState: vi.fn(),
+			resolveInput: vi.fn(),
+			clearCache: vi.fn(),
+		} as unknown as LifecycleResolver;
+	}
+
+	it("getState passed to commandManager.register returns the resolver's Active state — not unconditional Disabled", async () => {
+		// perplexity-auto: resolver says Active; perplexity-web: resolver says Disabled
+		const resolver = makeFakeResolver({
+			"perplexity-auto": { kind: "Active" },
+			"perplexity-web": { kind: "Disabled" },
+		});
+
+		const plugin = makePlugin({ lifecycleResolver: resolver });
+		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
+		clearCapturedSettings();
+		await tab.display();
+
+		// Navigate to the Commands segment
+		const commandsButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Commands");
+		expect(commandsButton).toBeDefined();
+
+		clearCapturedSettings();
+		commandsButton!._click();
+
+		// Drain microtasks: click → _selectSegment → _renderCommandsSection →
+		// store.getScripts + resolver.resolveItems + renderCommandsTab → getScripts
+		// Five ticks matches the heading test pattern for async segment renders.
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+
+		const settings = capturedSettings() as unknown as CapturedSetting[];
+
+		// Find the row for perplexity-auto (which is enabled, so it appears)
+		const autoRow = settings.find(
+			(s) => !s.isHeading && s.toggleControls.length > 0 && s.name === "perplexity-auto",
+		);
+		expect(autoRow).toBeDefined();
+
+		// Fire the toggle ON to trigger commandManager.register(id, name, fn, getState)
+		autoRow!.toggleControls[0].setValue(true);
+		await Promise.resolve();
+
+		expect(plugin.commandManager.register).toHaveBeenCalledOnce();
+		const [, , , capturedGetState] = plugin.commandManager.register.mock.calls[0] as [
+			string,
+			string,
+			unknown,
+			(id: string) => LifecycleState,
+		];
+
+		// With the fix: resolver said Active for perplexity-auto → getState returns Active
+		// With the old stub: getState always returns Disabled → this assertion FAILS
+		expect(capturedGetState("perplexity-auto")).toEqual({ kind: "Active" });
+	});
+
+	it("getState falls back to Disabled for scripts not in the resolver's Active map", async () => {
+		const resolver = makeFakeResolver({
+			"perplexity-auto": { kind: "Active" },
+			// perplexity-web not listed → defaults to Disabled in the map
+		});
+
+		const plugin = makePlugin({ lifecycleResolver: resolver });
+		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
+		clearCapturedSettings();
+		await tab.display();
+
+		const commandsButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Commands");
+		clearCapturedSettings();
+		commandsButton!._click();
+
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+
+		const settings = capturedSettings() as unknown as CapturedSetting[];
+
+		// perplexity-auto is enabled; fire toggle ON to get the getState reference
+		const autoRow = settings.find(
+			(s) => !s.isHeading && s.toggleControls.length > 0 && s.name === "perplexity-auto",
+		);
+		expect(autoRow).toBeDefined();
+		autoRow!.toggleControls[0].setValue(true);
+		await Promise.resolve();
+
+		expect(plugin.commandManager.register).toHaveBeenCalledOnce();
+		const [, , , capturedGetState] = plugin.commandManager.register.mock.calls[0] as [
+			string,
+			string,
+			unknown,
+			(id: string) => LifecycleState,
+		];
+
+		// A script id not in the resolver's output falls back to Disabled
+		expect(capturedGetState("unknown-script")).toEqual({ kind: "Disabled" });
 	});
 });
