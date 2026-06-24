@@ -114,38 +114,72 @@ to work until they enable an updated version; `data.json` is unaffected.
 
 ---
 
-## Dev loop (MASON_DEV_DIR override)
+## Dev loop (local catalog override)
 
-During development, `__MASON_DEV__` is set to `"true"` by the esbuild config.
-This makes `buildCatalogSource()` use `DevDirAdapter` instead of the network
-adapter.
+During development, `__MASON_DEV__` is set to `"true"` by the esbuild config, so
+`buildCatalogSource()` uses `DevDirAdapter` (reads a local catalog directory)
+instead of the network adapter. The dev catalog directory is the output of
+`npm run build:catalog` — this repo's own `catalog/dist/` (contains `index.json`
++ the `.cjs` files). The override is **never** read from `data.json` or any
+`ScriptRecord`.
 
-To enable the override:
+The override path is resolved in this order (ADR-15), and either works:
 
-1. Set `MASON_DEV_DIR` to the absolute path of your local catalog working-tree
-   directory (the directory that contains `index.json` and the `.cjs` files,
-   i.e. the output of `npm run build:catalog` from the catalog repo or this
-   repo's own `catalog/dist/`).
+1. **`MASON_DEV_DIR` env var** — absolute path to the catalog dir. Wins if set.
+2. **`.mason-dev.json` config file** (recommended — see below) — a gitignored
+   JSON file in the plugin dir, `{ "catalogDir": "/abs/path/to/catalog/dist" }`.
 
-   ```
-   MASON_DEV_DIR=/path/to/catalog/dist
-   ```
+If neither is configured, the dev build throws on load and falls back to offline
+stubs (with a console error naming both options).
 
-   The variable is typically stored in a gitignored env file (e.g.
-   `test/mason/.env`) or exported in your shell profile. It is **never**
-   read from `data.json` or any `ScriptRecord`.
+### Recommended: the `.mason-dev.json` config file
 
-2. Run `npm run dev` (or the esbuild watch mode). The dev build physically
-   includes `DevDirAdapter` and reads the catalog from the local directory.
+Prefer the config file over the env var, **especially when Obsidian runs outside
+the build environment** (e.g. you build in a container/devbox while Obsidian runs
+on the host via a shared mount, or you launch Obsidian from Finder on macOS). The
+plugin reads `process.env.MASON_DEV_DIR` *inside Obsidian's own process* — a value
+exported in your build shell does **not** reach it, and on macOS a Finder-launched
+app ignores shell env entirely. A file on the shared filesystem has no such
+problem.
 
-3. The production build (`npm run build`) defines `__MASON_DEV__` as `"false"`.
-   esbuild's dead-code elimination removes `DevDirAdapter` entirely from
-   `main.js`. The override cannot be activated in a production build — there
-   is no code path to reach it.
+Create (gitignored, already in `.gitignore`):
 
-The DCE guarantee is verified by `test/bundling/devAdapterDce.test.ts`, which
-greps the production bundle for the `__MASON_DEV_DIR_ADAPTER__` marker that
-only `devDirAdapter.ts` contains.
+```
+<vault>/.obsidian/plugins/markdown-mason/.mason-dev.json
+{ "catalogDir": "/absolute/path/to/this-repo/catalog/dist" }
+```
+
+The plugin resolves this path from `FileSystemAdapter.getBasePath()` + the
+plugin's manifest dir at load time. After creating/changing it, reload the plugin
+(Hot Reload picks up a rebuild, or toggle the plugin off/on) so `onload` re-reads
+it.
+
+### ⚠️ Gotchas (these will bite you)
+
+- **Do NOT run `npm run build` (production) while dev-testing in a vault.** The
+  prod build defines `__MASON_DEV__` as `"false"`, so esbuild dead-code-eliminates
+  `DevDirAdapter` **and** the copy step overwrites your vault's `main.js` with a
+  minified prod bundle that has no dev catalog path at all — curated scripts then
+  show `Blocked(offline)`. While developing, run **only** the `npm run dev`
+  watcher (it owns the vault copy); `npm test` / `npm run lint` are safe. A quick
+  check: a **dev** vault build is unminified and contains `__MASON_DEV_DIR_ADAPTER__`;
+  a prod build is minified and does not.
+- **Never dynamically `import()` an esbuild *external*** (`obsidian`, `electron`,
+  `@codemirror/*`, `@lezer/*`). esbuild leaves `await import("obsidian")` literal
+  in the bundle and Obsidian's renderer throws `Failed to resolve module specifier
+  'obsidian'` at runtime — which aborts plugin init. Use a **static** import
+  (`import { FileSystemAdapter } from "obsidian"`, emitted as `require`). Guarded
+  by `test/bundling/devAdapterDce.test.ts`, which asserts neither bundle contains
+  a dynamic `import("obsidian")`.
+
+### Production build is safe by construction
+
+The production build (`npm run build`) defines `__MASON_DEV__` as `"false"`;
+esbuild's dead-code elimination removes `DevDirAdapter` (and the config-file read)
+entirely from `main.js`. The override cannot be activated in production — there is
+no code path to reach it. Verified by `test/bundling/devAdapterDce.test.ts`, which
+greps the production bundle for the `__MASON_DEV_DIR_ADAPTER__` marker that only
+`devDirAdapter.ts` contains.
 
 ---
 
