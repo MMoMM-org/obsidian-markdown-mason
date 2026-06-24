@@ -107,6 +107,19 @@ export class ScriptStore {
 		await this._plugin.save(next);
 	}
 
+	/**
+	 * Removes scripts[id] from data.json entirely.
+	 * Preserves all other top-level keys (esp. settings) and all other script entries.
+	 * Deleting a non-existent id is a safe no-op.
+	 */
+	async deleteRecord(id: string): Promise<void> {
+		const data = await this._loadPluginData();
+		const scripts = { ...(data.scripts ?? {}) };
+		delete scripts[id];
+		const next: PluginData = { ...data, scripts };
+		await this._plugin.save(next);
+	}
+
 	// -------------------------------------------------------------------------
 	// Private helpers
 	// -------------------------------------------------------------------------

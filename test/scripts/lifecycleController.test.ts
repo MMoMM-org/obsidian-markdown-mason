@@ -36,7 +36,7 @@ import type { AskDecision } from "../../src/scripts/runner";
 import { sha256Bytes } from "../../src/scripts/checksum";
 
 // ---------------------------------------------------------------------------
-// In-memory store (Pick<ScriptStore, "getScripts" | "setRecord">)
+// In-memory store (Pick<ScriptStore, "getScripts" | "setRecord" | "deleteRecord">)
 // ---------------------------------------------------------------------------
 
 function makeStore(initial: Record<string, ScriptRecord> = {}) {
@@ -45,6 +45,7 @@ function makeStore(initial: Record<string, ScriptRecord> = {}) {
 		scripts,
 		getScripts: vi.fn(async () => ({ ...scripts })),
 		setRecord: vi.fn(async (id: string, rec: ScriptRecord) => { scripts[id] = rec; }),
+		deleteRecord: vi.fn(async (id: string) => { delete scripts[id]; }),
 	};
 }
 
@@ -426,7 +427,7 @@ describe("LifecycleController.reReview", () => {
 // ===========================================================================
 
 describe("LifecycleController.remove", () => {
-	it("clears record + deletes materialized <id>.cjs + removes fingerprint + re-renders", async () => {
+	it("deletes the record + deletes materialized <id>.cjs + removes fingerprint + re-renders", async () => {
 		const destPath = "plugins/markdown-mason/scripts/perplexity-app.cjs";
 		const store = makeStore({
 			"perplexity-app": {
@@ -441,11 +442,69 @@ describe("LifecycleController.remove", () => {
 
 		await h.controller.remove("perplexity-app");
 
-		expect(store.scripts["perplexity-app"].enabled).toBe(false);
-		expect(store.scripts["perplexity-app"].okayed).toBeNull();
+		// Record must be fully deleted (not merely cleared to {enabled:false, okayed:null})
+		expect(store.deleteRecord).toHaveBeenCalledWith("perplexity-app");
+		expect(store.scripts["perplexity-app"]).toBeUndefined();
 		expect(vault.removeCalls).toContain(destPath);
 		expect(fingerprints.remove).toHaveBeenCalledWith("perplexity-app");
 		expect(h.rerender).toHaveBeenCalled();
+	});
+
+	it("remove(curated): record absent → evaluateState step 1 → Available (not Disabled)", async () => {
+		const store = makeStore({
+			"perplexity-app": {
+				provenance: "curated", enabled: true,
+				okayed: { version: 1, checksum: CURATED_CHECKSUM }, source: "", command: false,
+			},
+		});
+		const vault = makeVault();
+		const catalog = makeCatalog({ "perplexity-app": curatedEntry() });
+		const fingerprints = { setVersion: vi.fn(async () => {}), remove: vi.fn(async () => {}) };
+		const h = makeController({ store, vault, catalog, fingerprints });
+
+		await h.controller.remove("perplexity-app");
+
+		// After remove, the record is absent from the store
+		const records = store.scripts;
+		expect(records["perplexity-app"]).toBeUndefined();
+		// evaluateState(record=undefined, inCatalog=true) → Available per step 1
+		const { evaluateState } = await import("../../src/scripts/lifecycle");
+		const state = evaluateState({
+			record: undefined,
+			inCatalog: true,
+			local: null,
+			catalogVersion: undefined,
+			online: true,
+		});
+		expect(state.kind).toBe("Available");
+	});
+
+	it("remove(imported): record absent → evaluateState step 1 → Absent (not Disabled)", async () => {
+		const store = makeStore({
+			"my-import": {
+				provenance: "imported", enabled: true,
+				okayed: { version: 1, checksum: "sha256:x" }, source: "vault/my-import.cjs", command: false,
+			},
+		});
+		const vault = makeVault();
+		const catalog = makeCatalog({});
+		const fingerprints = { setVersion: vi.fn(async () => {}), remove: vi.fn(async () => {}) };
+		const h = makeController({ store, vault, catalog, fingerprints });
+
+		await h.controller.remove("my-import");
+
+		// After remove, the record is absent from the store
+		expect(store.scripts["my-import"]).toBeUndefined();
+		// evaluateState(record=undefined, inCatalog=false) → Absent per step 1
+		const { evaluateState } = await import("../../src/scripts/lifecycle");
+		const state = evaluateState({
+			record: undefined,
+			inCatalog: false,
+			local: null,
+			catalogVersion: undefined,
+			online: true,
+		});
+		expect(state.kind).toBe("Absent");
 	});
 });
 

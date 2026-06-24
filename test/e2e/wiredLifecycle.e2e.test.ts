@@ -608,12 +608,10 @@ describe("T6.4 wired lifecycle — real controller/resolver/assembly (enable→r
 		// Act: remove
 		await h.controller.remove(SCRIPT_ID);
 
-		// Record must be cleared (okayed: null)
+		// Record must be deleted (absent from data.json entirely)
 		const records = await h.store.getScripts();
 		const rec = records[SCRIPT_ID];
-		expect(rec).toBeDefined();
-		expect(rec!.okayed).toBeNull();
-		expect(rec!.enabled).toBe(false);
+		expect(rec).toBeUndefined();
 
 		// Materialized file must be deleted
 		expect(h.vault.removePaths).toContain(h.destVaultPath);
@@ -623,12 +621,10 @@ describe("T6.4 wired lifecycle — real controller/resolver/assembly (enable→r
 		const fingerprintVersion = await h.fingerprints.getVersion(SCRIPT_ID);
 		expect(fingerprintVersion).toBeUndefined();
 
-		// State is not Active. After remove() the record stub persists with
-		// enabled:false → evaluateState step 2 → Disabled.
-		// The meaningful assertion is that the state is NOT Active (not runnable).
+		// State is Available: record absent + curated → evaluateState step 1 → Available
 		h.resolver.clearCache();
 		const state = await h.resolver.getState(SCRIPT_ID, rec);
-		expect(state.kind).not.toBe("Active");
+		expect(state.kind).toBe("Available");
 	});
 
 	// -------------------------------------------------------------------------

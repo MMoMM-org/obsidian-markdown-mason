@@ -392,3 +392,72 @@ describe("ScriptStore — malformed okayed coerced to null (W3)", () => {
 		expect(scripts["s"]?.okayed).toEqual({ version: 2, checksum: "sha256:ab" });
 	});
 });
+
+// ---------------------------------------------------------------------------
+// (g) deleteRecord — removes scripts[id]; preserves settings + other entries
+// ---------------------------------------------------------------------------
+
+describe("ScriptStore — deleteRecord", () => {
+	it("removes the specified id from scripts", async () => {
+		const pluginData = makePluginDataPort({
+			scripts: { "script-a": makeRecord() },
+		});
+		const store = makeStore(pluginData);
+
+		await store.deleteRecord("script-a");
+
+		const scripts = await store.getScripts();
+		expect(scripts["script-a"]).toBeUndefined();
+	});
+
+	it("preserves settings when deleting a record", async () => {
+		const pluginData = makePluginDataPort({
+			settings: { debugLogging: true, resourcesName: "Refs" },
+			scripts: { "script-a": makeRecord() },
+		});
+		const store = makeStore(pluginData);
+
+		await store.deleteRecord("script-a");
+
+		const saved = pluginData._stored as { settings: unknown; scripts: unknown };
+		expect(saved.settings).toEqual({ debugLogging: true, resourcesName: "Refs" });
+	});
+
+	it("preserves other script entries when deleting one", async () => {
+		const pluginData = makePluginDataPort({
+			scripts: {
+				"script-a": makeRecord({ source: "vault/a.js" }),
+				"script-b": makeRecord({ source: "vault/b.js" }),
+			},
+		});
+		const store = makeStore(pluginData);
+
+		await store.deleteRecord("script-a");
+
+		const scripts = await store.getScripts();
+		expect(scripts["script-a"]).toBeUndefined();
+		expect(scripts["script-b"]).toBeDefined();
+	});
+
+	it("is a no-op for an absent id (does not throw)", async () => {
+		const pluginData = makePluginDataPort({
+			scripts: { "script-a": makeRecord() },
+		});
+		const store = makeStore(pluginData);
+
+		await expect(store.deleteRecord("nonexistent")).resolves.toBeUndefined();
+
+		const scripts = await store.getScripts();
+		expect(scripts["script-a"]).toBeDefined();
+	});
+
+	it("calls plugin.save exactly once per deleteRecord call", async () => {
+		const pluginData = makePluginDataPort({
+			scripts: { "script-a": makeRecord() },
+		});
+		const store = makeStore(pluginData);
+
+		await store.deleteRecord("script-a");
+		expect(pluginData.saveCount).toBe(1);
+	});
+});

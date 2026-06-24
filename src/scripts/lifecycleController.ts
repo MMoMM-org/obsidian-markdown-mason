@@ -60,7 +60,7 @@ export interface LifecycleVault {
 
 export interface LifecycleControllerDeps {
 	app: App;
-	store: Pick<ScriptStore, "getScripts" | "setRecord">;
+	store: Pick<ScriptStore, "getScripts" | "setRecord" | "deleteRecord">;
 	catalog: CatalogSource;
 	vault: LifecycleVault;
 	fingerprints: FingerprintStore;
@@ -258,16 +258,13 @@ export class LifecycleController {
 	}
 
 	// -------------------------------------------------------------------------
-	// remove — clear record + delete materialized file + remove fingerprint
+	// remove — delete record + delete materialized file + remove fingerprint
 	// -------------------------------------------------------------------------
 
 	async remove(id: string): Promise<void> {
-		const rec = (await this._d.store.getScripts())[id];
-		if (rec !== undefined) {
-			await this._d.store.setRecord(id, { ...rec, enabled: false, okayed: null });
-		}
 		await this._deleteMaterialized(id);
 		await this._d.fingerprints.remove(id);
+		await this._d.store.deleteRecord(id);
 		this._d.rerender();
 	}
 
