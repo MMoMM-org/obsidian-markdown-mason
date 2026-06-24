@@ -1,6 +1,6 @@
 ---
 title: "Phase 6: Live GUI Wiring"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 6
 ---
@@ -49,7 +49,7 @@ This phase replaces every `// P5:` seam with a real implementation and proves th
   4. Validate: UI tests (drive each op, assert state transitions + modal/materialize calls); `npm run compliance`; lint; types.
   - Success: every Scripts-card action works end-to-end in the real UI; enable implies consent `[ref: PRD/F1, F2, F4, F6]`.
 
-- [ ] **T6.3 Module loading, paste-chain assembly & launcher run** `[activity: backend-api]`
+- [x] **T6.3 Module loading, paste-chain assembly & launcher run** `[activity: backend-api]`
 
   1. Prime: Read `main._buildEnabledPasteScripts` (returns `[]`), `loadScriptModule`/`FsScriptLoader` (`src/scripts/loader.ts`), `buildPasteChain`, the command-tab `resolveScriptFn` placeholder `[ref: SDD/ADR-16]`.
   2. Test (RED): `_buildEnabledPasteScripts` loads the materialized module (`loadScriptModule`) for each enabled+**Active** script and assembles `LoadedScript[]` so `buildPasteChain` orders them (curated→imported, priority desc, id) and "Paste and format" runs the first match against a real fixture; a disabled/Blocked script is excluded. The launcher/`CommandManager` `resolveScriptFn` returns the loaded `run` for an Active script (and fails safe for non-Active). Module loads happen lazily (no load for disabled scripts).
@@ -57,9 +57,18 @@ This phase replaces every `// P5:` seam with a real implementation and proves th
   4. Validate: integration tests over the real run paths; `npm test`; lint; types.
   - Success: paste autodetect + launcher execute materialized curated scripts `[ref: PRD/F9, F10, F11]`.
 
-- [ ] **T6.4 Wired end-to-end test + final validation** `[activity: validate]`
+- [x] **T6.4 Wired end-to-end test + final validation** `[activity: validate]`
 
   1. Prime: existing `test/e2e/scriptLifecycle.e2e.test.ts` (composed-unit flows) — now assert through the **wired plugin objects**.
   2. Test (RED): a live integration test that constructs the plugin (or the real settings tab + resolver + ops + main paste path) with a fake `CatalogSource` + in-memory adapters and drives: Scripts-tab enable → disclosure → materialize → Active → run via "Paste and format" AND via "Run script…" → disable → remove. Assert NO `_comingSoon` Notices fire on the happy path.
   3. Validate: run the **entire** suite (`npm test`), `npm run lint`, `npm run compliance`, `npm run build`, `npm run check:manifest`. Re-walk the PRD→Phase coverage map; confirm the live-GUI ACs (F1/F2/F4/F6/F9/F10) are now exercised through the wired path, not only composed units. Grep the production seams to confirm no `online:false`/`_comingSoon`/empty-`_buildEnabledPasteScripts` stubs remain. Record any residual deviations.
   - Success: the GUI drives the full lifecycle end-to-end; spec 002 deviation closed `[ref: PRD/F1–F11]`.
+  - **Result (2026-06-24):** wired e2e (test/e2e/wiredLifecycle.e2e.test.ts) drives the REAL controller/resolver/assembly/run paths; 1057 tests / lint / compliance / build / manifest all green; no `_comingSoon`/empty-paste-chain stubs remain (the lone `online:false` is the no-resolver fallback safety net). **DEVIATION found → addressed by T6.5 below:** remove(curated) yielded `Disabled` not `Available` (state had no `deleteRecord`).
+
+- [x] **T6.5 Remove deletes the record (Available/Absent per state diagram)** `[activity: backend-api]`
+
+  1. Prime: SDD state diagram (`Active → Available: remove (curated)`; `Active → Absent: remove (imported)`); `evaluateState` step 1 (no record → inCatalog?Available:Absent); `ScriptStore` (no delete today); `LifecycleController.remove`.
+  2. Test (RED): `ScriptStore.deleteRecord(id)` removes `scripts[id]` from `data.json` preserving other keys + other scripts; `LifecycleController.remove(id)` unregisters any command, deletes the materialized file, removes the fingerprint, AND deletes the record so the resolver reports `Available` (curated) / `Absent` (imported) — NOT `Disabled`.
+  3. Implement (GREEN): add `ScriptStore.deleteRecord`; change `LifecycleController.remove` to call it instead of `setRecord({enabled:false, okayed:null})`.
+  4. Validate: update controller + store + e2e tests; `npm test`; `npm run compliance`; lint; types.
+  - Success: remove returns the script to Available/Absent per the SDD state machine `[ref: PRD/F1; SDD/Runtime View]`.
