@@ -135,34 +135,30 @@ export class LifecycleResolver {
 	/**
 	 * Network-free runnability check for the paste chain (T6.3).
 	 *
-	 * Determines whether a script can run on THIS device without fetching the
-	 * catalog or reading vault file bytes. Uses the per-device fingerprint store
-	 * (a cheap manifest read) and the okayed consent record only.
+	 * Determines whether a script can run on THIS device. Reads the materialized
+	 * <id>.cjs bytes from the vault (a cheap LOCAL disk read — not network) and
+	 * recomputes their SHA-256 checksum so that step 6 of evaluateState (the
+	 * drift / tamper-detection check) is byte-authoritative on the paste/launcher
+	 * run path. This satisfies the SDD Security requirement:
+	 *   "no code path runs a script whose materialized bytes don't match the
+	 *    okayed {version, checksum}" (the device-B/SEC match-gate).
 	 *
-	 * "local" is derived from the fingerprint store alone:
-	 *   - fingerprint present → { version: fingerprintVersion, checksum: okayed.checksum }
-	 *     (The materializer wrote the file and recorded the version when it materialized;
-	 *      the okayed checksum was verified at that time. Re-hashing on every paste would
-	 *      be expensive and is deferred to the catalog-fetch path.)
-	 *   - fingerprint absent → null (code not yet on this device)
+	 * "local" is derived from the actual vault bytes via _resolveLocal:
+	 *   - file absent          → null (code not yet on this device)
+	 *   - file present, bytes hash == okayed.checksum → { version, checksum } → Active
+	 *   - file present, bytes hash != okayed.checksum → { version, driftChecksum } → Blocked("drift")
 	 *
 	 * catalogVersion is always undefined so step 7 (UpdateAvailable) never fires.
 	 * An outdated-but-valid script resolves Active here — correct for running.
 	 *
 	 * MUST NOT call fetchIndex. Callers on the paste path depend on this being
-	 * free of any network access.
+	 * free of any network access. Local disk reads (vault.exists + vault.readBinary)
+	 * are permitted and required for byte-authoritative drift detection.
 	 */
 	async resolveLocalState(id: string, record: ScriptRecord): Promise<LifecycleState> {
-		const fingerprintVersion = await this._deps.fingerprints.getVersion(id);
-
-		let local: { version: number; checksum: string } | null;
-		if (fingerprintVersion !== undefined && record.okayed !== null) {
-			// Fingerprint present: treat local as materialized with the recorded version
-			// and the okayed checksum (re-hashing deferred to catalog-fetch path).
-			local = { version: fingerprintVersion, checksum: record.okayed.checksum };
-		} else {
-			local = null;
-		}
+		// Reuse _resolveLocal for byte-authoritative local fingerprint: reads vault
+		// file bytes and hashes them. Does not call fetchIndex. Safe to call here.
+		const local = await this._resolveLocal(id, record);
 
 		return evaluateState({
 			record,

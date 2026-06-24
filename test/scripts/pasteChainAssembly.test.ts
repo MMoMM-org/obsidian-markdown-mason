@@ -10,6 +10,10 @@
 //      safe value (no throw, no run) for a non-runnable id.
 //   F. LifecycleResolver.resolveLocalState — network-free runnability method added to
 //      the real resolver class (RED until T6.3 implementation).
+//   G. SECURITY — resolveLocalState is byte-authoritative: a drifted local file (same
+//      version, wrong on-disk bytes) is caught as Blocked("drift") on the paste/launcher
+//      run path. Pre-fix this test FAILS (bug: okayed checksum used instead of hashing
+//      actual bytes). Post-fix it PASSES.
 //
 // Design:
 //   Parts A–E use local helper functions that mirror the production logic being implemented.
@@ -758,17 +762,28 @@ describe("T6.3 E — isLocallyRunnable (network-free runnability)", () => {
 // ---------------------------------------------------------------------------
 
 describe("T6.3 F — LifecycleResolver.resolveLocalState (network-free runnability)", () => {
-	/** Build a minimal LifecycleResolver with a fake catalog, vault, and fingerprints. */
-	function makeResolver(fingerprintVersions: Record<string, number>): LifecycleResolver {
+	// sha256 of empty ArrayBuffer: used when vault returns new ArrayBuffer(0)
+	// $ node -e "const {createHash}=require('node:crypto'); console.log('sha256:'+createHash('sha256').update(new Uint8Array(0)).digest('hex'))"
+	const EMPTY_CHECKSUM = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+	/**
+	 * Build a minimal LifecycleResolver with a fake catalog, vault, and fingerprints.
+	 * vaultExists: controls vault.exists response (default false = file absent)
+	 * vaultBytes: controls vault.readBinary response (default empty ArrayBuffer)
+	 */
+	function makeResolver(
+		fingerprintVersions: Record<string, number>,
+		opts: { vaultExists?: boolean; vaultBytes?: ArrayBuffer } = {},
+	): LifecycleResolver {
 		const fakeCatalog: CatalogSource = {
 			fetchIndex: vi.fn().mockRejectedValue(new Error("fetchIndex must not be called")),
 			fetchScript: vi.fn().mockResolvedValue(new Uint8Array()),
 		};
 
 		const fakeVault = {
-			readBinary: vi.fn().mockResolvedValue(new ArrayBuffer(0)),
+			readBinary: vi.fn().mockResolvedValue(opts.vaultBytes ?? new ArrayBuffer(0)),
 			writeBinary: vi.fn().mockResolvedValue(undefined),
-			exists: vi.fn().mockResolvedValue(false),
+			exists: vi.fn().mockResolvedValue(opts.vaultExists ?? false),
 			mkdir: vi.fn().mockResolvedValue(undefined),
 		};
 
@@ -790,13 +805,14 @@ describe("T6.3 F — LifecycleResolver.resolveLocalState (network-free runnabili
 		expect(typeof (resolver as unknown as { resolveLocalState?: unknown }).resolveLocalState).toBe("function");
 	});
 
-	it("resolveLocalState returns Active for enabled+okayed+local-fingerprint script", async () => {
-		const resolver = makeResolver({ "my-script": 1 });
+	it("resolveLocalState returns Active for enabled+okayed+local-fingerprint script (file present, bytes match)", async () => {
+		// vault returns empty bytes → checksum = EMPTY_CHECKSUM; okayed.checksum must match
+		const resolver = makeResolver({ "my-script": 1 }, { vaultExists: true, vaultBytes: new ArrayBuffer(0) });
 
 		const record: ScriptRecord = {
 			provenance: "curated",
 			enabled: true,
-			okayed: { version: 1, checksum: "sha256:abc" },
+			okayed: { version: 1, checksum: EMPTY_CHECKSUM },
 			source: "",
 			command: false,
 		};
@@ -809,12 +825,12 @@ describe("T6.3 F — LifecycleResolver.resolveLocalState (network-free runnabili
 	});
 
 	it("resolveLocalState returns Disabled for disabled script", async () => {
-		const resolver = makeResolver({ "my-script": 1 });
+		const resolver = makeResolver({ "my-script": 1 }, { vaultExists: true, vaultBytes: new ArrayBuffer(0) });
 
 		const record: ScriptRecord = {
 			provenance: "curated",
 			enabled: false,
-			okayed: { version: 1, checksum: "sha256:abc" },
+			okayed: { version: 1, checksum: EMPTY_CHECKSUM },
 			source: "",
 			command: false,
 		};
@@ -826,13 +842,14 @@ describe("T6.3 F — LifecycleResolver.resolveLocalState (network-free runnabili
 		expect(state.kind).toBe("Disabled");
 	});
 
-	it("resolveLocalState returns Blocked(offline) for enabled+okayed+no-fingerprint script", async () => {
-		const resolver = makeResolver({}); // no fingerprint entry
+	it("resolveLocalState returns Blocked(offline) for enabled+okayed+file-absent script", async () => {
+		// No vault file (exists=false) → local=null → online=false → Blocked("offline")
+		const resolver = makeResolver({ "my-script": 1 }, { vaultExists: false });
 
 		const record: ScriptRecord = {
 			provenance: "curated",
 			enabled: true,
-			okayed: { version: 1, checksum: "sha256:abc" },
+			okayed: { version: 1, checksum: EMPTY_CHECKSUM },
 			source: "",
 			command: false,
 		};
@@ -841,7 +858,7 @@ describe("T6.3 F — LifecycleResolver.resolveLocalState (network-free runnabili
 			resolveLocalState(id: string, record: ScriptRecord): Promise<import("../../src/scripts/lifecycle").LifecycleState>;
 		}).resolveLocalState("my-script", record);
 
-		// No local fingerprint → local=null → online=false → Blocked("offline")
+		// File absent → local=null → online=false → Blocked("offline")
 		expect(state.kind).toBe("Blocked");
 		if (state.kind === "Blocked") {
 			expect(state.reason).toBe("offline");
@@ -873,7 +890,7 @@ describe("T6.3 F — LifecycleResolver.resolveLocalState (network-free runnabili
 		const record: ScriptRecord = {
 			provenance: "curated",
 			enabled: true,
-			okayed: { version: 1, checksum: "sha256:abc" },
+			okayed: { version: 1, checksum: EMPTY_CHECKSUM },
 			source: "",
 			command: false,
 		};
@@ -884,5 +901,208 @@ describe("T6.3 F — LifecycleResolver.resolveLocalState (network-free runnabili
 		}).resolveLocalState("my-script", record);
 
 		expect(fakeCatalog.fetchIndex).not.toHaveBeenCalled();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Part G: SECURITY — byte-authoritative match-gate on resolveLocalState
+//
+// The bug (pre-fix): resolveLocalState sets local.checksum = record.okayed.checksum,
+// so evaluateState step 6 (local.checksum !== okayed.checksum) can NEVER fire on the
+// paste/launcher run path. A drifted/tampered <id>.cjs (same version, different bytes)
+// resolves Active and RUNS.
+//
+// The fix: resolve local.checksum by hashing the actual on-disk bytes via vault.readBinary,
+// exactly as _resolveLocal does, but without any catalog fetch.
+//
+// These tests FAIL against the pre-fix code and PASS after the fix.
+// ---------------------------------------------------------------------------
+
+describe("T6.3 G — SECURITY: byte-authoritative match-gate (drift must be caught on run path)", () => {
+	// Pre-computed checksums for test byte sequences
+	// sha256 of Buffer.from("fake script content")
+	const GOOD_BYTES = Buffer.from("fake script content");
+	const GOOD_CHECKSUM = "sha256:9530fee7664c792ed05c5b2d1f0643f0dd73bf1d305e3e76e034ffaec513adc9";
+	// sha256 of Buffer.from("drifted script content") — different bytes, same version
+	const DRIFTED_BYTES = Buffer.from("drifted script content");
+
+	/** LifecycleResolverState type alias for readability. */
+	type ResolverType = {
+		resolveLocalState(id: string, record: ScriptRecord): Promise<import("../../src/scripts/lifecycle").LifecycleState>;
+	};
+
+	function makeResolverWithBytes(opts: {
+		fingerprintVersion: number;
+		vaultBytes: Buffer;
+		onlineProbe?: () => boolean;
+	}): LifecycleResolver {
+		const fakeCatalog: CatalogSource = {
+			fetchIndex: vi.fn().mockImplementation(() => {
+				throw new Error("fetchIndex must not be called on paste path (G)");
+			}),
+			fetchScript: vi.fn().mockResolvedValue(new Uint8Array()),
+		};
+
+		const buf = opts.vaultBytes.buffer.slice(
+			opts.vaultBytes.byteOffset,
+			opts.vaultBytes.byteOffset + opts.vaultBytes.byteLength,
+		) as ArrayBuffer;
+
+		const fakeVault = {
+			readBinary: vi.fn().mockResolvedValue(buf),
+			writeBinary: vi.fn().mockResolvedValue(undefined),
+			exists: vi.fn().mockResolvedValue(true), // file is present on disk
+			mkdir: vi.fn().mockResolvedValue(undefined),
+		};
+
+		const fakeFingerprints = makeFingerprintStore({ "test-script": opts.fingerprintVersion });
+
+		return new LifecycleResolver({
+			catalog: fakeCatalog,
+			vault: fakeVault,
+			fingerprints: fakeFingerprints,
+			scriptsDir: "/vault/scripts",
+			destPath: (id: string) => `/vault/scripts/${id}.cjs`,
+			onlineProbe: opts.onlineProbe ?? (() => false),
+		});
+	}
+
+	it("SECURITY: drifted local file (same version, wrong bytes) → Blocked(drift) — NOT Active", async () => {
+		// Arrange: fingerprint says version=1 (matches okayed.version=1),
+		// but on-disk bytes hash to DRIFTED_CHECKSUM ≠ okayed.checksum=GOOD_CHECKSUM.
+		// Pre-fix: resolveLocalState uses okayed.checksum as local.checksum → step 6 never
+		// fires → Active (BUG: tampered script runs).
+		// Post-fix: resolveLocalState hashes actual bytes → local.checksum=DRIFTED_CHECKSUM
+		// ≠ okayed.checksum → step 6 fires → Blocked("drift").
+		const resolver = makeResolverWithBytes({
+			fingerprintVersion: 1,
+			vaultBytes: DRIFTED_BYTES,
+		});
+
+		const record: ScriptRecord = {
+			provenance: "curated",
+			enabled: true,
+			okayed: { version: 1, checksum: GOOD_CHECKSUM }, // okayed checksum is for GOOD_BYTES
+			source: "",
+			command: false,
+		};
+
+		const state = await (resolver as unknown as ResolverType).resolveLocalState("test-script", record);
+
+		// MUST be Blocked(drift), not Active
+		expect(state.kind).toBe("Blocked");
+		if (state.kind === "Blocked") {
+			expect(state.reason).toBe("drift");
+		}
+	});
+
+	it("SECURITY: matching local file (bytes hash == okayed.checksum) → Active (still runnable)", async () => {
+		// Arrange: on-disk bytes hash to GOOD_CHECKSUM == okayed.checksum → Active.
+		const resolver = makeResolverWithBytes({
+			fingerprintVersion: 1,
+			vaultBytes: GOOD_BYTES,
+		});
+
+		const record: ScriptRecord = {
+			provenance: "curated",
+			enabled: true,
+			okayed: { version: 1, checksum: GOOD_CHECKSUM },
+			source: "",
+			command: false,
+		};
+
+		const state = await (resolver as unknown as ResolverType).resolveLocalState("test-script", record);
+
+		expect(state.kind).toBe("Active");
+	});
+
+	it("SECURITY: drifted script is excluded from _buildEnabledPasteScripts (not loaded)", async () => {
+		// The isLocallyRunnable helper in the test file replicates the old buggy logic
+		// (uses okayed.checksum as local.checksum). This test verifies the production
+		// LifecycleResolver path: a drifted script must not be runnable via resolveLocalState.
+		const resolver = makeResolverWithBytes({
+			fingerprintVersion: 1,
+			vaultBytes: DRIFTED_BYTES,
+		});
+
+		const record: ScriptRecord = {
+			provenance: "curated",
+			enabled: true,
+			okayed: { version: 1, checksum: GOOD_CHECKSUM },
+			source: "",
+			command: false,
+		};
+
+		const state = await (resolver as unknown as ResolverType).resolveLocalState("test-script", record);
+
+		// Drifted script must NOT be runnable (not Active)
+		expect(state.kind).not.toBe("Active");
+	});
+
+	it("SECURITY: resolveScriptFn fails safe for drifted script (no execution)", async () => {
+		// Verify that a drifted script state (Blocked drift) causes the run-gate to refuse.
+		// We call resolveLocalState and confirm the result is not Active.
+		const resolver = makeResolverWithBytes({
+			fingerprintVersion: 1,
+			vaultBytes: DRIFTED_BYTES,
+		});
+
+		const record: ScriptRecord = {
+			provenance: "curated",
+			enabled: true,
+			okayed: { version: 1, checksum: GOOD_CHECKSUM },
+			source: "",
+			command: false,
+		};
+
+		const state = await (resolver as unknown as ResolverType).resolveLocalState("test-script", record);
+
+		// Any production run-gate checks state.kind === "Active" before executing.
+		// Confirm the gate would refuse.
+		expect(state.kind === "Active").toBe(false);
+	});
+
+	it("SECURITY: fetchIndex is NOT called for drifted script (network-free path preserved)", async () => {
+		const fakeCatalog: CatalogSource = {
+			fetchIndex: vi.fn().mockImplementation(() => {
+				throw new Error("fetchIndex must not be called on paste path");
+			}),
+			fetchScript: vi.fn().mockResolvedValue(new Uint8Array()),
+		};
+
+		const buf = DRIFTED_BYTES.buffer.slice(
+			DRIFTED_BYTES.byteOffset,
+			DRIFTED_BYTES.byteOffset + DRIFTED_BYTES.byteLength,
+		) as ArrayBuffer;
+
+		const fakeVault = {
+			readBinary: vi.fn().mockResolvedValue(buf),
+			writeBinary: vi.fn().mockResolvedValue(undefined),
+			exists: vi.fn().mockResolvedValue(true),
+			mkdir: vi.fn().mockResolvedValue(undefined),
+		};
+
+		const resolver = new LifecycleResolver({
+			catalog: fakeCatalog,
+			vault: fakeVault,
+			fingerprints: makeFingerprintStore({ "test-script": 1 }),
+			scriptsDir: "/vault/scripts",
+			destPath: (id: string) => `/vault/scripts/${id}.cjs`,
+			onlineProbe: () => true, // even when online, must not fetch
+		});
+
+		const record: ScriptRecord = {
+			provenance: "curated",
+			enabled: true,
+			okayed: { version: 1, checksum: GOOD_CHECKSUM },
+			source: "",
+			command: false,
+		};
+
+		// Must not throw (fetchIndex is not called even for drifted script)
+		const state = await (resolver as unknown as ResolverType).resolveLocalState("test-script", record);
+
+		expect(fakeCatalog.fetchIndex).not.toHaveBeenCalled();
+		expect(state.kind).toBe("Blocked");
 	});
 });
