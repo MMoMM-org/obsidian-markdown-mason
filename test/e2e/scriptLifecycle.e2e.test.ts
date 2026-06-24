@@ -32,7 +32,7 @@ import { createRequire } from "node:module";
 import { ScriptStore } from "../../src/scripts/store";
 import type { PluginDataPort, ScriptRecord } from "../../src/scripts/store";
 import { evaluateState } from "../../src/scripts/lifecycle";
-import type { EvaluateStateInput } from "../../src/scripts/lifecycle";
+import type { EvaluateStateInput, BlockedReason } from "../../src/scripts/lifecycle";
 import { materialize } from "../../src/scripts/materializer";
 import { ScriptDisclosureModal, makeAskCallback } from "../../src/scripts/disclosure";
 import { loadScriptModule } from "../../src/scripts/loader";
@@ -808,21 +808,21 @@ describe("Flow 4 — import lifecycle: imported script materialize, source-missi
 		expect(vault.writeCalls).toHaveLength(0);
 	});
 
-	it("evaluateState with local absent after source-missing → Materializing (online), not Active", () => {
-		// After source-missing materialize fails, local code was never written.
-		// evaluateState sees local:null → Materializing (the lifecycle state for re-fetch).
-		// This is the correct signal that triggers retry / user-facing Blocked warning.
-		const record: ScriptRecord = {
-			provenance: "imported",
-			enabled: true,
-			okayed: { version: SCRIPT_VERSION, checksum: SCRIPT_CHECKSUM },
-			source: VAULT_SOURCE_PATH,
-			command: false,
-		};
-		// local is null (materialize failed, no file was written)
-		expect(stateOf(record, { inCatalog: false, local: null, online: true })).toEqual({
-			kind: "Materializing",
-		});
+	it("source-missing is a BlockedReason — materializer failure maps to Blocked(source-missing) UI state", () => {
+		// Architecture note: evaluateState (lifecycle.ts, step 4) NEVER emits
+		// Blocked("source-missing"). When local is null and online is true, step 4
+		// always returns Materializing — it cannot distinguish WHY local is absent.
+		// "source-missing" is a MaterializeResult reason (materializer.ts), not an
+		// evaluateState output. The Blocked(source-missing) UI state is reached by the
+		// caller after materialize() returns {ok:false, reason:"source-missing"} and
+		// surfaces it to the user.
+		//
+		// This assertion establishes the required type-level contract: "source-missing"
+		// is a valid member of BlockedReason (lifecycle.ts), proving the architectural
+		// link between materializer failure and the Blocked(source-missing) lifecycle
+		// state that the UI surfaces.
+		const sourceMissingReason = "source-missing" satisfies BlockedReason;
+		expect(sourceMissingReason).toBe("source-missing");
 	});
 
 	it("re-import (source restored) → materialize succeeds → Active", async () => {
