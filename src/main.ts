@@ -55,10 +55,10 @@ export async function buildCatalogSource(): Promise<CatalogSource> {
 }
 
 // ---------------------------------------------------------------------------
-// CommandInjection — test seam for paste AND selection commands
+// CommandInjection — test seam for the paste command
 //
-// Both the paste command and _runScriptOnSelection's editorCallback must honour
-// Obsidian's fixed signature `(editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => any`.
+// The paste command's editorCallback must honour Obsidian's fixed signature
+// `(editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => any`.
 // Injecting test doubles via a second argument would violate that type contract.
 //
 // Instead the plugin exposes `_commandInjection?: CommandInjection`, a test-only
@@ -67,11 +67,11 @@ export async function buildCatalogSource(): Promise<CatalogSource> {
 // with `_` to signal "test seam, not public API".
 //
 // Fields:
-//   clipboardReader  — replaces navigator.clipboard.readText() (paste only)
-//   applyPlan        — replaces the CM6 applyEditPlan side-effect (paste only)
-//   failScript       — when true, forces the paste script to throw (paste rawFallback tests)
+//   clipboardReader  — replaces navigator.clipboard.readText()
+//   applyPlan        — replaces the CM6 applyEditPlan side-effect
+//   failScript       — when true, forces the paste script to throw (rawFallback tests)
 //   pasteScripts     — when set, replaces the enabled paste-script set fed to the
-//                      data-driven paste chain (paste only)
+//                      data-driven paste chain
 // ---------------------------------------------------------------------------
 
 export interface CommandInjection {
@@ -110,7 +110,7 @@ export class MarkdownMasonPlugin extends Plugin {
 	declare commandManager: CommandManager;
 
 	/**
-	 * Test seam for paste AND selection commands.
+	 * Test seam for the paste command.
 	 * Set this property before triggering a command in tests.
 	 * Undefined in production — all defaults apply.
 	 */

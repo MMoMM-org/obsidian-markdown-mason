@@ -47,7 +47,7 @@ This phase delivers the developer loop, the production-safety build guarantee, t
   4. Validate: catalog-load + per-script paste tests (reuse existing parser fixtures); lint; types.
   - Success: curated scripts are catalog entries, not compiled in `[ref: PRD/F11; SDD/ADR-16]`; autodetect order preserved `[ref: PRD/F10]`.
 
-- [ ] **T5.3 End-to-end & integration tests** `[activity: test-strategy]`
+- [x] **T5.3 End-to-end & integration tests** `[activity: test-strategy]`
 
   1. Prime: Read the cross-device + Blocked-recovery specs `[ref: PRD/Detailed Feature Specifications; SDD/Runtime View]`; existing `test/e2e/happyPath.e2e.test.ts`.
   2. Test (RED) — with fake `CatalogSource` + in-memory adapters:
