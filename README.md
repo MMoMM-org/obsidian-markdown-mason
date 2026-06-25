@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/mason-logo.png" alt="Markdown Mason logo" width="320">
+  <img src="assets/mason-logo.png" alt="Markdown Mason logo" width="400">
 </p>
 
 <h1 align="center">Markdown Mason</h1>
