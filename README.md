@@ -1,4 +1,10 @@
-# Markdown Mason
+<p align="center">
+  <img src="assets/mason-logo.png" alt="Markdown Mason logo" width="180">
+</p>
+
+<h1 align="center">Markdown Mason</h1>
+
+<p align="center"><strong>Solid formatting, block by block.</strong></p>
 
 > Reshape pasted or whole-note Markdown to fit a note's structure — heading cascade,
 > footnote renumbering and dedup — plus a runnable, consent-gated script library.

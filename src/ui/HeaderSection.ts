@@ -22,7 +22,7 @@ const REPO_URL = "https://github.com/MMoMM-org/obsidian-markdown-mason";
  * Punchy tagline shown below the identity line.
  * Kept independent from manifest.description, which is the long listing blurb.
  */
-const TAGLINE = "Reshape pasted Markdown to fit your note.";
+const TAGLINE = "Solid formatting, block by block.";
 
 /** Constructor options for HeaderSection. */
 export interface HeaderSectionOptions {

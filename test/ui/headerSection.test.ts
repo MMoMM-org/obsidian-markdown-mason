@@ -179,7 +179,7 @@ describe("HeaderSection — tagline", () => {
 		const paragraphs = findAll(container, (n) => n.tagName === "p");
 		const taglineParagraph = paragraphs.find((p) => p._text.length > 0);
 		expect(taglineParagraph, "Expected a <p> with non-empty text content").toBeDefined();
-		expect(taglineParagraph!._text).toBe("Reshape pasted Markdown to fit your note.");
+		expect(taglineParagraph!._text).toBe("Solid formatting, block by block.");
 	});
 });
 
