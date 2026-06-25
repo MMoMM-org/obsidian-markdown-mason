@@ -94,15 +94,20 @@ jobs:
           subject-path: main.js
 
       # Collect release assets. styles.css is optional — only upload if it
-      # exists (this plugin has no styles.css at v0.0.1).
+      # exists. softprops/action-gh-release expects a NEWLINE-separated list:
+      # a single space-separated string is parsed as one glob and matches
+      # nothing ("Pattern '...' does not match any files"), publishing an
+      # asset-less release. Emit a multiline GITHUB_OUTPUT value instead.
       - name: Collect release assets
         id: assets
         run: |
-          ASSETS="main.js manifest.json"
-          if [ -f styles.css ]; then
-            ASSETS="$ASSETS styles.css"
-          fi
-          echo "files=${ASSETS}" >> "$GITHUB_OUTPUT"
+          {
+            echo "files<<EOF"
+            echo "main.js"
+            echo "manifest.json"
+            [ -f styles.css ] && echo "styles.css"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release and upload assets
         uses: softprops/action-gh-release@v2
