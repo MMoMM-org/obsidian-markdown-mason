@@ -45,7 +45,7 @@
 
 ## Context
 
-Source briefing: project-root [`README.md`](../../../../README.md) — full concept/spec for the
+Source briefing: project-root [`PROJECT_BRIEFING.de.md`](../../../../PROJECT_BRIEFING.de.md) — full concept/spec for the
 **Markdown Mason** Obsidian plugin (paste/selection/whole-note Markdown structuring: heading
 cascade, citation→footnote, footnote offset/renumber, dedup, move-to-Resources; plus a curated,
 plugin-managed declarative transform library).

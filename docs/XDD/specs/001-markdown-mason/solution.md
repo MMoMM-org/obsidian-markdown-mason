@@ -53,7 +53,7 @@ version: "1.0"
 
 #### Documentation Context
 ```yaml
-- doc: README.md
+- doc: PROJECT_BRIEFING.de.md
   relevance: HIGH
   why: "Canonical briefing; §2 fixtures, §5 algorithms, §7 extensibility/trust, §8 architecture, §9 Obsidian notes"
 - doc: docs/XDD/specs/001-markdown-mason/requirements.md

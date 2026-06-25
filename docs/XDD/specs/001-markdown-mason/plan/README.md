@@ -46,7 +46,7 @@ preview, more scripts) are out of this plan — see *Future Phases* at the botto
 **Specification**:
 - `docs/XDD/specs/001-markdown-mason/requirements.md` — Product Requirements (PRD v1.1)
 - `docs/XDD/specs/001-markdown-mason/solution.md` — Solution Design (10 ADRs)
-- `README.md` — briefing (§5 algorithms, §7 extensibility, §8 architecture, §9 Obsidian notes)
+- `PROJECT_BRIEFING.de.md` — briefing (§5 algorithms, §7 extensibility, §8 architecture, §9 Obsidian notes)
 - `assets/sakura-in-tokyo-{app,web,web-download}.md` — golden fixtures
 - `https://github.com/MMoMM-org/miyo-tomo-hashi` `src/hooks/` — runtime to port
 
