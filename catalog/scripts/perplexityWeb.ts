@@ -13,6 +13,13 @@
 // ctx.op.cursor = insertion point (typically doc.length — end of note)
 // ctx.input     = raw Perplexity web copy-paste text
 //
+// COMMAND / SELECTION (OperationContext.replaceRange)
+// ---------------------------------------------------
+// Run as a command on a non-empty selection, ctx.op.replaceRange is set to the
+// selection span (and ctx.op.cursor to its start), so cascadeOrInsert REPLACES the
+// selected raw text in place (format-in-place) instead of inserting at the cursor.
+// All "insert at cursor" steps below become a replace-over-selection in that mode.
+//
 // COMPOSITION
 // -----------
 // 1. Parse ctx.input → ParseResult { body, inline, sources }

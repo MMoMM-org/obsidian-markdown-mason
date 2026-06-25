@@ -84,10 +84,11 @@ export interface LifecycleControllerDeps {
 	unregisterCommand?: (id: string) => void;
 	/**
 	 * Re-register the script's Obsidian command with a FRESH module + state snapshot.
-	 * Called after a successful (re)materialize so a command that was bound to an old
-	 * module (or registered with a frozen non-Active state) picks up the new code and
-	 * becomes runnable again — without a plugin reload. No-op when the script has no
-	 * command (command:false). Optional: omitted by tests that don't exercise commands.
+	 * Called after any op that changes runnability — a successful (re)materialize
+	 * (update/retry/re-enable → rebinds new code, becomes Active) or a disable
+	 * (refreshes the frozen snapshot to Disabled so the fail-safe blocks it). Avoids
+	 * needing a plugin reload. No-op when the script has no command (command:false).
+	 * Optional: omitted by tests that don't exercise commands.
 	 */
 	reRegisterCommand?: (id: string) => void | Promise<void>;
 }
@@ -178,6 +179,11 @@ export class LifecycleController {
 		const rec = (await this._d.store.getScripts())[id];
 		if (rec !== undefined) {
 			await this._d.store.setRecord(id, { ...rec, enabled: false });
+			// Refresh the command's frozen state snapshot to Disabled so its fail-safe
+			// blocks invocation ("is disabled") instead of running the now-disabled
+			// script off a stale Active snapshot. Command + hotkey persist (consistent
+			// with _restoreScriptCommands keeping commands for non-Active scripts).
+			await this._d.reRegisterCommand?.(id);
 		}
 		this._d.rerender();
 	}

@@ -316,6 +316,23 @@ describe("LifecycleController.disable", () => {
 		expect(vault.writeCalls).toHaveLength(0);
 		expect(h.rerender).toHaveBeenCalled();
 	});
+
+	it("re-registers the command so its snapshot refreshes to Disabled (fail-safe blocks it)", async () => {
+		const store = makeStore({
+			"perplexity-app": {
+				provenance: "curated", enabled: true,
+				okayed: { version: 1, checksum: CURATED_CHECKSUM }, source: "", command: true,
+			},
+		});
+		const vault = makeVault();
+		const catalog = makeCatalog({ "perplexity-app": curatedEntry() });
+		const fingerprints = { setVersion: vi.fn(async () => {}), remove: vi.fn(async () => {}) };
+		const h = makeController({ store, vault, catalog, fingerprints });
+
+		await h.controller.disable("perplexity-app");
+
+		expect(h.reRegisterCommand).toHaveBeenCalledWith("perplexity-app");
+	});
 });
 
 // ===========================================================================
