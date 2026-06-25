@@ -38,6 +38,9 @@ _archive/
 .claude/
 .claude-docker/
 
+# tcs-git-helpers per-repo setup lock (transient; never committed)
+.githooks/.setup.lock
+
 # Local Docker-based dev environment (not useful to anyone cloning the repo).
 # The master copies live under ~/Kouzou/scripts and are deployed per-repo
 # locally; they do not belong in the plugin source tree.
@@ -46,3 +49,15 @@ claude-docker-home/
 begin-code.sh
 /generated-images/
 .mcp.json
+
+# Local Obsidian dev test vault (manual plugin testing; not tracked)
+test/mason/
+
+# Dev catalog override config (ADR-15 amendment — per-machine, never committed)
+.mason-dev.json
+
+# Visual companion brainstorm scratch (tcs-workflow)
+.brainstorm/
+
+# Session checkpoint (context-bridge)
+.claude/.session-checkpoint.md

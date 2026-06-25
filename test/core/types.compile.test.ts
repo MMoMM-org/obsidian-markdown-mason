@@ -1,0 +1,80 @@
+import { describe, it, expect } from "vitest";
+import type {
+	Edit,
+	EditPlan,
+	OperationContext,
+	FootnoteRef,
+	ExistingRef,
+	ParseResult,
+	Operation,
+} from "../../src/core/types";
+
+// ---------------------------------------------------------------------------
+// Compile fixture — verifies that every contract type in src/core/types.ts
+// can be constructed from a concrete literal value and that the module shape
+// is exactly as specified by the SDD. The real assertion is that this file
+// compiles under tsc (noEmit). The trivial it() below lets vitest collect
+// the file so CI surfaces type errors as test failures.
+// ---------------------------------------------------------------------------
+
+// Edit
+const _edit: Edit = { from: 0, to: 5, insert: "hello" };
+
+// EditPlan
+const _editPlan: EditPlan = [
+	{ from: 0, to: 3, insert: "abc" },
+];
+
+// OperationContext — uses real MasonSettings shape (debugLogging + resourcesName)
+const _ctx: OperationContext = {
+	doc: "# Title\n\nBody text.",
+	cursor: 10,
+	selection: { from: 0, to: 7 },
+	input: "paste payload",
+	settings: { debugLogging: false, resourcesName: "Resources" },
+};
+
+// FootnoteRef
+const _footnoteRef: FootnoteRef = {
+	incomingId: 1,
+	snippet: "some text",
+	title: "Example Domain",
+	url: "https://example.com",
+};
+
+// ExistingRef
+const _existingRef: ExistingRef = { id: 2, url: "https://example.org" };
+
+// ParseResult
+const _parseResult: ParseResult = {
+	body: "Body after extraction.",
+	inline: [{ marker: "[^1]", n: 1 }],
+	sources: [_footnoteRef],
+};
+
+// Operation — concrete implementation with run returning an EditPlan
+const _operation: Operation = {
+	id: "headings.cascade",
+	apiName: "mason.headings.cascade",
+	command: { name: "Cascade headings" },
+	run(_runCtx: OperationContext): EditPlan {
+		return [];
+	},
+};
+
+// Suppress unused-variable warnings from noUnusedLocals by referencing values.
+void _edit;
+void _editPlan;
+void _ctx;
+void _footnoteRef;
+void _existingRef;
+void _parseResult;
+void _operation;
+
+describe("src/core/types — compile fixture", () => {
+	it("all contract types construct without compile errors", () => {
+		// The real assertion is that tsc accepted this file.
+		// A runtime truth-check keeps vitest from skipping it.
+		expect(true).toBe(true);
+	});
+});

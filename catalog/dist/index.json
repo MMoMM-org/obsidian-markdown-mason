@@ -1,0 +1,30 @@
+{
+	"schemaVersion": 1,
+	"ref": "0000000000000000000000000000000000000000",
+	"scripts": {
+		"perplexity-app": {
+			"id": "perplexity-app",
+			"version": 4,
+			"checksum": "sha256:a00c7311da065e0124dc2acf5bcaee5cc3670b2310e6a991266162bc03cfeaa4",
+			"path": "perplexity-app.cjs",
+			"name": "Perplexity app",
+			"description": "Convert a Perplexity app copy-paste into a structured note with cascaded headings and filed footnotes."
+		},
+		"perplexity-web-download": {
+			"id": "perplexity-web-download",
+			"version": 4,
+			"checksum": "sha256:342ee908151618a39d336a908f14afc615f895887e163e06b100c8356dff872e",
+			"path": "perplexity-web-download.cjs",
+			"name": "Perplexity web download",
+			"description": "Convert a Perplexity web-download copy-paste into a structured note with cascaded headings and filed footnotes."
+		},
+		"perplexity-web": {
+			"id": "perplexity-web",
+			"version": 4,
+			"checksum": "sha256:e799148b6efdd061fbd672e2e55695948df1bd46f95c4e3d081b1b323d3c72e2",
+			"path": "perplexity-web.cjs",
+			"name": "Perplexity web",
+			"description": "Convert a Perplexity web copy-paste into a structured note with cascaded headings and filed footnotes."
+		}
+	}
+}

@@ -1,0 +1,275 @@
+/* Markdown Mason — settings UI
+ *
+ * Obsidian auto-loads this file (styles.css at the plugin root) and scopes it to
+ * the app. Every rule uses theme CSS variables so the UI adapts to light/dark
+ * and to user themes. Status is never conveyed by colour alone — the pill always
+ * carries an icon + text label (see scriptsTab.ts).
+ */
+
+/* ── Segment nav (tabs) ───────────────────────────────────────────────────── */
+
+.mason-segment-nav {
+	display: flex;
+	gap: var(--size-4-1); /* (b) small gap between tabs */
+	margin-bottom: var(--size-4-4);
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.mason-segment-nav button {
+	background: transparent;
+	border: none;
+	border-bottom: 2px solid transparent;
+	border-radius: 0;
+	box-shadow: none;
+	margin-bottom: -1px; /* overlap the nav's bottom border so the active underline sits on it */
+	padding: var(--size-4-2) var(--size-4-3);
+	color: var(--text-muted);
+	font-weight: var(--font-medium);
+	cursor: pointer;
+}
+
+.mason-segment-nav button:hover {
+	background: transparent;
+	color: var(--text-normal);
+	box-shadow: none;
+}
+
+/* (a) the active tab is reflected by the tab itself — no separate bold heading. */
+.mason-segment-nav button.mason-segment-active {
+	color: var(--text-accent);
+	border-bottom-color: var(--text-accent);
+}
+
+/* Count badge on the Scripts tab — number of scripts with updates waiting.
+ * Hidden when empty (count 0) so the tab reads cleanly when nothing is pending. */
+.mason-segment-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 1.4em;
+	height: 1.4em;
+	margin-left: var(--size-4-1);
+	padding: 0 var(--size-2-1);
+	border-radius: var(--radius-l);
+	background: var(--text-accent);
+	color: var(--text-on-accent);
+	font-size: var(--font-ui-smaller);
+	font-weight: var(--font-bold);
+	line-height: 1;
+}
+
+.mason-segment-badge:empty {
+	display: none;
+}
+
+/* ── Scripts toolbar (import / browse) ────────────────────────────────────── */
+
+.mason-scripts-toolbar {
+	display: flex;
+	gap: var(--size-4-4); /* (c) slightly larger gap between the action buttons */
+	margin-bottom: var(--size-4-4); /* (d) toolbar sits above the list */
+}
+
+/* ── Script cards ─────────────────────────────────────────────────────────── */
+
+.mason-scripts-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-4-2);
+}
+
+.mason-script-card {
+	padding: var(--size-4-3);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	background: var(--background-secondary);
+}
+
+.mason-script-card-header {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+}
+
+.mason-script-name {
+	font-weight: var(--font-semibold);
+}
+
+.mason-script-badge {
+	padding: 0 var(--size-2-2);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+/* Push the status pill and everything after it (version · toggle · ⋯) to the right. */
+.mason-script-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--size-2-1);
+	margin-left: auto;
+	padding: var(--size-2-1) var(--size-2-2);
+	border-radius: var(--radius-s);
+	background: var(--background-modifier-hover);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+.mason-pill-active {
+	color: var(--text-success);
+}
+
+.mason-pill-blocked {
+	color: var(--text-error);
+}
+
+.mason-pill-updateavailable {
+	color: var(--text-warning);
+}
+
+.mason-script-version {
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+}
+
+.mason-script-menu-button {
+	padding: 0 var(--size-2-3);
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.mason-script-menu-button:hover {
+	background: transparent;
+	color: var(--text-normal);
+	box-shadow: none;
+}
+
+.mason-script-card-body {
+	margin-top: var(--size-4-1);
+}
+
+.mason-script-desc {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.mason-script-blocked {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	margin-top: var(--size-4-2);
+}
+
+.mason-script-blocked-reason {
+	color: var(--text-error);
+	font-size: var(--font-ui-small);
+}
+
+/* ── Empty state ──────────────────────────────────────────────────────────── */
+
+.mason-scripts-empty-text {
+	margin-top: 0;
+	color: var(--text-muted);
+}
+
+/* ── Browse-official modal (e) — card per entry ───────────────────────────── */
+
+.mason-browse-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-4-2);
+	margin-top: var(--size-4-2);
+}
+
+.mason-browse-card {
+	padding: var(--size-4-3);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	background: var(--background-secondary);
+}
+
+.mason-browse-card-header {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+}
+
+.mason-browse-name {
+	font-weight: var(--font-semibold);
+	font-size: var(--font-ui-medium);
+}
+
+/* (e) enable button aligned to the right of the card header. */
+.mason-browse-enable {
+	margin-left: auto;
+}
+
+/* Already-enabled entry: muted, non-actionable. */
+.mason-browse-enabled {
+	color: var(--text-muted);
+	cursor: default;
+	opacity: 0.7;
+}
+
+.mason-browse-desc {
+	display: block;
+	margin-top: var(--size-4-1);
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.mason-browse-empty {
+	color: var(--text-muted);
+}
+
+/* ── Run-script launcher (fuzzy picker, card suggestions) ─────────────────── */
+
+.mason-run-suggestion {
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-2-1);
+	padding: var(--size-2-2) 0;
+}
+
+.mason-run-suggestion-name {
+	font-weight: var(--font-semibold);
+}
+
+.mason-run-suggestion-desc {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+/* ── Disclosure (consent) dialog ──────────────────────────────────────────── */
+
+/* The script's description, shown above the technical identity. */
+.mason-script-disclosure-desc {
+	margin: var(--size-4-1) 0 var(--size-4-3);
+	color: var(--text-normal);
+	font-style: italic;
+}
+
+/* Consent action row — small gap so the buttons don't touch. */
+.mason-script-buttons {
+	display: flex;
+	gap: var(--size-4-2);
+	margin-top: var(--size-4-3);
+}
+
+/* ── Post-update splash ───────────────────────────────────────────────────── */
+
+.mason-update-splash-summary {
+	margin: var(--size-4-2) 0 var(--size-4-3);
+	color: var(--text-normal);
+}
+
+.mason-update-splash-buttons {
+	display: flex;
+	justify-content: flex-end;
+	gap: var(--size-4-2);
+	margin-top: var(--size-4-3);
+}

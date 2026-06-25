@@ -1,0 +1,98 @@
+// Phase 5 — Perplexity Web script
+//
+// PURPOSE
+// -------
+// Converts a Perplexity *web* copy-paste (format: inline [text](url) citation
+// links; NO Sources block) into a structured note: headings cascaded under the
+// note context, inline links replaced by [^n] footnotes with URL-deduped
+// identity resolution, and footnote defs filed into the ## Resources section.
+//
+// PASTE DOC MODEL
+// ---------------
+// ctx.op.doc    = the current note text (e.g. "# Title\n\n")
+// ctx.op.cursor = insertion point (typically doc.length — end of note)
+// ctx.input     = raw Perplexity web copy-paste text
+//
+// COMMAND / SELECTION (OperationContext.replaceRange)
+// ---------------------------------------------------
+// Run as a command on a non-empty selection, ctx.op.replaceRange is set to the
+// selection span (and ctx.op.cursor to its start), so cascadeOrInsert REPLACES the
+// selected raw text in place (format-in-place) instead of inserting at the cursor.
+// All "insert at cursor" steps below become a replace-over-selection in that mode.
+//
+// COMPOSITION
+// -----------
+// 1. Parse ctx.input → ParseResult { body, inline, sources }
+//    - body: input text verbatim (links unchanged)
+//    - inline: one InlineMarker per [text](url) link;
+//              marker = full "[text](url)" string; n = sequential 1..N
+// 2. replaceMarkersInBody(body, inline) → bodyFC
+//    Replace each inline.marker string in body with its [^n] reference.
+//    (fromCitations is app-only; web/download markers are not bare [n] patterns.)
+// 3. resolveFootnoteIdentity(pr.sources, []) → { idMap, newRefs }
+// 4. applyFootnoteInlineRename(bodyFC, idMap) → edits against bodyFC; apply → finalBody
+// 5. cascade with ctx.op.input = finalBody → one placement in doc
+//    (insert at cursor, or replace-over-selection in command mode — see header)
+// 6. moveToResources(ctx.op, compactRefDefinitions(newRefs)) → insert single-line defs into Resources
+
+import type { ScriptContext, ScriptFunction } from "../../src/scripts/context";
+import type { EditPlan } from "../../src/core/types";
+import { perplexityWeb } from "../parsers/perplexityWeb";
+import {
+	resolveFootnoteIdentity,
+	applyFootnoteInlineRename,
+	compactRefDefinitions,
+	moveToResources,
+	scanExistingRefs,
+} from "../../src/core/footnotes";
+import { applyToString } from "../../src/core/applyToString";
+import { cascadeOrInsert } from "../../src/core/headings";
+import { replaceMarkersInBody } from "./replaceMarkersInBody";
+
+/**
+ * Transform a Perplexity web copy-paste into a structured Obsidian note fragment.
+ *
+ * The script is a ScriptFunction — it receives a ScriptContext and returns an
+ * EditPlan of offsets against ctx.op.doc (ADR-1).  Returning undefined signals
+ * "nothing to do" (noop); the runner will NOT call rawFallback in that case.
+ */
+export const perplexityWebScript: ScriptFunction = (ctx: ScriptContext): EditPlan | undefined => {
+	if (!perplexityWeb.canParse(ctx.input)) return undefined;
+
+	ctx.logger.info(`perplexity-web started (source=${ctx.source})`);
+
+	const pr = perplexityWeb.parse(ctx.input);
+
+	// Step 1: Replace [text](url) inline links with [^n] footnote references.
+	// Web markers are full "[text](url)" strings, not bare [n] patterns,
+	// so we use replaceMarkersInBody rather than fromCitations.
+	const bodyFC = replaceMarkersInBody(pr.body, pr.inline);
+
+	// Step 2: Resolve identity — dedup by URL, build idMap and new refs.
+	// Scan the destination note for existing numeric footnote defs so new paste ids
+	// start past maxExisting and never collide with pre-existing [^n] footnotes.
+	const existing = scanExistingRefs(ctx.op.doc);
+	const { idMap, newRefs } = resolveFootnoteIdentity(pr.sources, existing);
+	ctx.logger.info(`resolved ${pr.sources.length} footnotes (${newRefs.length} new, ${pr.sources.length - newRefs.length} reused)`);
+
+	// Step 3: Rename [^n] → [^finalId] using the resolved idMap.
+	const renameEdits = applyFootnoteInlineRename(bodyFC, idMap);
+	const finalBody = applyToString(bodyFC, renameEdits);
+
+	// Step 4: Cascade the final body under the note context heading. cascadeOrInsert
+	// never drops the body — a blank note (no heading above the cursor) inserts it
+	// verbatim at the cursor instead of returning an empty plan.
+	const cascadeOp = { ...ctx.op, input: finalBody };
+	const bodyPlan = cascadeOrInsert(cascadeOp);
+
+	// Step 5: Build single-line compact footnote definitions and move them to the Resources section.
+	// Web format uses compact single-line defs ("[^n]: [title](url)") to avoid
+	// duplicating the link: the snippet was the raw markdown link, which would have
+	// appeared twice in the two-line F4 format.
+	const defs = compactRefDefinitions(newRefs);
+	const resourcesPlan = moveToResources(ctx.op, defs);
+
+	const plan = [...bodyPlan, ...resourcesPlan];
+	ctx.logger.info(`plan: ${plan.length} edits`);
+	return plan;
+};

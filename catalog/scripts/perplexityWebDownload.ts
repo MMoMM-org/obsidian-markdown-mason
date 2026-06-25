@@ -1,0 +1,105 @@
+// Phase 5 — Perplexity Web-Download script
+//
+// PURPOSE
+// -------
+// Converts a Perplexity *web-download* copy-paste (format: [^a_b]: url
+// definition lines; inline [^a_b] markers; HTML noise stripped) into a
+// structured note: headings cascaded under the note context, inline [^a_b]
+// markers replaced by [^n] footnotes with URL-deduped identity resolution,
+// and footnote defs filed into the ## Resources section.
+//
+// PASTE DOC MODEL
+// ---------------
+// ctx.op.doc    = the current note text (e.g. "# Title\n\n")
+// ctx.op.cursor = insertion point (typically doc.length — end of note)
+// ctx.input     = raw Perplexity web-download copy-paste text
+//
+// COMMAND / SELECTION (OperationContext.replaceRange)
+// ---------------------------------------------------
+// Run as a command on a non-empty selection, ctx.op.replaceRange is set to the
+// selection span (and ctx.op.cursor to its start), so cascadeOrInsert REPLACES the
+// selected raw text in place (format-in-place) instead of inserting at the cursor.
+// All "insert at cursor" steps below become a replace-over-selection in that mode.
+//
+// COMPOSITION
+// -----------
+// 1. Parse ctx.input → ParseResult { body, inline, sources }
+//    - body: HTML-stripped, definition lines removed, prose only
+//    - inline: one InlineMarker per [^a_b] occurrence in prose
+//              marker = "[^a_b]" string; n = sequential incomingId
+//    - sources: sequential incomingIds; snippet = url; title = host
+// 2. citedSources = filter sources to those actually cited in pr.inline
+//    (hidden-span markers are stripped from body by parser; their sources
+//     are excluded to avoid orphan Resource defs)
+// 3. replaceMarkersInBody(body, inline) → bodyFC
+//    Replace each inline.marker string ([^a_b]) in body with its [^n] reference.
+// 4. resolveFootnoteIdentity(citedSources, []) → { idMap, newRefs }
+// 5. applyFootnoteInlineRename(bodyFC, idMap) → edits against bodyFC; apply → finalBody
+// 6. cascade with ctx.op.input = finalBody → one placement in doc
+//    (insert at cursor, or replace-over-selection in command mode — see header)
+// 7. moveToResources(ctx.op, compactRefDefinitions(newRefs)) → insert single-line defs into Resources
+
+import type { ScriptContext, ScriptFunction } from "../../src/scripts/context";
+import type { EditPlan } from "../../src/core/types";
+import { perplexityWebDownload } from "../parsers/perplexityWebDownload";
+import {
+	resolveFootnoteIdentity,
+	applyFootnoteInlineRename,
+	compactRefDefinitions,
+	moveToResources,
+	scanExistingRefs,
+} from "../../src/core/footnotes";
+import { applyToString } from "../../src/core/applyToString";
+import { cascadeOrInsert } from "../../src/core/headings";
+import { replaceMarkersInBody, filterCitedSources } from "./replaceMarkersInBody";
+
+/**
+ * Transform a Perplexity web-download copy-paste into a structured Obsidian note fragment.
+ *
+ * The script is a ScriptFunction — it receives a ScriptContext and returns an
+ * EditPlan of offsets against ctx.op.doc (ADR-1).  Returning undefined signals
+ * "nothing to do" (noop); the runner will NOT call rawFallback in that case.
+ */
+export const perplexityWebDownloadScript: ScriptFunction = (ctx: ScriptContext): EditPlan | undefined => {
+	if (!perplexityWebDownload.canParse(ctx.input)) return undefined;
+
+	ctx.logger.info(`perplexity-web-download started (source=${ctx.source})`);
+
+	const pr = perplexityWebDownload.parse(ctx.input);
+
+	// Step 1: Replace [^a_b] inline markers with sequential [^n] footnote references.
+	// Web-download markers are full "[^a_b]" strings; replaceMarkersInBody locates
+	// each occurrence in the body by direct string search and replaces it with [^n].
+	const bodyFC = replaceMarkersInBody(pr.body, pr.inline);
+
+	// Step 2: Filter to only sources actually cited in prose — avoids orphan defs.
+	// Hidden-span markers are stripped by the parser; their sources are excluded.
+	const citedSources = filterCitedSources(pr.sources, pr.inline);
+
+	// Step 3: Resolve identity — dedup cited sources by URL, build idMap and new refs.
+	// Scan the destination note for existing numeric footnote defs so new paste ids
+	// start past maxExisting and never collide with pre-existing [^n] footnotes.
+	const existing = scanExistingRefs(ctx.op.doc);
+	const { idMap, newRefs } = resolveFootnoteIdentity(citedSources, existing);
+	ctx.logger.info(`resolved ${citedSources.length} footnotes (${newRefs.length} new, ${citedSources.length - newRefs.length} reused)`);
+
+	// Step 4: Rename [^n] → [^finalId] using the resolved idMap.
+	const renameEdits = applyFootnoteInlineRename(bodyFC, idMap);
+	const finalBody = applyToString(bodyFC, renameEdits);
+
+	// Step 5: Cascade the final body under the note context heading. cascadeOrInsert
+	// never drops the body — a blank note (no heading above the cursor) inserts it
+	// verbatim at the cursor instead of returning an empty plan.
+	const cascadeOp = { ...ctx.op, input: finalBody };
+	const bodyPlan = cascadeOrInsert(cascadeOp);
+
+	// Step 6: Build single-line compact footnote definitions and move them to the Resources section.
+	// Web-download format uses compact single-line defs ("[^n]: [title](url)") to avoid
+	// duplicating the URL: the snippet was the raw URL, which would have appeared twice.
+	const defs = compactRefDefinitions(newRefs);
+	const resourcesPlan = moveToResources(ctx.op, defs);
+
+	const plan = [...bodyPlan, ...resourcesPlan];
+	ctx.logger.info(`plan: ${plan.length} edits`);
+	return plan;
+};
