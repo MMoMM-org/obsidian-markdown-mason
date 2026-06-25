@@ -1,4 +1,4 @@
-import { Notice, Plugin, FileSystemAdapter } from "obsidian";
+import { Notice, Plugin, FileSystemAdapter, normalizePath } from "obsidian";
 import type { Editor } from "obsidian";
 import { DEFAULT_SETTINGS, type MasonSettings } from "./core/types";
 import type { EditPlan } from "./core/types";
@@ -14,6 +14,7 @@ import { ScriptStore } from "./scripts/store";
 import { buildPasteChain } from "./scripts/paste/buildPasteChain";
 import type { LoadedScript } from "./scripts/paste/buildPasteChain";
 import { MasonSettingTab } from "./ui/settingsTab";
+import { UpdateSplashModal } from "./ui/updateSplashModal";
 import { CommandManager } from "./scripts/commandManager";
 import { RunScriptModal } from "./ui/runScriptModal";
 import type { CatalogSource } from "./scripts/catalog/catalogSource";
@@ -23,8 +24,9 @@ import { MaterializedFingerprintStore } from "./scripts/materializedFingerprint"
 import { LifecycleController } from "./scripts/lifecycleController";
 import type { LifecycleVault } from "./scripts/lifecycleController";
 import { ImportPickerModal } from "./ui/importPickerModal";
-import { loadScriptModule, buildRequireFn, loadRunFnSafe } from "./scripts/loader";
+import { loadScriptModule, buildRequireFn, loadRunFnSafe, resolveScriptsDir } from "./scripts/loader";
 import { buildEnabledPasteScripts } from "./scripts/pasteAssembly";
+import { debug, setDebugLogging } from "./core/debug";
 
 // Re-export so consumers that import from "src/main" still resolve.
 export { DEFAULT_SETTINGS, type MasonSettings };
@@ -146,13 +148,28 @@ export class MarkdownMasonPlugin extends Plugin {
 	 */
 	_commandInjection?: CommandInjection;
 
+	/**
+	 * Retained settings-tab instance — used by the post-update splash to pre-select
+	 * the Scripts segment before opening the settings pane.
+	 */
+	private _settingTab?: MasonSettingTab;
+
+	/**
+	 * Count of curated scripts whose catalog version now exceeds the consented one
+	 * (lifecycle state UpdateAvailable). Computed once at layout-ready and refreshed
+	 * by the Scripts settings section; read by MasonSettingTab to render the Scripts
+	 * segment badge. Undefined until first computed (offline/no-resolver → stays 0).
+	 */
+	updatableScriptCount?: number;
+
 	override async onload(): Promise<void> {
 		await this.loadSettings();
 		this._initStore();
 		await this._initLifecycleResolver();
-		this.addSettingTab(new MasonSettingTab(this.app, this));
+		this._settingTab = new MasonSettingTab(this.app, this);
+		this.addSettingTab(this._settingTab);
 		this.app.workspace.onLayoutReady(() => this.onLayoutReady());
-		console.debug("[MarkdownMason] loaded");
+		debug("[MarkdownMason] loaded");
 	}
 
 	/**
@@ -238,11 +255,15 @@ export class MarkdownMasonPlugin extends Plugin {
 				listCjsFiles: () => this._listVaultCjsFiles(),
 				pickCjsFile: (paths) => this._pickVaultCjsFile(paths),
 				unregisterCommand: (id) => this.commandManager.unregister(id),
+				// After a successful (re)materialize, rebind the command to the new
+				// module + refreshed state so an updated script becomes runnable again
+				// without a plugin reload (no-op when the script has no command).
+				reRegisterCommand: (id) => this._registerScriptCommands([id]),
 			});
 
-			console.debug("[MarkdownMason] lifecycle resolver + controller initialized");
+			debug("[MarkdownMason] lifecycle resolver + controller initialized");
 		} catch (err: unknown) {
-			console.debug("[MarkdownMason] lifecycle resolver init failed — using offline stubs:", err);
+			debug("[MarkdownMason] lifecycle resolver init failed — using offline stubs:", err);
 		}
 	}
 
@@ -268,14 +289,40 @@ export class MarkdownMasonPlugin extends Plugin {
 
 	/**
 	 * List vault-relative `.cjs` files as candidates for import-from-vault.
-	 * Uses the loaded-file index (getFiles) so no recursive scan is needed.
+	 *
+	 * Obsidian's `vault.getFiles()` only returns files whose extension it indexes,
+	 * and `.cjs` is NOT one of them — so getFiles never surfaces script files (this
+	 * was the "no .cjs found" bug). Walk the raw filesystem via the data adapter
+	 * instead, which sees every file regardless of extension. The config dir
+	 * (`.obsidian`) is skipped: it holds plugin internals and already-materialized
+	 * scripts, neither of which is an import candidate.
 	 */
 	private async _listVaultCjsFiles(): Promise<string[]> {
-		const files = this.app.vault.getFiles();
-		return files
-			.filter((f) => f.extension === "cjs")
-			.map((f) => f.path)
-			.sort();
+		const adapter = this.app.vault.adapter as unknown as {
+			list(path: string): Promise<{ files: string[]; folders: string[] }>;
+		};
+		const configDir = this.app.vault.configDir;
+		const found: string[] = [];
+
+		const walk = async (dir: string): Promise<void> => {
+			let listing: { files: string[]; folders: string[] };
+			try {
+				listing = await adapter.list(normalizePath(dir === "" ? "/" : dir));
+			} catch {
+				return; // unreadable folder — skip it, keep scanning the rest
+			}
+			for (const file of listing.files) {
+				if (file.toLowerCase().endsWith(".cjs")) found.push(file);
+			}
+			for (const folder of listing.folders) {
+				// folder paths are vault-relative; the config dir is its last segment.
+				if (folder === configDir || folder.split("/").pop() === configDir) continue;
+				await walk(folder);
+			}
+		};
+
+		await walk("");
+		return found.sort();
 	}
 
 	/**
@@ -292,27 +339,195 @@ export class MarkdownMasonPlugin extends Plugin {
 	 * and the Phase-5 paste command.
 	 */
 	onLayoutReady(): void {
-		if (this.settings.debugLogging) {
-			console.debug("[MarkdownMason] layout ready");
-		}
+		debug("[MarkdownMason] layout ready");
 		registerCommands(this);
 		this._registerPasteCommand();
 		this._registerRunScriptLauncher();
+		// Re-create per-script commands the user had turned on (record.command).
+		// Obsidian drops dynamically-added commands on reload, so without this the
+		// commands — and any hotkeys bound to them — vanish until the user re-toggles.
+		void this._restoreScriptCommands();
+		// Detect a plugin-version change and, if so, surface waiting script updates.
+		// Also seeds updatableScriptCount for the Scripts segment badge.
+		void this._maybeShowUpdateSplash();
+	}
+
+	// -------------------------------------------------------------------------
+	// Post-update splash (script-update awareness)
+	//
+	// Curated scripts ride pinned plugin releases, so a script version can only
+	// change when the plugin updates. This one-shot splash makes that visible:
+	// on the first run after manifest.version changes, it counts scripts now in
+	// UpdateAvailable and offers a one-click route to review them.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Show the post-update splash once per version bump, gated by showUpdateSplash.
+	 *
+	 * Fresh install (no recorded lastSeenVersion) is recorded silently — no splash.
+	 * A genuine version change always advances lastSeenVersion (so we never nag on
+	 * the next load) and, when the gate is on, computes the updatable-script count
+	 * and presents UpdateSplashModal. Best-effort: never throws into onLayoutReady.
+	 */
+	private async _maybeShowUpdateSplash(): Promise<void> {
+		try {
+			const current = this.manifest.version ?? "";
+			const last = this.settings.lastSeenVersion ?? "";
+
+			// Already current → nothing changed; still refresh the badge count so the
+			// Scripts segment badge is accurate without waiting for the user to visit.
+			if (current === "" || current === last) {
+				this.updatableScriptCount = await this._countUpdatableScripts();
+				return;
+			}
+
+			// Fresh install: record the version silently, no splash.
+			if (last === "") {
+				this.settings.lastSeenVersion = current;
+				await this.saveSettings();
+				this.updatableScriptCount = await this._countUpdatableScripts();
+				return;
+			}
+
+			// Genuine update. Advance the marker first so a dismissed/suppressed splash
+			// never re-fires on the next load.
+			this.settings.lastSeenVersion = current;
+			await this.saveSettings();
+
+			const count = await this._countUpdatableScripts();
+			this.updatableScriptCount = count;
+
+			if (this.settings.showUpdateSplash === false) return;
+
+			new UpdateSplashModal(this.app, {
+				version: current,
+				updatableCount: count,
+				showSplash: this.settings.showUpdateSplash ?? true,
+				onToggleSplash: async (value) => {
+					this.settings.showUpdateSplash = value;
+					await this.saveSettings();
+				},
+				onOpenScripts: () => this._openScriptsSettings(),
+			}).open();
+		} catch (err: unknown) {
+			debug("[MarkdownMason] update splash skipped:", err);
+		}
+	}
+
+	/**
+	 * Count curated scripts currently in the UpdateAvailable lifecycle state.
+	 * Returns 0 when the resolver is absent (offline stubs / tests) or on error.
+	 */
+	private async _countUpdatableScripts(): Promise<number> {
+		const resolver = this.lifecycleResolver;
+		if (resolver === undefined) return 0;
+		try {
+			const records = await this.store.getScripts();
+			const items = await resolver.resolveItems(records);
+			return items.filter((it) => it.state.kind === "UpdateAvailable").length;
+		} catch {
+			return 0;
+		}
+	}
+
+	/**
+	 * Open Settings → Scripts. Pre-selects the Scripts segment, then opens the
+	 * settings pane and Mason's tab via Obsidian's (semi-private) setting API,
+	 * guarded so a missing/renamed API degrades to a no-op rather than throwing.
+	 */
+	private _openScriptsSettings(): void {
+		this._settingTab?.selectScriptsSegment();
+		const setting = (this.app as unknown as {
+			setting?: { open?: () => void; openTabById?: (id: string) => void };
+		}).setting;
+		setting?.open?.();
+		setting?.openTabById?.(this.manifest.id);
+	}
+
+	/**
+	 * Re-register every script command persisted with command:true.
+	 *
+	 * Runs once at layout-ready. Each command keeps its STABLE id (the script id),
+	 * so any user hotkey bound to `markdown-mason:<id>` survives the reload — only
+	 * the registration is recreated, not the binding. Commands are restored even
+	 * for non-Active scripts so their hotkeys persist; invoking a non-runnable one
+	 * surfaces a Notice (CommandManager._invokeScript re-checks state at call time).
+	 */
+	private async _restoreScriptCommands(): Promise<void> {
+		const records = await this.store.getScripts();
+		const ids = Object.entries(records)
+			.filter(([, rec]) => rec.command)
+			.map(([id]) => id);
+		await this._registerScriptCommands(ids);
+		if (ids.length > 0) debug("[MarkdownMason] restored", ids.length, "script command(s)");
+	}
+
+	/**
+	 * (Re-)register the Obsidian commands for the given script ids with a FRESH
+	 * state snapshot and a FRESHLY-loaded module.
+	 *
+	 * Shared by _restoreScriptCommands (load-time, all command ids) and the
+	 * lifecycle controller's reRegisterCommand hook (after a successful update/
+	 * retry/re-enable, a single id). Resolving state + module here is what lets an
+	 * UpdateAvailable→Active transition rebind the command to the new code without
+	 * a plugin reload. Ids whose record has command:false are skipped.
+	 */
+	private async _registerScriptCommands(ids: string[]): Promise<void> {
+		if (ids.length === 0) return;
+		const records = await this.store.getScripts();
+		const targets = ids.filter((id) => records[id]?.command);
+		if (targets.length === 0) return;
+
+		// Build getState + resolveScriptFn the same way the launcher does.
+		const resolver = this.lifecycleResolver;
+		let getState: (id: string) => import("./scripts/lifecycle").LifecycleState;
+		if (resolver !== undefined) {
+			const items = await resolver.resolveItems(records);
+			const stateMap = new Map(items.map((item) => [item.id, item.state]));
+			getState = (id: string) => stateMap.get(id) ?? { kind: "Disabled" };
+		} else {
+			getState = () => ({ kind: "Disabled" });
+		}
+
+		const scriptsDir = resolveScriptsDir(this.app.vault.adapter, this.manifest.dir);
+		const requireFn = buildRequireFn(scriptsDir);
+		const resolveScriptFn = (id: string): import("./scripts/context").ScriptFunction =>
+			getState(id).kind !== "Active" ? (): undefined => undefined : loadRunFnSafe(id, scriptsDir, requireFn);
+
+		for (const id of targets) {
+			const name = (records[id].commandName ?? "").trim() || id;
+			this.commandManager.register(id, name, resolveScriptFn(id), getState);
+		}
 	}
 
 	override onunload(): void {
 		// Obsidian automatically invokes all callbacks registered via
 		// this.register() and this.registerEvent() on unload — no manual
 		// teardown is needed here.
-		console.debug("[MarkdownMason] unloaded");
+		debug("[MarkdownMason] unloaded");
 	}
 
 	async loadSettings(): Promise<void> {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		// pickSettingsFields keeps this.settings a PURE MasonSettings object — it
+		// drops foreign keys (notably the ScriptStore `scripts` namespace, which
+		// shares data.json). Without this, this.settings would carry a stale scripts
+		// snapshot that saveSettings could write back over ScriptStore's newer data.
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, pickSettingsFields(await this.loadData()));
+		// Seed the diagnostic-logging gate before any debug() trace fires.
+		setDebugLogging(this.settings.debugLogging);
 	}
 
 	async saveSettings(): Promise<void> {
-		await this.saveData(this.settings);
+		// Read-modify-write: data.json is SHARED with ScriptStore (the `scripts`
+		// namespace) and potentially other keys. Overlay only the canonical settings
+		// fields onto the freshly-loaded blob so concurrent ScriptStore writes — e.g.
+		// a script enabled earlier this session — are never clobbered.
+		const persisted = await this.loadData();
+		const base =
+			persisted !== null && typeof persisted === "object"
+				? (persisted as Record<string, unknown>)
+				: {};
+		await this.saveData({ ...base, ...pickSettingsFields(this.settings) });
 	}
 
 	// -------------------------------------------------------------------------
@@ -369,7 +584,8 @@ export class MarkdownMasonPlugin extends Plugin {
 		}
 
 		const records = await this.store.getScripts();
-		const scriptsDir = `${this.manifest.dir}/scripts`;
+		// ABSOLUTE path — require/createRequire need it (manifest.dir is vault-relative).
+		const scriptsDir = resolveScriptsDir(this.app.vault.adapter, this.manifest.dir);
 		const requireFn = buildRequireFn(scriptsDir);
 
 		return buildEnabledPasteScripts({
@@ -415,13 +631,14 @@ export class MarkdownMasonPlugin extends Plugin {
 			editorCallback: async (editor: Editor): Promise<void> => {
 				const resolver = this.lifecycleResolver;
 				let getState: (id: string) => import("./scripts/lifecycle").LifecycleState;
+				let items: import("./ui/scriptsTab").ScriptItem[] = [];
 
 				if (resolver !== undefined) {
 					const scripts = await this.store.getScripts();
-					const items = await resolver.resolveItems(scripts);
+					items = await resolver.resolveItems(scripts);
 					const stateMap = new Map(items.map((item) => [item.id, item.state]));
 					getState = (id: string) => stateMap.get(id) ?? { kind: "Disabled" };
-					console.debug("[MarkdownMason] Run script launcher: pre-resolved state map", stateMap.size, "entries");
+					debug("[MarkdownMason] Run script launcher: pre-resolved state map", stateMap.size, "entries");
 				} else {
 					getState = () => ({ kind: "Disabled" });
 				}
@@ -430,7 +647,7 @@ export class MarkdownMasonPlugin extends Plugin {
 				// and returns its run function. Falls back to a safe no-op for non-runnable
 				// ids (CommandManager._invokeScript re-checks getState before invoking, so
 				// this no-op is never actually invoked for non-Active scripts).
-				const scriptsDir = `${this.manifest.dir}/scripts`;
+				const scriptsDir = resolveScriptsDir(this.app.vault.adapter, this.manifest.dir);
 				const requireFn = buildRequireFn(scriptsDir);
 				const resolveScriptFn = (id: string): import("./scripts/context").ScriptFunction => {
 					if (getState(id).kind !== "Active") {
@@ -439,14 +656,15 @@ export class MarkdownMasonPlugin extends Plugin {
 					return loadRunFnSafe(id, scriptsDir, requireFn);
 				};
 
-				const modal = new RunScriptModal(
-					this.app,
-					this.store,
-					this.commandManager,
-					getState,
-					resolveScriptFn,
-					editor,
-				);
+				// Runnable (Active) scripts, with name + description for the picker cards.
+				const entries = items
+					.filter((it) => it.state.kind === "Active")
+					.map((it) => ({ id: it.id, name: it.displayName, description: it.description }));
+
+				const modal = new RunScriptModal(this.app, entries, async (entry) => {
+					const fn = resolveScriptFn(entry.id);
+					await this.commandManager.runScript(entry.id, entry.id, fn, getState, editor);
+				});
 				modal.open();
 			},
 		});
@@ -477,7 +695,7 @@ async function runPasteCommand(
 	}
 
 	if (settings.debugLogging) {
-		console.debug(`[MarkdownMason] paste: clipboard read (${rawText.length} chars)`);
+		debug(`[MarkdownMason] paste: clipboard read (${rawText.length} chars)`);
 	}
 
 	// 2. Guard: empty clipboard
@@ -551,7 +769,7 @@ async function runPasteCommand(
 	// fall back to edit-count ("N change(s)") for non-footnote plans.
 	if (outcome.kind === "applied") {
 		if (settings.debugLogging) {
-			console.debug(`[MarkdownMason] paste outcome: ${outcome.kind} (${outcome.count} edits)`);
+			debug(`[MarkdownMason] paste outcome: ${outcome.kind} (${outcome.count} edits)`);
 		}
 		const fn = countFootnoteDefs(outcome.plan);
 		effects.notify(
@@ -572,6 +790,26 @@ async function runPasteCommand(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Pick only the canonical MasonSettings fields from an arbitrary persisted-data
+ * blob. The key set is DERIVED from DEFAULT_SETTINGS, so it stays correct as
+ * settings fields are added (every field has a default by convention).
+ *
+ * Why: data.json is shared between the plugin settings and the ScriptStore
+ * (`scripts`) namespace. Restricting both load and save to these keys keeps the
+ * two namespaces from clobbering one another.
+ */
+export function pickSettingsFields(data: unknown): Partial<MasonSettings> {
+	const out: Record<string, unknown> = {};
+	if (data !== null && typeof data === "object") {
+		const rec = data as Record<string, unknown>;
+		for (const key of Object.keys(DEFAULT_SETTINGS)) {
+			if (rec[key] !== undefined) out[key] = rec[key];
+		}
+	}
+	return out as Partial<MasonSettings>;
+}
 
 /** Production clipboard reader — wraps navigator.clipboard (requires secure context). */
 async function defaultClipboardReader(): Promise<string> {

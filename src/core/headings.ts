@@ -83,6 +83,15 @@ function replaceHeadingLevel(text: string, newLevel: number): string {
 // cascade
 // ---------------------------------------------------------------------------
 
+/**
+ * Where the cascaded body lands: REPLACE ctx.replaceRange when set (command /
+ * selection path → format the selected raw text in place), else a zero-width
+ * insert at the cursor (paste). Returns the {from,to} for the body Edit.
+ */
+function bodyTarget(ctx: OperationContext): { from: number; to: number } {
+	return ctx.replaceRange ?? { from: ctx.cursor, to: ctx.cursor };
+}
+
 export function cascade(ctx: OperationContext): CascadeResult {
 	const input = ctx.input ?? "";
 
@@ -101,9 +110,28 @@ export function cascade(ctx: OperationContext): CascadeResult {
 
 	const transformed = applyShiftToText(input, shift);
 	return {
-		plan: [{ from: ctx.cursor, to: ctx.cursor, insert: transformed }],
+		plan: [{ ...bodyTarget(ctx), insert: transformed }],
 		noContextHeading: false,
 	};
+}
+
+/**
+ * Cascade `ctx.input` under the context heading, but NEVER drop the content.
+ *
+ * cascade() returns an EMPTY plan when there is no heading above the cursor
+ * (e.g. pasting into a blank note) or when the input has no headings to shift.
+ * That is the right behaviour for the cascade COMMAND (it no-ops + notifies),
+ * but a PASTE script must still place the body somewhere — otherwise the pasted
+ * text silently disappears. This helper falls back to inserting the input
+ * verbatim at the cursor whenever cascade yields no edit.
+ *
+ * Returns an empty plan only when there is genuinely nothing to insert.
+ */
+export function cascadeOrInsert(ctx: OperationContext): EditPlan {
+	const { plan } = cascade(ctx);
+	if (plan.length > 0) return plan;
+	const input = ctx.input ?? "";
+	return input.length > 0 ? [{ ...bodyTarget(ctx), insert: input }] : [];
 }
 
 /** Apply a shift to all headings in a text string, clamping to [1, 6]. */

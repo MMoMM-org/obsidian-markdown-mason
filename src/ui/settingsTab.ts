@@ -11,7 +11,9 @@ import type { CommandsTabCommandManager, ScriptFnResolver, StateResolver } from 
 import type { LifecycleResolver } from "../scripts/lifecycleResolver";
 import type { LifecycleController } from "../scripts/lifecycleController";
 import { BrowseOfficialModal } from "./browseOfficialModal";
-import { buildRequireFn, loadRunFnSafe } from "../scripts/loader";
+import type { BrowseEntryStatus } from "./browseOfficialModal";
+import { buildRequireFn, loadRunFnSafe, resolveScriptsDir } from "../scripts/loader";
+import { debug, setDebugLogging } from "../core/debug";
 
 // ---------------------------------------------------------------------------
 // Minimal plugin interface — avoids a hard import cycle with main.ts
@@ -39,6 +41,13 @@ export interface MasonPlugin extends Plugin {
 	 * then falls back to the minimal store-only enable/disable/remove path.
 	 */
 	lifecycleController?: LifecycleController;
+	/**
+	 * Count of curated scripts with a newer catalog version waiting (state
+	 * UpdateAvailable). Computed by the plugin at startup and refreshed by the
+	 * Scripts section; read here to render the "needs attention" badge on the
+	 * Scripts segment. Optional — absent in card-rendering unit tests → no badge.
+	 */
+	updatableScriptCount?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -77,10 +86,23 @@ export class MasonSettingTab extends PluginSettingTab {
 	private readonly _plugin: MasonPlugin;
 	private _activeSegment: Segment = "General";
 	private _rendering: boolean = false;
+	/** Live badge element on the Scripts segment button; null until the nav renders. */
+	private _scriptsBadgeEl: HTMLElement | null = null;
 
 	constructor(app: App, plugin: MasonPlugin) {
 		super(app, plugin);
 		this._plugin = plugin;
+	}
+
+	/**
+	 * Pre-select the Scripts segment so the next display() opens there.
+	 *
+	 * Used by the post-update splash's "Open scripts settings" action: the plugin
+	 * sets the segment, then opens the settings pane (which triggers display()).
+	 * Safe to call before the tab has rendered.
+	 */
+	selectScriptsSegment(): void {
+		this._activeSegment = "Scripts";
 	}
 
 	/**
@@ -112,13 +134,45 @@ export class MasonSettingTab extends PluginSettingTab {
 		for (const segment of SEGMENTS) {
 			const btn = nav.createEl("button");
 			btn.setText(segment);
-			if (segment === this._activeSegment) {
+			btn.setAttribute("type", "button");
+			const active = segment === this._activeSegment;
+			if (active) {
 				btn.addClass("mason-segment-active");
+			}
+			// Convey the active tab to assistive tech, not by styling alone.
+			btn.setAttribute("aria-selected", active ? "true" : "false");
+			// Scripts segment carries a count badge for scripts with updates waiting.
+			// The badge element is always created (text empty at 0) so _refreshScriptsBadge
+			// can update it in place; CSS hides an empty badge via :empty.
+			if (segment === "Scripts") {
+				this._scriptsBadgeEl = btn.createEl("span", { cls: "mason-segment-badge" });
+				this._renderScriptsBadge();
 			}
 			btn.addEventListener("click", () => {
 				void this._selectSegment(containerEl, segment);
 			});
 		}
+	}
+
+	/**
+	 * Reflect the current updatable-script count onto the Scripts segment badge.
+	 *
+	 * Reads the plugin-cached count (set at startup + refreshed by the Scripts
+	 * section). Sets the badge text to the count, or "" at zero so the `:empty`
+	 * CSS rule hides it. Also mirrors the count into an aria-label so assistive
+	 * tech announces it rather than relying on the badge glyph alone.
+	 */
+	private _renderScriptsBadge(): void {
+		const el = this._scriptsBadgeEl;
+		if (el === null) return;
+		const count = this._plugin.updatableScriptCount ?? 0;
+		el.setText(count > 0 ? String(count) : "");
+		el.setAttribute(
+			"aria-label",
+			count > 0
+				? `${count} script update${count === 1 ? "" : "s"} available`
+				: "",
+		);
 	}
 
 	/**
@@ -167,10 +221,8 @@ export class MasonSettingTab extends PluginSettingTab {
 	// General section
 	// -------------------------------------------------------------------------
 
-	/** Render the General section heading and its controls. */
+	/** Render the General section controls. The active tab labels the section. */
 	private _renderGeneralSection(containerEl: HTMLElement): void {
-		new Setting(containerEl).setName("General").setHeading();
-
 		new Setting(containerEl)
 			.setName("Resources section name")
 			.setDesc("Folder name used as the Resources section in heading cascades.")
@@ -180,6 +232,21 @@ export class MasonSettingTab extends PluginSettingTab {
 					.setPlaceholder("Resources")
 					.onChange(async (value) => {
 						this._plugin.settings.resourcesName = value;
+						await this._plugin.saveSettings();
+					});
+			});
+
+		new Setting(containerEl)
+			.setName("Show update notes")
+			.setDesc(
+				"Show a summary of waiting script updates the first time you run a new " +
+				"version of Markdown Mason.",
+			)
+			.addToggle((toggle) => {
+				toggle
+					.setValue(this._plugin.settings.showUpdateSplash ?? true)
+					.onChange(async (value) => {
+						this._plugin.settings.showUpdateSplash = value;
 						await this._plugin.saveSettings();
 					});
 			});
@@ -219,8 +286,6 @@ export class MasonSettingTab extends PluginSettingTab {
 	 * renderScriptsTab itself remains synchronous.
 	 */
 	private async _renderScriptsSection(containerEl: HTMLElement): Promise<void> {
-		new Setting(containerEl).setName("Scripts").setHeading();
-
 		const scripts = await this._plugin.store.getScripts();
 		let items: ScriptItem[];
 		if (this._plugin.lifecycleResolver !== undefined) {
@@ -230,6 +295,13 @@ export class MasonSettingTab extends PluginSettingTab {
 		} else {
 			items = this._buildScriptItemsFallback(scripts);
 		}
+		// Refresh the cached updatable count from the just-resolved items (zero extra
+		// fetch) and patch the segment badge in place — so an in-tab update op that
+		// clears a script's UpdateAvailable state immediately drops the badge count.
+		this._plugin.updatableScriptCount = items.filter(
+			(it) => it.state.kind === "UpdateAvailable",
+		).length;
+		this._renderScriptsBadge();
 		renderScriptsTab(containerEl, items, this._buildLifecycleOps(containerEl));
 	}
 
@@ -252,7 +324,9 @@ export class MasonSettingTab extends PluginSettingTab {
 			return {
 				id,
 				displayName: id,
-				description: `Source: ${record.source}`,
+				description: record.description !== undefined && record.description.length > 0
+					? record.description
+					: `Source: ${record.source}`,
 				record,
 				state,
 				version: record.okayed?.version ?? 0,
@@ -291,9 +365,19 @@ export class MasonSettingTab extends PluginSettingTab {
 				importFromVault: () => controller.importFromVault(),
 				browseOfficial: async () => {
 					const entries = await controller.listOfficial();
-					new BrowseOfficialModal(this._plugin.app, entries, (id) => {
-						void controller.enable(id);
-					}).open();
+					// Reflect each entry's current state so an already-enabled script
+					// shows as "Enabled" instead of offering a redundant "Enable".
+					const records = await this._plugin.store.getScripts();
+					const statusOf = (id: string): BrowseEntryStatus => {
+						const r = records[id];
+						if (r === undefined) return "available";
+						return r.enabled ? "enabled" : "installed";
+					};
+					new BrowseOfficialModal(this._plugin.app, entries, (id: string) => {
+						// enableOfficial creates the curated record first — enable() alone
+						// would silently no-op for a catalog entry that has no record yet.
+						void controller.enableOfficial(id);
+					}, statusOf).open();
 				},
 			};
 		}
@@ -356,8 +440,6 @@ export class MasonSettingTab extends PluginSettingTab {
 	 * is never actually called for non-Active scripts).
 	 */
 	private async _renderCommandsSection(containerEl: HTMLElement): Promise<void> {
-		new Setting(containerEl).setName("Commands").setHeading();
-
 		// T6.1: pre-resolve all script states into a Map so getState can be sync.
 		// resolveItems fetches the catalog index once and returns one entry per
 		// script record; we key the map by id and fall back to Disabled for any
@@ -371,14 +453,15 @@ export class MasonSettingTab extends PluginSettingTab {
 			const items = await resolver.resolveItems(scripts);
 			const stateMap = new Map(items.map((item) => [item.id, item.state]));
 			getState = (id: string) => stateMap.get(id) ?? { kind: "Disabled" };
-			console.debug("[MarkdownMason] Commands tab: pre-resolved state map", stateMap.size, "entries");
+			debug("[MarkdownMason] Commands tab: pre-resolved state map", stateMap.size, "entries");
 		} else {
 			getState = () => ({ kind: "Disabled" });
 		}
 
 		// T6.3: resolveScriptFn — loads the materialized module for Active scripts.
 		// Uses getState (already backed by the pre-resolved Map) to gate the load.
-		const scriptsDir = `${this._plugin.manifest.dir}/scripts`;
+		// ABSOLUTE path — require/createRequire need it (manifest.dir is vault-relative).
+		const scriptsDir = resolveScriptsDir(this._plugin.app.vault.adapter, this._plugin.manifest.dir);
 		const requireFn = buildRequireFn(scriptsDir);
 		const resolveScriptFn: ScriptFnResolver = (id: string) => {
 			if (getState(id).kind !== "Active") {
@@ -400,18 +483,18 @@ export class MasonSettingTab extends PluginSettingTab {
 	// Advanced section
 	// -------------------------------------------------------------------------
 
-	/** Render the Advanced section heading and its controls. */
+	/** Render the Advanced section controls. The active tab labels the section. */
 	private _renderAdvancedSection(containerEl: HTMLElement): void {
-		new Setting(containerEl).setName("Advanced").setHeading();
-
 		new Setting(containerEl)
 			.setName("Debug logging")
-			.setDesc("Enable verbose console.debug traces. Reload Obsidian after toggling.")
+			.setDesc("Write verbose Mason traces to the developer console. Takes effect immediately.")
 			.addToggle((toggle) => {
 				toggle
 					.setValue(this._plugin.settings.debugLogging)
 					.onChange(async (value) => {
 						this._plugin.settings.debugLogging = value;
+						// Apply live so traces start/stop without a reload.
+						setDebugLogging(value);
 						await this._plugin.saveSettings();
 					});
 			});

@@ -15,7 +15,6 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { App } from "obsidian";
 import type { Editor, EditorPosition, EditorSelection } from "obsidian";
 import { clearNoticeLog, noticeLog, lastOpenedModal, clearLastOpenedModal } from "./__mocks__/obsidian";
-import type { MockHTMLElement } from "./__mocks__/obsidian";
 import type { LifecycleResolver } from "../src/scripts/lifecycleResolver";
 import type { ScriptRecord } from "../src/scripts/store";
 import { EditorState, type TransactionSpec } from "@codemirror/state";
@@ -980,11 +979,56 @@ describe("T6.1 — launcher modal getState backed by live resolver (Run script�
 		const modal = lastOpenedModal();
 		expect(modal).toBeDefined();
 
-		const text = (modal!.contentEl as unknown as MockHTMLElement)._collectText();
+		// The launcher is a FuzzySuggestModal seeded with the runnable (Active)
+		// entries; main.ts filters before constructing it. Inspect the offered items.
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const ids = (modal as any).getItems().map((e: { id: string }) => e.id);
 
-		// With the fix: Active script appears, Disabled script does NOT
-		// With the old stub: getState always returns Disabled → both absent → only empty-state text
-		expect(text).toContain("perplexity-auto");
-		expect(text).not.toContain("perplexity-web");
+		// With the fix: Active script is offered, Disabled script is NOT
+		// With the old stub: getState always returns Disabled → no entries
+		expect(ids).toContain("perplexity-auto");
+		expect(ids).not.toContain("perplexity-web");
+	});
+
+	it("restores commands persisted with command:true after reload (preserving the custom name)", async () => {
+		const plugin = makePlugin();
+		await plugin.onload();
+
+		const records: Record<string, ScriptRecord> = {
+			"perplexity-app": {
+				provenance: "curated", enabled: true,
+				okayed: { version: 1, checksum: "sha256:abc" },
+				source: "vault/perplexity-app.cjs", command: true, commandName: "Format Perplexity",
+			},
+			"perplexity-web": {
+				provenance: "curated", enabled: true,
+				okayed: { version: 1, checksum: "sha256:def" },
+				source: "vault/perplexity-web.cjs", command: false,
+			},
+		};
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		(plugin as any).store = {
+			getScripts: vi.fn().mockResolvedValue(records),
+			setRecord: vi.fn().mockResolvedValue(undefined),
+		};
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		(plugin as any).lifecycleResolver = makeFakeResolver(["perplexity-app", "perplexity-web"]);
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		(plugin.app as any).workspace._fireLayoutReady();
+		// Drain _restoreScriptCommands: getScripts + resolveItems + register.
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const cmds = (plugin as any)._commands as Array<{ id: string; name: string }>;
+		const restored = cmds.find((c) => c.id === "perplexity-app");
+		expect(restored).toBeDefined();
+		// Custom name preserved; stable id keeps any bound hotkey.
+		expect(restored!.name).toBe("Format Perplexity");
+		// A script WITHOUT command:true is not registered.
+		expect(cmds.find((c) => c.id === "perplexity-web")).toBeUndefined();
 	});
 });

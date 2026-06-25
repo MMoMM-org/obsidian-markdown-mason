@@ -50,6 +50,18 @@ export interface ScriptRecord {
 	okayed: { version: number; checksum: string } | null;
 	source: string;
 	command: boolean;
+	/**
+	 * Optional human description shown in the Scripts list. Captured at install
+	 * time: the catalog blurb for curated scripts, or a "// description:" header
+	 * comment for imported user scripts. Absent when neither is available.
+	 */
+	description?: string;
+	/**
+	 * Optional user-chosen command name. When the user creates a command for this
+	 * script (Commands tab), this is the label shown in the command palette /
+	 * Hotkeys list. Absent → the script id is used as the command name.
+	 */
+	commandName?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -156,5 +168,7 @@ function applyDefaults(raw: unknown): ScriptRecord {
 		okayed: parseOkayed(entry.okayed),
 		source: entry.source ?? "",
 		command: entry.command ?? false,
+		...(typeof entry.description === "string" ? { description: entry.description } : {}),
+		...(typeof entry.commandName === "string" ? { commandName: entry.commandName } : {}),
 	};
 }

@@ -22,6 +22,14 @@ export interface EventRef {
 	_mockEventRef: true;
 }
 
+/**
+ * Stub for Obsidian's normalizePath. The real function collapses slashes and
+ * trims; for tests an identity-ish passthrough (strip a leading "./") suffices.
+ */
+export function normalizePath(path: string): string {
+	return path.replace(/^\.\//, "").replace(/\/{2,}/g, "/");
+}
+
 // ---------------------------------------------------------------------------
 // MockHTMLElement — lightweight DOM node for modal unit tests (T5.3)
 //
@@ -294,6 +302,52 @@ export class Modal {
 	/** Override in subclass to clean up. */
 	onClose(): void {
 		// no-op base implementation
+	}
+}
+
+// ---------------------------------------------------------------------------
+// FuzzySuggestModal — minimal stub for the import picker (T6.2)
+//
+// Extends Modal so open()/close() + onOpen/onClose lifecycle hooks work. The
+// real Obsidian class renders a fuzzy-search input over getItems(); here we only
+// model the selection seam used by ImportPickerModal:
+//   setPlaceholder / emptyStateText  — accepted, stored (not rendered)
+//   getItems / getItemText           — overridden by subclass
+//   onChooseItem                     — overridden by subclass
+//
+// Test-only helper:
+//   _choose(text)  — selects the item whose getItemText === text, mirroring the
+//                    real flow (onChooseItem then auto-close).
+// ---------------------------------------------------------------------------
+
+export class FuzzySuggestModal<T> extends Modal {
+	emptyStateText: string = "";
+	/** Captured placeholder text (the real class wires it into the search input). */
+	placeholder: string = "";
+
+	setPlaceholder(placeholder: string): void {
+		this.placeholder = placeholder;
+	}
+
+	getItems(): T[] {
+		return [];
+	}
+
+	getItemText(item: T): string {
+		return String(item);
+	}
+
+	onChooseItem(_item: T, _evt?: unknown): void {
+		// overridden by subclass
+	}
+
+	/** Test helper: choose an item by its display text (then auto-close). */
+	_choose(text: string): void {
+		const item = this.getItems().find((i) => this.getItemText(i) === text);
+		if (item !== undefined) {
+			this.onChooseItem(item);
+			this.close();
+		}
 	}
 }
 

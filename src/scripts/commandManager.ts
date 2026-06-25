@@ -40,6 +40,7 @@ import { buildScriptContext, buildGatedLogger } from "./context";
 import type { LifecycleState } from "./lifecycle";
 import type { ScriptStore } from "./store";
 import { selectionContext } from "../sources/selection";
+import { debug } from "../core/debug";
 import { buildRegistry } from "../core/registry";
 import type { Editor } from "obsidian";
 import { applyEditPlan } from "../sources/apply";
@@ -246,6 +247,16 @@ export class CommandManager {
 
 		// Build context and run
 		const op = selectionContext(editor, this._settings);
+		// Format-in-place: when the command runs on a NON-EMPTY selection, the
+		// script's body should REPLACE the selected raw text rather than insert a
+		// formatted copy at the cursor (which would duplicate it). Anchor the cascade
+		// context to the selection START — the heading the selection sits under — and
+		// mark the whole selection as the body's replace target.
+		if (op.selection !== undefined && op.selection.from !== op.selection.to) {
+			op.cursor = op.selection.from;
+			op.replaceRange = { from: op.selection.from, to: op.selection.to };
+		}
+		debug(`[MarkdownMason] command "${id}" invoked (source=command, input ${(op.input ?? op.doc).length} chars)`);
 		const { api: mason } = buildRegistry();
 		const ctx = buildScriptContext({
 			// Parity with _runScriptOnSelection: fall back to full doc when no selection.
@@ -260,7 +271,10 @@ export class CommandManager {
 			this._injection?.applyPlan ?? ((ed: Editor, plan: EditPlan): void => applyEditPlan(ed, plan));
 
 		const effects: RunnerEffects = {
-			applyPlan: (plan: EditPlan): void => { applyPlanFn(editor, plan); },
+			applyPlan: (plan: EditPlan): void => {
+				debug(`[MarkdownMason] command "${id}" applying ${plan.length} edit(s)`);
+				applyPlanFn(editor, plan);
+			},
 			// Raw fallback for command: selection already lives in the document — leave intact.
 			rawFallback: (): void => { /* command raw fallback: leave intact */ },
 			notify: (msg: string): void => { new Notice(msg); },
@@ -268,6 +282,9 @@ export class CommandManager {
 
 		const runner = new ScriptRunner(effects, { policy: "enabled" });
 		await runner.run(script, ctx);
+		// applyPlan above logs on success; if nothing logged after this, the script
+		// returned undefined/[] — a deliberate no-op (e.g. canParse() didn't match).
+		debug(`[MarkdownMason] command "${id}" finished`);
 	}
 }
 
@@ -287,9 +304,10 @@ function _describeNonActiveState(state: LifecycleState, name: string): string {
 			return `Mason: "${name}" is blocked (${state.reason})`;
 		case "Materializing":
 			return `Mason: "${name}" is not ready yet`;
+		case "UpdateAvailable":
+			return `Mason: "${name}" has an update — update it in settings → scripts to run it`;
 		case "Available":
 		case "Absent":
-		case "UpdateAvailable":
 		case "Active":
 			return `Mason: "${name}" is not active`;
 	}

@@ -55,6 +55,12 @@ export interface ScriptInfo {
 	fileSizeBytes: number;
 	version: number;
 	checksum: string;
+	/**
+	 * Optional human description of what the script does — the catalog blurb for
+	 * curated scripts, or the "// description:" header for imported user scripts.
+	 * Shown prominently so the user knows what they are consenting to run.
+	 */
+	description?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -105,6 +111,15 @@ export class ScriptDisclosureModal extends Modal {
 
 		// Title
 		contentEl.createEl("h2", { text: "Run script?" });
+
+		// Description (when provided) — what the script does, shown above the
+		// technical identity so the user knows what they are approving.
+		if (this._info.description !== undefined && this._info.description.length > 0) {
+			contentEl.createEl("p", {
+				text: this._info.description,
+				cls: "mason-script-disclosure-desc",
+			});
+		}
 
 		// Meta: path, size, version, checksum
 		const meta = contentEl.createDiv({ cls: "mason-script-meta" });

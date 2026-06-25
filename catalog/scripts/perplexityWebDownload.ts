@@ -42,7 +42,7 @@ import {
 	scanExistingRefs,
 } from "../../src/core/footnotes";
 import { applyToString } from "../../src/core/applyToString";
-import { cascade } from "../../src/core/headings";
+import { cascadeOrInsert } from "../../src/core/headings";
 import { replaceMarkersInBody, filterCitedSources } from "./replaceMarkersInBody";
 
 /**
@@ -79,9 +79,11 @@ export const perplexityWebDownloadScript: ScriptFunction = (ctx: ScriptContext):
 	const renameEdits = applyFootnoteInlineRename(bodyFC, idMap);
 	const finalBody = applyToString(bodyFC, renameEdits);
 
-	// Step 5: Cascade the final body under the note context heading.
+	// Step 5: Cascade the final body under the note context heading. cascadeOrInsert
+	// never drops the body — a blank note (no heading above the cursor) inserts it
+	// verbatim at the cursor instead of returning an empty plan.
 	const cascadeOp = { ...ctx.op, input: finalBody };
-	const { plan: cascadePlan } = cascade(cascadeOp);
+	const bodyPlan = cascadeOrInsert(cascadeOp);
 
 	// Step 6: Build single-line compact footnote definitions and move them to the Resources section.
 	// Web-download format uses compact single-line defs ("[^n]: [title](url)") to avoid
@@ -89,7 +91,7 @@ export const perplexityWebDownloadScript: ScriptFunction = (ctx: ScriptContext):
 	const defs = compactRefDefinitions(newRefs);
 	const resourcesPlan = moveToResources(ctx.op, defs);
 
-	const plan = [...cascadePlan, ...resourcesPlan];
+	const plan = [...bodyPlan, ...resourcesPlan];
 	ctx.logger.info(`plan: ${plan.length} edits`);
 	return plan;
 };

@@ -45,6 +45,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ScriptFunction } from "./context";
+import { debug } from "../core/debug";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -301,6 +302,47 @@ function isEnvelopeCandidate(v: unknown): v is Record<string, unknown> {
 // ---------------------------------------------------------------------------
 
 /**
+ * Resolve the ABSOLUTE filesystem path to the materialized scripts directory.
+ *
+ * WHY: scripts are materialized via Obsidian's vault adapter, whose paths are
+ * vault-RELATIVE (e.g. ".obsidian/plugins/markdown-mason/scripts"). But Node's
+ * require / module.createRequire — used to load a script module — require an
+ * ABSOLUTE path or they throw ("The argument 'filename' must be … an absolute
+ * path"), which surfaces as the soft-fail "require unavailable" stub. So we
+ * prefix the vault base path (FileSystemAdapter.getBasePath) when available.
+ *
+ * Duck-typed on `getBasePath` rather than `instanceof FileSystemAdapter` so this
+ * stays obsidian-free (pure Node, unit-testable) and so a mock adapter without
+ * getBasePath simply falls back to the relative path.
+ *
+ * @param adapter     Obsidian's vault data adapter (FileSystemAdapter on desktop).
+ * @param manifestDir The plugin's vault-relative manifest.dir.
+ */
+/**
+ * Extract an optional one-line description that a user declared in an imported
+ * script via a `// description: ...` header comment, e.g.
+ *
+ *   // description: Prefix every Markdown heading with "=> ".
+ *
+ * Parsed from the script SOURCE text — this NEVER executes the script, so it is
+ * safe to call before consent. Returns the trimmed text, or undefined if absent.
+ */
+export function extractScriptDescription(source: string): string | undefined {
+	const m = source.match(/^[ \t]*\/\/[ \t]*description:[ \t]*(.+?)[ \t]*$/im);
+	const text = m?.[1]?.trim();
+	return text !== undefined && text.length > 0 ? text : undefined;
+}
+
+export function resolveScriptsDir(adapter: unknown, manifestDir: string | undefined): string {
+	const dir = manifestDir ?? "";
+	const getBasePath = (adapter as { getBasePath?: () => string } | null)?.getBasePath;
+	const base = typeof getBasePath === "function" ? getBasePath.call(adapter) : undefined;
+	return base !== undefined && base !== ""
+		? `${base}/${dir}/scripts`
+		: `${dir}/scripts`;
+}
+
+/**
  * Build a Node require function for loading materialized CJS scripts.
  *
  * Desktop-only: uses module.createRequire (Electron/Node). The scriptsDir
@@ -338,7 +380,7 @@ export function loadRunFnSafe(
 		const mod = loadScriptModule(absolutePath, requireFn);
 		return mod.run;
 	} catch (err: unknown) {
-		console.debug(`[MarkdownMason] resolveScriptFn: failed to load module "${id}":`, err);
+		debug(`[MarkdownMason] resolveScriptFn: failed to load module "${id}":`, err);
 		return (): undefined => undefined;
 	}
 }

@@ -62,7 +62,13 @@ const SCHEMA_VERSION = 1;
 
 // Per-script catalog version (CatalogEntry.version). Bump when a script's behaviour
 // changes in a user-visible way.
-const SCRIPT_VERSION = 1;
+// v2: cascadeOrInsert fix — pasting into a blank note no longer drops the body.
+// v3: F-1 fix — an unresolvable perplexity-app citation stays a plain [n] instead
+//     of becoming a dangling [^n] footnote with no definition.
+// v4: format-in-place — run as a command on a selection now REPLACES the selected
+//     raw text (via OperationContext.replaceRange) instead of inserting a formatted
+//     copy at the cursor and leaving the original behind (which duplicated it).
+const SCRIPT_VERSION = 4;
 
 // Pinned git ref placeholder. The real release SHA (40 hex chars) is injected at
 // release time — the SHA of the catalog commit the shipped plugin pins to.

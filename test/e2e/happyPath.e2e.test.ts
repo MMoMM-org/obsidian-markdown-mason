@@ -375,3 +375,87 @@ describe("E2E happy path — web-download fixture (sakura-in-tokyo-web-download.
 		assertNoNoticesOnSuccess();
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Regression — paste into a BLANK note (no heading above the cursor).
+//
+// cascade() returns an empty plan when there is no context heading; the scripts
+// used to spread that empty plan and silently DROP the entire body, leaving only
+// the ## Resources footnotes. cascadeOrInsert now inserts the body verbatim.
+// ---------------------------------------------------------------------------
+
+describe("paste into a blank note — body is never dropped", () => {
+	function runBlank(script: ScriptFunction, input: string): string {
+		const { api } = buildRegistry();
+		const ctx = buildScriptContext({
+			input,
+			source: "paste",
+			op: { doc: "", cursor: 0, settings: makeSettings(), input },
+			mason: api,
+			logger: { info: () => {}, warn: () => {}, error: () => {} },
+		});
+		const plan = script(ctx);
+		expect(plan, "script must return a plan").toBeDefined();
+		return applyToString("", plan as EditPlan);
+	}
+
+	it("perplexity-app keeps the prose body, not just the Resources footnotes", () => {
+		const output = runBlank(perplexityAppScript, appInput);
+		expect(output).toContain("## Resources");
+		// The actual article prose survived (this is the regression that was lost).
+		expect(output).toContain("forecast to start blooming");
+		// And inline footnote markers exist in the body, not only in the defs.
+		expect(extractBodySection(output)).toMatch(/\[\^\d+\]/);
+	});
+
+	it("perplexity-web keeps the body when pasted into a blank note", () => {
+		const output = runBlank(perplexityWebScript, webInput);
+		expect(extractBodySection(output).trim().length).toBeGreaterThan(0);
+	});
+
+	it("perplexity-web-download keeps the body when pasted into a blank note", () => {
+		const output = runBlank(perplexityWebDownloadScript, webDownloadInput);
+		expect(extractBodySection(output).trim().length).toBeGreaterThan(0);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Regression (F-1) — a malformed Sources line must NOT silently lose the
+// citation as a dangling [^n] footnote. The unresolved marker stays plain [n].
+// ---------------------------------------------------------------------------
+
+describe("perplexity-app — malformed source line leaves a plain [n], not a broken footnote", () => {
+	const input = [
+		"## Answer",
+		"",
+		"Claim one[1] and claim two[2].",
+		"",
+		"Sources",
+		"[1] Good source https://example.com/good",
+		"[2] Malformed line with no url",
+		"",
+	].join("\n");
+
+	it("converts the resolvable citation but leaves the unresolvable one as [2]", () => {
+		const doc = "# Notes\n\n";
+		const { api } = buildRegistry();
+		const ctx = buildScriptContext({
+			input,
+			source: "paste",
+			op: { doc, cursor: doc.length, settings: makeSettings(), input },
+			mason: api,
+			logger: { info: () => {}, warn: () => {}, error: () => {} },
+		});
+		const output = applyToString(doc, perplexityAppScript(ctx) as EditPlan);
+		const body = extractBodySection(output);
+
+		// The unresolved citation stays a plain, visible [2] — never a [^2].
+		expect(body).toContain("[2]");
+		expect(body).not.toMatch(/\[\^2\]/);
+		// And there is no dangling [^2]: definition.
+		expect(output).not.toMatch(/\[\^2\]:/);
+		// The well-formed source still became a footnote with a definition.
+		expect(body).toMatch(/\[\^\d+\]/);
+		expect(extractResourcesSection(output)).toMatch(/\[\^\d+\]:/);
+	});
+});

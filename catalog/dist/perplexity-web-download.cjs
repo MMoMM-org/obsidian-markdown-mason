@@ -284,6 +284,9 @@ function findContextLevel(doc, cursor) {
 function clampLevel(level) {
   return Math.max(1, Math.min(6, level));
 }
+function bodyTarget(ctx) {
+  return ctx.replaceRange ?? { from: ctx.cursor, to: ctx.cursor };
+}
 function cascade(ctx) {
   const input = ctx.input ?? "";
   const ctxLevel = findContextLevel(ctx.doc, ctx.cursor);
@@ -298,9 +301,15 @@ function cascade(ctx) {
   const shift = ctxLevel + 1 - minIn;
   const transformed = applyShiftToText(input, shift);
   return {
-    plan: [{ from: ctx.cursor, to: ctx.cursor, insert: transformed }],
+    plan: [{ ...bodyTarget(ctx), insert: transformed }],
     noContextHeading: false
   };
+}
+function cascadeOrInsert(ctx) {
+  const { plan } = cascade(ctx);
+  if (plan.length > 0) return plan;
+  const input = ctx.input ?? "";
+  return input.length > 0 ? [{ ...bodyTarget(ctx), insert: input }] : [];
 }
 function applyShiftToText(text, shift) {
   return text.replace(/^(#{1,6})(\s)/gm, (_match, hashes, space) => {
@@ -362,10 +371,10 @@ var perplexityWebDownloadScript = (ctx) => {
   const renameEdits = applyFootnoteInlineRename(bodyFC, idMap);
   const finalBody = applyToString(bodyFC, renameEdits);
   const cascadeOp = { ...ctx.op, input: finalBody };
-  const { plan: cascadePlan } = cascade(cascadeOp);
+  const bodyPlan = cascadeOrInsert(cascadeOp);
   const defs = compactRefDefinitions(newRefs);
   const resourcesPlan = moveToResources(ctx.op, defs);
-  const plan = [...cascadePlan, ...resourcesPlan];
+  const plan = [...bodyPlan, ...resourcesPlan];
   ctx.logger.info(`plan: ${plan.length} edits`);
   return plan;
 };

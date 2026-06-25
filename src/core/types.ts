@@ -23,12 +23,34 @@ export interface MasonSettings {
 	 * Wiring numericOnly=false to allow alpha markers is a planned follow-up.
 	 */
 	numericOnly?: boolean;
+	/**
+	 * When true (default), a one-shot "what's new" splash is shown the first time
+	 * the plugin runs after its version changes. Surfaces how many curated scripts
+	 * have a newer catalog version waiting (scripts ride pinned plugin releases, so
+	 * a plugin update is the only moment a script version can change). User-gated
+	 * via General settings and the in-splash toggle.
+	 *
+	 * Optional for backward-compat with persisted data predating this field;
+	 * treated as `true` when absent.
+	 */
+	showUpdateSplash?: boolean;
+	/**
+	 * The plugin version (manifest.version) last shown to the user. Compared against
+	 * the current manifest.version on load to detect an update (mirrors Excalidraw's
+	 * `previousRelease`). Empty string means "never recorded" → fresh install, which
+	 * is recorded silently without a splash.
+	 *
+	 * Optional for backward-compat; treated as `""` when absent.
+	 */
+	lastSeenVersion?: string;
 }
 
 export const DEFAULT_SETTINGS: MasonSettings = {
 	debugLogging: false,
 	resourcesName: "Resources",
 	numericOnly: true,
+	showUpdateSplash: true,
+	lastSeenVersion: "",
 };
 
 // ---------------------------------------------------------------------------
@@ -55,6 +77,14 @@ export interface OperationContext {
 	/** Cursor offset; for paste operations this is the insertion point. */
 	cursor: number;
 	selection?: { from: number; to: number };
+	/**
+	 * When set, body-insertion helpers (cascade / cascadeOrInsert) REPLACE this
+	 * range instead of inserting at `cursor`. The command path sets it to the
+	 * active selection so paste-formatter scripts transform the selected raw text
+	 * in place (format-in-place) instead of inserting a formatted copy and leaving
+	 * the original behind. Paste never sets it (no prior selection) → insert-at-cursor.
+	 */
+	replaceRange?: { from: number; to: number };
 	/** Paste or selection payload when the operation is source-scoped. */
 	input?: string;
 	/** Plugin settings (resourcesName, debugLogging, …). */

@@ -21,14 +21,29 @@ import type { CatalogEntry } from "../scripts/catalog/catalogSource";
 /** Callback invoked when the user chooses to enable a curated entry. */
 export type EnableEntry = (id: string) => void;
 
+/**
+ * Install state of a catalog entry, used to label its action button:
+ *   available → not in the vault yet   (button: "Enable")
+ *   installed → present but disabled    (button: "Enable")
+ *   enabled   → already active          (button: "Enabled", disabled)
+ */
+export type BrowseEntryStatus = "available" | "installed" | "enabled";
+
 export class BrowseOfficialModal extends Modal {
 	private readonly _entries: CatalogEntry[];
 	private readonly _onEnable: EnableEntry;
+	private readonly _statusOf: (id: string) => BrowseEntryStatus;
 
-	constructor(app: App, entries: CatalogEntry[], onEnable: EnableEntry) {
+	constructor(
+		app: App,
+		entries: CatalogEntry[],
+		onEnable: EnableEntry,
+		statusOf: (id: string) => BrowseEntryStatus = () => "available",
+	) {
 		super(app);
 		this._entries = entries;
 		this._onEnable = onEnable;
+		this._statusOf = statusOf;
 	}
 
 	onOpen(): void {
@@ -57,16 +72,32 @@ export class BrowseOfficialModal extends Modal {
 	}
 
 	private _renderEntry(parent: HTMLElement, entry: CatalogEntry): void {
-		const row = parent.createDiv({ cls: "mason-browse-row" });
-		row.createEl("span", { text: entry.name, cls: "mason-browse-name" });
-		row.createEl("span", { text: entry.description, cls: "mason-browse-desc" });
+		// Card layout: a header row with the script name and a right-aligned action
+		// button, then the description beneath.
+		const card = parent.createDiv({ cls: "mason-browse-card" });
 
-		const btn = row.createEl("button", { text: "Enable", cls: "mason-browse-enable" });
-		btn.setAttribute("type", "button");
-		btn.setAttribute("aria-label", `Enable ${entry.name}`);
-		btn.addEventListener("click", () => {
-			this._onEnable(entry.id);
-			this.close();
-		});
+		const header = card.createDiv({ cls: "mason-browse-card-header" });
+		header.createEl("span", { text: entry.name, cls: "mason-browse-name" });
+
+		const status = this._statusOf(entry.id);
+		if (status === "enabled") {
+			// Already enabled — show a non-actionable "Enabled" state, not a redundant
+			// "Enable" button.
+			const badge = header.createEl("button", { text: "Enabled", cls: "mason-browse-enable" });
+			badge.addClass("mason-browse-enabled");
+			badge.setAttribute("type", "button");
+			badge.setAttribute("disabled", "true");
+			badge.setAttribute("aria-label", `${entry.name} is already enabled`);
+		} else {
+			const btn = header.createEl("button", { text: "Enable", cls: "mason-browse-enable" });
+			btn.setAttribute("type", "button");
+			btn.setAttribute("aria-label", `Enable ${entry.name}`);
+			btn.addEventListener("click", () => {
+				this._onEnable(entry.id);
+				this.close();
+			});
+		}
+
+		card.createEl("span", { text: entry.description, cls: "mason-browse-desc" });
 	}
 }

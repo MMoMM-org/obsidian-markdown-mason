@@ -19,7 +19,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import * as module from "node:module";
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { FsScriptLoader, loadScriptFresh, loadScriptModule } from "../../src/scripts/loader";
+import { FsScriptLoader, loadScriptFresh, loadScriptModule, resolveScriptsDir, extractScriptDescription } from "../../src/scripts/loader";
 import type { RequireFn, ScriptModule, PasteBlock } from "../../src/scripts/loader";
 
 // ---------------------------------------------------------------------------
@@ -525,5 +525,68 @@ module.exports = { run: function(ctx) { return h; } };`,
 		const mod2 = loadScriptModule(mainPath, requireFn);
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		expect((mod2.run as any)()).toBe("v2");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// resolveScriptsDir — vault-relative manifest.dir → ABSOLUTE require path
+//
+// require/createRequire reject a relative path; this helper prefixes the vault
+// base path from the adapter's getBasePath() so script modules can be loaded.
+// ---------------------------------------------------------------------------
+
+describe("resolveScriptsDir", () => {
+	it("prefixes the vault base path when the adapter exposes getBasePath()", () => {
+		const adapter = { getBasePath: () => "/Users/me/Vault" };
+		expect(resolveScriptsDir(adapter, ".obsidian/plugins/markdown-mason")).toBe(
+			"/Users/me/Vault/.obsidian/plugins/markdown-mason/scripts",
+		);
+	});
+
+	it("returns an absolute path that createRequire accepts (no throw)", () => {
+		const base = fs.mkdtempSync(path.join(os.tmpdir(), "mason-absdir-"));
+		const adapter = { getBasePath: () => base };
+		const abs = resolveScriptsDir(adapter, "plugin");
+		expect(path.isAbsolute(abs)).toBe(true);
+		// The real failure mode was createRequire throwing on a relative base.
+		expect(() => module.createRequire(abs + "/")).not.toThrow();
+	});
+
+	it("falls back to the relative path when getBasePath is absent (e.g. a mock adapter)", () => {
+		expect(resolveScriptsDir({}, "plugin-dir")).toBe("plugin-dir/scripts");
+	});
+
+	it("tolerates an undefined manifest.dir", () => {
+		expect(resolveScriptsDir({ getBasePath: () => "/v" }, undefined)).toBe("/v//scripts");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// extractScriptDescription — "// description:" header convention
+// ---------------------------------------------------------------------------
+
+describe("extractScriptDescription", () => {
+	it("reads a leading '// description:' header", () => {
+		const src = `// description: Prefix every heading with "=> ".\nmodule.exports = { run() {} };`;
+		expect(extractScriptDescription(src)).toBe('Prefix every heading with "=> ".');
+	});
+
+	it("is case-insensitive and tolerates missing spaces", () => {
+		expect(extractScriptDescription("//Description:Hello")).toBe("Hello");
+		expect(extractScriptDescription("   // DESCRIPTION:   spaced   ")).toBe("spaced");
+	});
+
+	it("returns undefined when there is no description header", () => {
+		expect(extractScriptDescription("module.exports = { run() {} };")).toBeUndefined();
+	});
+
+	it("returns undefined for an empty description", () => {
+		expect(extractScriptDescription("// description:   ")).toBeUndefined();
+	});
+
+	it("does NOT execute the script — pure text parse", () => {
+		// A source that would throw if evaluated still yields its description.
+		const src = "// description: safe\nthrow new Error('should never run');";
+		expect(extractScriptDescription(src)).toBe("safe");
 	});
 });

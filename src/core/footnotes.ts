@@ -353,7 +353,7 @@ export function newRefDefinitions(newRefs: ResolvedRef[]): string[] {
  *
  * Offsets vs ORIGINAL body string (ADR-1).
  */
-export function fromCitations(parseResult: ParseResult): EditPlan {
+export function fromCitations(parseResult: ParseResult, allowedIds?: ReadonlySet<number>): EditPlan {
 	if (parseResult.inline.length === 0) return [];
 
 	// Count how many edits we need for each n value, per inline entries.
@@ -362,6 +362,11 @@ export function fromCitations(parseResult: ParseResult): EditPlan {
 
 	for (const [n, count] of Object.entries(targetCount)) {
 		const numeric = Number(n);
+		// When allowedIds is given, only convert citations that resolve to a source.
+		// Skipping the rest leaves a plain "[n]" in the prose instead of producing a
+		// dangling "[^n]" footnote reference with no definition (F-1: a citation that
+		// renders as an invisible, broken footnote = silent loss).
+		if (allowedIds !== undefined && !allowedIds.has(numeric)) continue;
 		const re = new RegExp(`\\[${numeric}\\](?!\\()`, "g");
 		let m: RegExpExecArray | null;
 		let found = 0;

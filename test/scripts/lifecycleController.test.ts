@@ -132,6 +132,7 @@ interface Harness {
 	askCalls: ScriptInfo[];
 	opened: string[];
 	setDecision: (d: AskDecision) => void;
+	reRegisterCommand: ReturnType<typeof vi.fn>;
 }
 
 function makeController(opts: {
@@ -144,6 +145,7 @@ function makeController(opts: {
 	pick?: (paths: string[]) => Promise<string | null>;
 }): Harness {
 	const rerender = vi.fn();
+	const reRegisterCommand = vi.fn();
 	const askCalls: ScriptInfo[] = [];
 	const opened: string[] = [];
 	let decision: AskDecision = opts.decision ?? "enable-session";
@@ -160,6 +162,7 @@ function makeController(opts: {
 		},
 		destPath: (id: string) => `plugins/markdown-mason/scripts/${id}.cjs`,
 		rerender,
+		reRegisterCommand,
 		// Test seams (override the real disclosure / picker / window.open):
 		ask: async (info: ScriptInfo): Promise<AskDecision> => {
 			askCalls.push(info);
@@ -176,6 +179,7 @@ function makeController(opts: {
 		askCalls,
 		opened,
 		setDecision: (d: AskDecision) => { decision = d; },
+		reRegisterCommand,
 	};
 }
 
@@ -197,9 +201,13 @@ describe("LifecycleController.enable", () => {
 
 		await h.controller.enable("perplexity-app");
 
-		// Disclosure shown with the to-be-consented {version,checksum}
+		// Disclosure shown with the to-be-consented {version,checksum} + catalog blurb
 		expect(h.askCalls).toHaveLength(1);
-		expect(h.askCalls[0]).toMatchObject({ version: 1, checksum: CURATED_CHECKSUM });
+		expect(h.askCalls[0]).toMatchObject({
+			version: 1,
+			checksum: CURATED_CHECKSUM,
+			description: "Format Perplexity exports",
+		});
 
 		// Persisted okayed + enabled
 		expect(store.setRecord).toHaveBeenCalledWith("perplexity-app", expect.objectContaining({
@@ -393,6 +401,48 @@ describe("LifecycleController.update", () => {
 		expect(vault.writeCalls).toContain("plugins/markdown-mason/scripts/perplexity-app.cjs");
 		expect(fingerprints.setVersion).toHaveBeenCalledWith("perplexity-app", 2);
 		expect(h.rerender).toHaveBeenCalled();
+	});
+
+	it("re-registers the command after a successful update (rebinds new module + state)", async () => {
+		const v2bytes = new TextEncoder().encode("module.exports = { v: 2 };");
+		const v2checksum = sha256Bytes(v2bytes);
+		const store = makeStore({
+			"perplexity-app": {
+				provenance: "curated", enabled: true,
+				okayed: { version: 1, checksum: CURATED_CHECKSUM }, source: "", command: true,
+			},
+		});
+		const vault = makeVault();
+		const catalog = makeCatalog(
+			{ "perplexity-app": curatedEntry({ version: 2, checksum: v2checksum }) },
+			{ "scripts/perplexity-app.cjs": v2bytes },
+		);
+		const fingerprints = { setVersion: vi.fn(async () => {}), remove: vi.fn(async () => {}) };
+		const h = makeController({ store, vault, catalog, fingerprints, decision: "enable-session" });
+
+		await h.controller.update("perplexity-app");
+
+		expect(h.reRegisterCommand).toHaveBeenCalledWith("perplexity-app");
+	});
+
+	it("does NOT re-register the command when the update is cancelled", async () => {
+		const store = makeStore({
+			"perplexity-app": {
+				provenance: "curated", enabled: true,
+				okayed: { version: 1, checksum: CURATED_CHECKSUM }, source: "", command: true,
+			},
+		});
+		const vault = makeVault();
+		const catalog = makeCatalog(
+			{ "perplexity-app": curatedEntry({ version: 2, checksum: "sha256:newer" }) },
+			{ "scripts/perplexity-app.cjs": new TextEncoder().encode("x") },
+		);
+		const fingerprints = { setVersion: vi.fn(async () => {}), remove: vi.fn(async () => {}) };
+		const h = makeController({ store, vault, catalog, fingerprints, decision: "disable" });
+
+		await h.controller.update("perplexity-app");
+
+		expect(h.reRegisterCommand).not.toHaveBeenCalled();
 	});
 });
 
@@ -627,6 +677,74 @@ describe("LifecycleController.browseOfficial", () => {
 });
 
 // ===========================================================================
+// enableOfficial — the Browse-official "Enable" path
+// ===========================================================================
+
+describe("LifecycleController.enableOfficial", () => {
+	it("no existing record: creates the curated record (source=catalog path), then runs the enable/disclosure/materialize flow", async () => {
+		// The store starts EMPTY — exactly the Browse-official case. Plain enable()
+		// would silently no-op here; enableOfficial must create the record first.
+		const store = makeStore();
+		const vault = makeVault();
+		const catalog = makeCatalog({ "perplexity-app": curatedEntry() }, { "scripts/perplexity-app.cjs": CURATED_BYTES });
+		const fingerprints = { setVersion: vi.fn(async () => {}), remove: vi.fn(async () => {}) };
+		const h = makeController({ store, vault, catalog, fingerprints, decision: "enable-session" });
+
+		await h.controller.enableOfficial("perplexity-app");
+
+		// A curated record was created with the catalog path as its source and the
+		// catalog blurb captured as its description.
+		const created = store.scripts["perplexity-app"];
+		expect(created).toBeDefined();
+		expect(created.provenance).toBe("curated");
+		expect(created.source).toBe("scripts/perplexity-app.cjs");
+		expect(created.description).toBe("Format Perplexity exports");
+
+		// The disclosure ran and the consented identity was persisted + materialized.
+		expect(h.askCalls).toHaveLength(1);
+		expect(created.enabled).toBe(true);
+		expect(created.okayed).toEqual({ version: 1, checksum: CURATED_CHECKSUM });
+		expect(vault.writeCalls).toContain("plugins/markdown-mason/scripts/perplexity-app.cjs");
+		expect(fingerprints.setVersion).toHaveBeenCalledWith("perplexity-app", 1);
+		expect(h.rerender).toHaveBeenCalled();
+	});
+
+	it("catalog unreachable: fires a sentence-case Notice, creates no record, re-renders", async () => {
+		const store = makeStore();
+		const vault = makeVault();
+		const catalog: CatalogSource = {
+			fetchIndex: vi.fn(async () => { throw new Error("offline"); }),
+			fetchScript: vi.fn(async () => { throw new Error("offline"); }),
+		};
+		const fingerprints = { setVersion: vi.fn(async () => {}), remove: vi.fn(async () => {}) };
+		const h = makeController({ store, vault, catalog, fingerprints });
+
+		await h.controller.enableOfficial("perplexity-app");
+
+		expect(Object.keys(store.scripts)).toHaveLength(0);
+		expect(noticeLog().join(" ")).toContain("official catalog");
+		expect(h.rerender).toHaveBeenCalled();
+	});
+
+	it("record already exists: does not recreate it, just runs the enable flow", async () => {
+		const existing: ScriptRecord = {
+			provenance: "curated", enabled: false, okayed: null, source: "scripts/perplexity-app.cjs", command: false,
+		};
+		const store = makeStore({ "perplexity-app": existing });
+		const vault = makeVault();
+		const catalog = makeCatalog({ "perplexity-app": curatedEntry() }, { "scripts/perplexity-app.cjs": CURATED_BYTES });
+		const fingerprints = { setVersion: vi.fn(async () => {}), remove: vi.fn(async () => {}) };
+		const h = makeController({ store, vault, catalog, fingerprints, decision: "enable-session" });
+
+		await h.controller.enableOfficial("perplexity-app");
+
+		// Enabled + materialized via the shared enable() path.
+		expect(store.scripts["perplexity-app"].enabled).toBe(true);
+		expect(vault.writeCalls).toContain("plugins/markdown-mason/scripts/perplexity-app.cjs");
+	});
+});
+
+// ===========================================================================
 // importFromVault
 // ===========================================================================
 
@@ -661,6 +779,28 @@ describe("LifecycleController.importFromVault", () => {
 		expect(created.okayed).toEqual({ version: created.okayed?.version, checksum: importedChecksum });
 		expect(vault.writeCalls).toContain("plugins/markdown-mason/scripts/my-import.cjs");
 		expect(h.rerender).toHaveBeenCalled();
+	});
+
+	it("captures a '// description:' header from the imported source into the record", async () => {
+		const importedBytes = new TextEncoder().encode(
+			"// description: My handy importer\nmodule.exports = { run() {} };",
+		);
+		const store = makeStore();
+		const vault = makeVault({ "vault/handy.cjs": importedBytes });
+		const catalog = makeCatalog({});
+		const fingerprints = { setVersion: vi.fn(async () => {}), remove: vi.fn(async () => {}) };
+		const h = makeController({
+			store, vault, catalog, fingerprints,
+			decision: "enable-session",
+			listCjs: async () => ["vault/handy.cjs"],
+			pick: async (paths) => paths[0] ?? null,
+		});
+
+		await h.controller.importFromVault();
+
+		expect(store.scripts["handy"].description).toBe("My handy importer");
+		// The disclosure dialog also receives the description.
+		expect(h.askCalls.at(-1)).toMatchObject({ description: "My handy importer" });
 	});
 
 	it("no file picked: no record created, no materialize, no coming-soon notice", async () => {

@@ -39,7 +39,7 @@ import {
 	scanExistingRefs,
 } from "../../src/core/footnotes";
 import { applyToString } from "../../src/core/applyToString";
-import { cascade } from "../../src/core/headings";
+import { cascadeOrInsert } from "../../src/core/headings";
 import { filterCitedSources } from "./replaceMarkersInBody";
 
 /**
@@ -56,33 +56,39 @@ export const perplexityAppScript: ScriptFunction = (ctx: ScriptContext): EditPla
 
 	const pr = perplexityApp.parse(ctx.input);
 
-	// Step 1: Convert bare [n] citation markers to [^n] footnote references.
-	const fromCitationsEdits = fromCitations(pr);
-	const bodyFC = applyToString(pr.body, fromCitationsEdits);
-
-	// Step 2: Filter to only sources actually cited in prose — avoids orphan defs.
+	// Step 1: Filter to only sources actually cited in prose — avoids orphan defs.
 	const citedSources = filterCitedSources(pr.sources, pr.inline);
 
-	// Step 3: Resolve identity — dedup cited sources by URL, build idMap and new refs.
-	// Scan the destination note for existing numeric footnote defs so new paste ids
-	// start past maxExisting and never collide with pre-existing [^n] footnotes.
+	// Step 2: Resolve identity FIRST — dedup cited sources by URL, build idMap and
+	// new refs. Scan the destination note for existing numeric footnote defs so new
+	// paste ids start past maxExisting and never collide with pre-existing [^n].
+	// Resolving before converting tells us which [n] markers actually have a source.
 	const existing = scanExistingRefs(ctx.op.doc);
 	const { idMap, newRefs } = resolveFootnoteIdentity(citedSources, existing);
 	ctx.logger.info(`resolved ${citedSources.length} footnotes (${newRefs.length} new, ${citedSources.length - newRefs.length} reused)`);
+
+	// Step 3: Convert ONLY resolvable [n] markers to [^n]. A marker whose source line
+	// was malformed/missing has no idMap entry and stays a plain [n] — never a
+	// dangling [^n] footnote with no definition (F-1).
+	const resolvableIds = new Set(Object.keys(idMap).map(Number));
+	const fromCitationsEdits = fromCitations(pr, resolvableIds);
+	const bodyFC = applyToString(pr.body, fromCitationsEdits);
 
 	// Step 4: Rename [^n] → [^finalId] using the resolved idMap.
 	const renameEdits = applyFootnoteInlineRename(bodyFC, idMap);
 	const finalBody = applyToString(bodyFC, renameEdits);
 
-	// Step 5: Cascade the final body under the note context heading.
+	// Step 5: Cascade the final body under the note context heading. cascadeOrInsert
+	// never drops the body — if there's no heading above the cursor (blank note) it
+	// inserts the body verbatim at the cursor instead of returning an empty plan.
 	const cascadeOp = { ...ctx.op, input: finalBody };
-	const { plan: cascadePlan } = cascade(cascadeOp);
+	const bodyPlan = cascadeOrInsert(cascadeOp);
 
 	// Step 6: Build footnote definitions and move them to the Resources section.
 	const defs = newRefDefinitions(newRefs);
 	const resourcesPlan = moveToResources(ctx.op, defs);
 
-	const plan = [...cascadePlan, ...resourcesPlan];
+	const plan = [...bodyPlan, ...resourcesPlan];
 	ctx.logger.info(`plan: ${plan.length} edits`);
 	return plan;
 };

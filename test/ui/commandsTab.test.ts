@@ -257,6 +257,83 @@ describe("renderCommandsTab — toggle ON", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Custom command name
+// ---------------------------------------------------------------------------
+
+interface MockTextControl {
+	setValue(v: string): MockTextControl;
+	onChange(cb: (v: string) => void): MockTextControl;
+}
+
+describe("renderCommandsTab — custom command name", () => {
+	it("persists a typed command name into record.commandName", async () => {
+		const scripts: Record<string, ScriptRecord> = {
+			"my-script": makeRecord({ enabled: true, command: false }),
+		};
+		const { settings, store } = await renderTab(scripts);
+
+		const row = settings.find((s) => s.toggleControls.length > 0 && !s.isHeading);
+		const text = row!.textControls[0] as MockTextControl;
+		text.setValue("Tidy headings");
+		await Promise.resolve();
+
+		const last = store.setRecord.mock.calls.at(-1)!;
+		expect(last[0]).toBe("my-script");
+		expect((last[1] as ScriptRecord).commandName).toBe("Tidy headings");
+	});
+
+	it("clearing the name removes commandName (falls back to the id)", async () => {
+		const scripts: Record<string, ScriptRecord> = {
+			"my-script": makeRecord({ enabled: true, command: false, commandName: "Old name" }),
+		};
+		const { settings, store } = await renderTab(scripts);
+
+		const row = settings.find((s) => s.toggleControls.length > 0 && !s.isHeading);
+		(row!.textControls[0] as MockTextControl).setValue("   ");
+		await Promise.resolve();
+
+		const last = store.setRecord.mock.calls.at(-1)!;
+		expect("commandName" in (last[1] as ScriptRecord)).toBe(false);
+	});
+
+	it("registers the command under the custom name when toggled on", async () => {
+		const scripts: Record<string, ScriptRecord> = {
+			"my-script": makeRecord({ enabled: true, command: false, commandName: "Tidy headings" }),
+		};
+		const cm = makeCommandManager();
+		const { settings } = await renderTab(scripts, { commandManager: cm });
+
+		const row = settings.find((s) => s.toggleControls.length > 0 && !s.isHeading);
+		row!.toggleControls[0].setValue(true);
+		await Promise.resolve();
+
+		expect(cm.register).toHaveBeenCalledOnce();
+		const [id, name] = cm.register.mock.calls[0];
+		expect(id).toBe("my-script");
+		expect(name).toBe("Tidy headings");
+	});
+
+	it("re-registers live when the name changes while a command is active", async () => {
+		const scripts: Record<string, ScriptRecord> = {
+			"my-script": makeRecord({ enabled: true, command: true, commandName: "First" }),
+		};
+		const cm = makeCommandManager();
+		const { settings } = await renderTab(scripts, { commandManager: cm });
+
+		const row = settings.find((s) => s.toggleControls.length > 0 && !s.isHeading);
+		(row!.textControls[0] as MockTextControl).setValue("Second");
+		// onChange awaits getScripts() then setRecord() before re-registering.
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(cm.register).toHaveBeenCalled();
+		const [, name] = cm.register.mock.calls.at(-1)!;
+		expect(name).toBe("Second");
+	});
+});
+
+// ---------------------------------------------------------------------------
 // Toggle OFF — unregister + persist command=false, preserve enabled
 // ---------------------------------------------------------------------------
 

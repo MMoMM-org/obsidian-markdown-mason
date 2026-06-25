@@ -301,7 +301,8 @@ function stateOf(
 
 describe("Flow 1 — full curated lifecycle with real catalog .cjs", () => {
 	const SCRIPT_ID = "perplexity-app";
-	const CATALOG_CHECKSUM = "sha256:dd55cb5cb48e04379f94fa2348d42f55ef0eaf64858b92c6affdf567b451aedc";
+	// Compute from the real built .cjs so a catalog rebuild never breaks this test.
+	const CATALOG_CHECKSUM = sha256Bytes(readRealCatalogBytes(SCRIPT_ID));
 	const CATALOG_VERSION = 1;
 
 	it("starts Available (no record, inCatalog:true)", () => {
@@ -469,7 +470,8 @@ describe("Flow 1 — full curated lifecycle with real catalog .cjs", () => {
 
 describe("Flow 2 — device-B materialization (no disclosure re-shown)", () => {
 	const SCRIPT_ID = "perplexity-app";
-	const CATALOG_CHECKSUM = "sha256:dd55cb5cb48e04379f94fa2348d42f55ef0eaf64858b92c6affdf567b451aedc";
+	// Compute from the real built .cjs so a catalog rebuild never breaks this test.
+	const CATALOG_CHECKSUM = sha256Bytes(readRealCatalogBytes(SCRIPT_ID));
 	const CATALOG_VERSION = 1;
 
 	const SYNCED_RECORD: ScriptRecord = {

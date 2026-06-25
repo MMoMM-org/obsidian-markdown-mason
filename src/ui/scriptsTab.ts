@@ -87,11 +87,14 @@ export function renderScriptsTab(
 		return;
 	}
 
+	// Toolbar first, then the list beneath it (the action buttons sit above the
+	// scripts they create).
+	renderToolbar(containerEl, ops);
+
 	const list = containerEl.createDiv({ cls: "mason-scripts-list" });
 	for (const item of items) {
 		renderCard(list, item, ops);
 	}
-	renderToolbar(containerEl, ops);
 }
 
 // ---------------------------------------------------------------------------

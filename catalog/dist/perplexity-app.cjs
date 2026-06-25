@@ -245,12 +245,13 @@ function formatF4Def(ref) {
 function newRefDefinitions(newRefs) {
   return newRefs.map(formatF4Def);
 }
-function fromCitations(parseResult) {
+function fromCitations(parseResult, allowedIds) {
   if (parseResult.inline.length === 0) return [];
   const targetCount = countTargets(parseResult.inline);
   const plan = [];
   for (const [n, count] of Object.entries(targetCount)) {
     const numeric = Number(n);
+    if (allowedIds !== void 0 && !allowedIds.has(numeric)) continue;
     const re = new RegExp(`\\[${numeric}\\](?!\\()`, "g");
     let m;
     let found = 0;
@@ -358,6 +359,9 @@ function findContextLevel(doc, cursor) {
 function clampLevel(level) {
   return Math.max(1, Math.min(6, level));
 }
+function bodyTarget(ctx) {
+  return ctx.replaceRange ?? { from: ctx.cursor, to: ctx.cursor };
+}
 function cascade(ctx) {
   const input = ctx.input ?? "";
   const ctxLevel = findContextLevel(ctx.doc, ctx.cursor);
@@ -372,9 +376,15 @@ function cascade(ctx) {
   const shift = ctxLevel + 1 - minIn;
   const transformed = applyShiftToText(input, shift);
   return {
-    plan: [{ from: ctx.cursor, to: ctx.cursor, insert: transformed }],
+    plan: [{ ...bodyTarget(ctx), insert: transformed }],
     noContextHeading: false
   };
+}
+function cascadeOrInsert(ctx) {
+  const { plan } = cascade(ctx);
+  if (plan.length > 0) return plan;
+  const input = ctx.input ?? "";
+  return input.length > 0 ? [{ ...bodyTarget(ctx), insert: input }] : [];
 }
 function applyShiftToText(text, shift) {
   return text.replace(/^(#{1,6})(\s)/gm, (_match, hashes, space) => {
@@ -394,19 +404,20 @@ var perplexityAppScript = (ctx) => {
   if (!perplexityApp.canParse(ctx.input)) return void 0;
   ctx.logger.info(`perplexity-app started (source=${ctx.source})`);
   const pr = perplexityApp.parse(ctx.input);
-  const fromCitationsEdits = fromCitations(pr);
-  const bodyFC = applyToString(pr.body, fromCitationsEdits);
   const citedSources = filterCitedSources(pr.sources, pr.inline);
   const existing = scanExistingRefs(ctx.op.doc);
   const { idMap, newRefs } = resolveFootnoteIdentity(citedSources, existing);
   ctx.logger.info(`resolved ${citedSources.length} footnotes (${newRefs.length} new, ${citedSources.length - newRefs.length} reused)`);
+  const resolvableIds = new Set(Object.keys(idMap).map(Number));
+  const fromCitationsEdits = fromCitations(pr, resolvableIds);
+  const bodyFC = applyToString(pr.body, fromCitationsEdits);
   const renameEdits = applyFootnoteInlineRename(bodyFC, idMap);
   const finalBody = applyToString(bodyFC, renameEdits);
   const cascadeOp = { ...ctx.op, input: finalBody };
-  const { plan: cascadePlan } = cascade(cascadeOp);
+  const bodyPlan = cascadeOrInsert(cascadeOp);
   const defs = newRefDefinitions(newRefs);
   const resourcesPlan = moveToResources(ctx.op, defs);
-  const plan = [...cascadePlan, ...resourcesPlan];
+  const plan = [...bodyPlan, ...resourcesPlan];
   ctx.logger.info(`plan: ${plan.length} edits`);
   return plan;
 };

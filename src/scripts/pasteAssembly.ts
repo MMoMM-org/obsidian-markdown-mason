@@ -11,6 +11,7 @@ import type { ScriptRecord } from "./store";
 import type { LifecycleState } from "./lifecycle";
 import type { ScriptModule, RequireFn } from "./loader";
 import type { LoadedScript } from "./paste/buildPasteChain";
+import { debug } from "../core/debug";
 
 // ---------------------------------------------------------------------------
 // Deps interface
@@ -64,7 +65,7 @@ export async function buildEnabledPasteScripts(deps: PasteAssemblyDeps): Promise
 		try {
 			module = loadModule(absolutePath, requireFn);
 		} catch (err: unknown) {
-			console.debug(`[MarkdownMason] paste: failed to load module "${id}":`, err);
+			debug(`[MarkdownMason] paste: failed to load module "${id}":`, err);
 			module = null;
 		}
 

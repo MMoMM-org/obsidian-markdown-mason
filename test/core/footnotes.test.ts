@@ -569,6 +569,32 @@ describe("fromCitations — basic citation-to-footnote rewrite", () => {
 	});
 });
 
+describe("fromCitations — allowedIds restricts conversion (F-1)", () => {
+	const body = "First claim[1] and second claim[2].";
+	const pr = makeParseResult({
+		body,
+		inline: [
+			{ marker: "[1]", n: 1 },
+			{ marker: "[2]", n: 2 },
+		],
+	});
+
+	it("converts only ids in the allowed set; the rest stay plain [n]", () => {
+		const plan = fromCitations(pr, new Set([1]));
+		const result = applyPlan(body, plan);
+		// [1] resolved → footnote; [2] unresolved → left as a plain citation number.
+		expect(result).toBe("First claim[^1] and second claim[2].");
+	});
+
+	it("an empty allowed set converts nothing (no dangling footnotes)", () => {
+		expect(fromCitations(pr, new Set())).toHaveLength(0);
+	});
+
+	it("omitting allowedIds keeps the original convert-all behaviour", () => {
+		expect(fromCitations(pr)).toHaveLength(2);
+	});
+});
+
 describe("fromCitations — alphabetic markers are never altered", () => {
 	// [A] is an alpha marker; it must be ignored even if it appears in inline
 	// (the spec says alpha markers like [A] are NEVER treated as citations).

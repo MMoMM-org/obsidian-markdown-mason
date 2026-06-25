@@ -331,6 +331,31 @@ describe("CommandManager — fail-safe (stale command)", () => {
 		expect(notices[0]).toMatch(/drift/i);
 	});
 
+	it("(i2) invoking command when script is UpdateAvailable notifies an actionable update message and does NOT execute", async () => {
+		const surface = makePluginSurface("markdown-mason");
+		const store = makeStore({ "outdated-script": makeRecord() });
+		const manager = new CommandManager(surface, store, DEFAULT_SETTINGS);
+		const script = makeScript();
+
+		manager.register(
+			"outdated-script",
+			"Outdated Script",
+			script,
+			makeStateResolver({ kind: "UpdateAvailable" }),
+		);
+
+		const cmd = surface._commands.find((c) => c.id === "outdated-script");
+		await cmd!.editorCallback!(makeMinimalEditor());
+
+		expect(script).not.toHaveBeenCalled();
+		const notices = noticeLog();
+		expect(notices).toHaveLength(1);
+		// Actionable: mentions an update and where to do it — not the vague "not active".
+		expect(notices[0]).toMatch(/update/i);
+		expect(notices[0]).toMatch(/settings/i);
+		expect(notices[0]).not.toMatch(/is not active/i);
+	});
+
 	it("(j) invoking command when script is Active DOES execute the script", async () => {
 		const surface = makePluginSurface("markdown-mason");
 		const store = makeStore({ "active-script": makeRecord() });
@@ -403,5 +428,82 @@ describe("CommandManager — fail-safe (stale command)", () => {
 		// The injected applyPlan spy must have been called with the returned plan
 		expect(planSpy).toHaveBeenCalledOnce();
 		expect(planSpy.mock.calls[0][1]).toEqual(expectedPlan);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// SUITE — format-in-place (selection replace)
+//
+// When a command runs on a NON-EMPTY selection, the OperationContext handed to
+// the script must mark the selection as the body's replace target (replaceRange)
+// and anchor the cascade context to the selection START (cursor = from). This is
+// what lets a paste-formatter (perplexity-*) transform selected raw text in place
+// instead of inserting a formatted copy and leaving the original behind.
+// ---------------------------------------------------------------------------
+
+describe("CommandManager — format-in-place on selection", () => {
+	/** Editor whose single selection spans [from,to) (left-to-right). */
+	function makeSelectionEditor(doc: string, from: number, to: number): Editor {
+		const anchor = { line: 0, ch: 0, _o: from } as unknown as EditorPosition;
+		const head = { line: 0, ch: 0, _o: to } as unknown as EditorPosition;
+		const sel: EditorSelection = { anchor, head };
+		return {
+			getValue: () => doc,
+			listSelections: () => [sel],
+			posToOffset: (p: EditorPosition) => (p as unknown as { _o: number })._o,
+			getSelection: () => doc.slice(from, to),
+			replaceSelection: () => {},
+		} as unknown as Editor;
+	}
+
+	interface CapturedOp {
+		cursor: number;
+		replaceRange?: { from: number; to: number };
+		selection?: { from: number; to: number };
+	}
+	interface CapturedCtx {
+		op: CapturedOp;
+		source: string;
+		input: string;
+	}
+
+	it("sets replaceRange to the selection and anchors cursor to its start", async () => {
+		const doc = "## Section\n\nRAW TEXT HERE\n";
+		const from = "## Section\n\n".length;
+		const to = doc.length;
+
+		const surface = makePluginSurface("markdown-mason");
+		const store = makeStore({ fmt: makeRecord() });
+		const manager = new CommandManager(surface, store, DEFAULT_SETTINGS);
+		const fn = vi.fn().mockReturnValue(undefined);
+
+		manager.register("fmt", "Fmt", fn, makeStateResolver({ kind: "Active" }));
+		const cmd = surface._commands.find((c) => c.id === "fmt");
+		await cmd!.editorCallback!(makeSelectionEditor(doc, from, to));
+
+		expect(fn).toHaveBeenCalledOnce();
+		const ctx = fn.mock.calls[0][0] as CapturedCtx;
+		expect(ctx.op.replaceRange).toEqual({ from, to });
+		expect(ctx.op.cursor).toBe(from);
+		expect(ctx.source).toBe("command");
+		// The script's input is the selected raw text, not the whole doc.
+		expect(ctx.input).toBe(doc.slice(from, to));
+	});
+
+	it("leaves replaceRange unset when the selection is empty (insert-at-cursor preserved)", async () => {
+		const doc = "## Section\n\n";
+		const surface = makePluginSurface("markdown-mason");
+		const store = makeStore({ fmt: makeRecord() });
+		const manager = new CommandManager(surface, store, DEFAULT_SETTINGS);
+		const fn = vi.fn().mockReturnValue(undefined);
+
+		manager.register("fmt", "Fmt", fn, makeStateResolver({ kind: "Active" }));
+		const cmd = surface._commands.find((c) => c.id === "fmt");
+		// Caret-only: from === to → no selection.
+		await cmd!.editorCallback!(makeSelectionEditor(doc, 5, 5));
+
+		expect(fn).toHaveBeenCalledOnce();
+		const ctx = fn.mock.calls[0][0] as CapturedCtx;
+		expect(ctx.op.replaceRange).toBeUndefined();
 	});
 });

@@ -48,6 +48,7 @@ import type { Plugin } from "obsidian";
 import type { Editor } from "obsidian";
 import { buildRegistry } from "./core/registry";
 import type { RegistryEntry } from "./core/registry";
+import { debug } from "./core/debug";
 import { tidyFootnotes, diffToEditPlan } from "./core/noteFootnotes";
 import { normalize } from "./core/headings";
 import { applyEditPlan } from "./sources/apply";
@@ -430,6 +431,6 @@ export function registerCommands(
 
 	if (plugin.settings.debugLogging) {
 		const count = entries.length - SKIP_IDS.size + 2;
-		console.debug(`[MarkdownMason] registered ${count} commands`);
+		debug(`[MarkdownMason] registered ${count} commands`);
 	}
 }

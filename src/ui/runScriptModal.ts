@@ -2,145 +2,76 @@
 //
 // DESIGN
 // ──────
-// Opens a simple list modal (extends Modal, not FuzzySuggestModal) to minimize
-// mock complexity. Lists only ACTIVE scripts (getState(id).kind === "Active").
+// A quick-switcher-style FuzzySuggestModal: a fuzzy-search input on top, and
+// below it the runnable scripts rendered as cards (name + description). Fuzzy
+// matching covers both the name and the description. Selecting one runs it.
 //
-// Async load: onOpen schedules the async work via Promise so the Modal base-class
-// open() call returns synchronously. The content is filled in once the promise
-// resolves. Tests drain microtasks (await Promise.resolve()) after open().
-//
-// P5 SEAM
-// ───────
-// resolveScriptFn(id) → ScriptFunction  (P5: real module loader)
-// getState(id)        → LifecycleState  (P5: live lifecycle resolver)
+// The caller (main.ts) pre-filters to runnable (Active) scripts and supplies the
+// run wiring as `onChoose`, so this module stays a pure picker.
 //
 // COMMUNITY COMPLIANCE
 // ────────────────────
-// - Sentence case: modal title, item labels, empty-state text.
-// - DOM via createEl / createDiv / setText / setAttribute — never innerHTML.
-// - No default hotkeys.
+// - Sentence case: placeholder + empty-state text.
+// - DOM via createEl — never innerHTML. No default hotkeys.
 
-import { Modal } from "obsidian";
-import type { App, Editor } from "obsidian";
-import type { ScriptFunction } from "../scripts/context";
-import type { LifecycleState } from "../scripts/lifecycle";
-import type { ScriptStore } from "../scripts/store";
+import { FuzzySuggestModal } from "obsidian";
+import type { App, FuzzyMatch } from "obsidian";
 
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
 
-/** Minimal CommandManager surface consumed by RunScriptModal. */
-export interface RunScriptModalCommandManager {
-	runScript(
-		id: string,
-		name: string,
-		script: ScriptFunction,
-		getState: (id: string) => LifecycleState,
-		editor: Editor,
-	): Promise<void>;
+/** One runnable script offered by the launcher. */
+export interface RunScriptEntry {
+	id: string;
+	name: string;
+	description: string;
 }
 
-/** Resolver that returns a ScriptFunction for a given script id. P5: real module loader. */
-export type ScriptFnResolver = (id: string) => ScriptFunction;
-
-/** Resolver that returns the current LifecycleState for a given script id. */
-export type StateResolver = (id: string) => LifecycleState;
+/** Invoked when the user picks a script to run. */
+export type RunScriptChoose = (entry: RunScriptEntry) => void | Promise<void>;
 
 // ---------------------------------------------------------------------------
 // RunScriptModal
 // ---------------------------------------------------------------------------
 
 /**
- * Launcher modal for "Mason: Run script…".
- *
- * Lists only scripts whose current LifecycleState is "Active". Selecting one
- * delegates execution to commandManager.runScript(), which reuses CommandManager's
- * existing _invokeScript effects wiring (applyPlan/rawFallback/notify).
+ * Launcher modal for "Mason: Run script…". Lists the runnable scripts it is
+ * given (the caller filters to Active) with fuzzy search; selecting one calls
+ * onChoose, which runs it via CommandManager.runScript.
  */
-export class RunScriptModal extends Modal {
-	private readonly _store: Pick<ScriptStore, "getScripts">;
-	private readonly _commandManager: RunScriptModalCommandManager;
-	private readonly _getState: StateResolver;
-	private readonly _resolveScriptFn: ScriptFnResolver;
-	private readonly _editor: Editor;
+export class RunScriptModal extends FuzzySuggestModal<RunScriptEntry> {
+	private readonly _entries: RunScriptEntry[];
+	private readonly _onChoose: RunScriptChoose;
 
-	constructor(
-		app: App,
-		store: Pick<ScriptStore, "getScripts">,
-		commandManager: RunScriptModalCommandManager,
-		getState: StateResolver,
-		resolveScriptFn: ScriptFnResolver,
-		editor: Editor,
-	) {
+	constructor(app: App, entries: RunScriptEntry[], onChoose: RunScriptChoose) {
 		super(app);
-		this._store = store;
-		this._commandManager = commandManager;
-		this._getState = getState;
-		this._resolveScriptFn = resolveScriptFn;
-		this._editor = editor;
+		this._entries = entries;
+		this._onChoose = onChoose;
+		this.setPlaceholder("Search scripts to run…");
+		this.emptyStateText = "No active scripts. Enable and consent to a script in the Scripts tab first.";
 	}
 
-	onOpen(): void {
-		// Set title synchronously (visible immediately)
-		if (this.titleEl !== undefined) {
-			this.titleEl.setText("Run script");
-		}
-
-		this.contentEl.empty();
-
-		// Async content fill — tests drain with await Promise.resolve()
-		void this._loadContent();
+	getItems(): RunScriptEntry[] {
+		return this._entries;
 	}
 
-	onClose(): void {
-		this.contentEl.empty();
+	/** Fuzzy match against both the name and the description. */
+	getItemText(entry: RunScriptEntry): string {
+		return entry.description ? `${entry.name} ${entry.description}` : entry.name;
 	}
 
-	// -------------------------------------------------------------------------
-	// Private helpers
-	// -------------------------------------------------------------------------
-
-	private async _loadContent(): Promise<void> {
-		const scripts = await this._store.getScripts();
-
-		// Filter to only Active scripts
-		const active = Object.entries(scripts).filter(
-			([id]) => this._getState(id).kind === "Active",
-		);
-
-		this.contentEl.empty();
-
-		if (active.length === 0) {
-			this.contentEl.createEl("p", {
-				text: "No active scripts. Enable and consent to a script in the Scripts tab first.",
-				cls: "mason-run-empty",
-			});
-			return;
-		}
-
-		const list = this.contentEl.createDiv({ cls: "mason-run-list" });
-
-		for (const [id] of active) {
-			this._renderItem(list, id);
+	/** Card-style suggestion: name as the header, description beneath. */
+	renderSuggestion(match: FuzzyMatch<RunScriptEntry>, el: HTMLElement): void {
+		const entry = match.item;
+		el.addClass("mason-run-suggestion");
+		el.createEl("div", { text: entry.name, cls: "mason-run-suggestion-name" });
+		if (entry.description.length > 0) {
+			el.createEl("div", { text: entry.description, cls: "mason-run-suggestion-desc" });
 		}
 	}
 
-	private _renderItem(parent: HTMLElement, id: string): void {
-		const btn = parent.createEl("button", {
-			text: id,
-			cls: "mason-run-item",
-		});
-		btn.setAttribute("type", "button");
-		btn.addEventListener("click", () => {
-			this.close();
-			void this._runScript(id);
-		});
-	}
-
-	private async _runScript(id: string): Promise<void> {
-		// P5: resolveScriptFn returns a placeholder until real module loader exists
-		const fn = this._resolveScriptFn(id);
-		await this._commandManager.runScript(id, id, fn, this._getState, this._editor);
+	onChooseItem(entry: RunScriptEntry): void {
+		void this._onChoose(entry);
 	}
 }

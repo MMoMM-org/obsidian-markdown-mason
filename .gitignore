@@ -58,3 +58,6 @@ test/mason/
 
 # Visual companion brainstorm scratch (tcs-workflow)
 .brainstorm/
+
+# Session checkpoint (context-bridge)
+.claude/.session-checkpoint.md

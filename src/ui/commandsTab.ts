@@ -105,26 +105,45 @@ function _renderScriptRow(
 	resolveScriptFn: ScriptFnResolver,
 	getState: StateResolver,
 ): void {
+	// Effective command label = the user's chosen name, else the script id.
+	const effectiveName = (rec: ScriptRecord): string => (rec.commandName ?? "").trim() || id;
+
 	new Setting(containerEl)
 		.setName(id)
-		.setDesc("Bind keys in core hotkeys after enabling.")
+		.setDesc("Name the command, toggle to create it, then bind keys in core hotkeys.")
+		// Editable command name. Empty → the script id is used. Changing it while a
+		// command exists re-registers so the palette / Hotkeys label updates live.
+		.addText((text) => {
+			text
+				.setPlaceholder(id)
+				.setValue(record.commandName ?? "")
+				.onChange(async (value) => {
+					const existing = (await store.getScripts())[id];
+					if (existing === undefined) return;
+					const trimmed = value.trim();
+					const next: ScriptRecord = { ...existing };
+					if (trimmed.length > 0) next.commandName = trimmed;
+					else delete next.commandName;
+					await store.setRecord(id, next);
+					// Re-register live only if a command is currently active.
+					if (existing.command) {
+						commandManager.register(id, effectiveName(next), resolveScriptFn(id), getState);
+					}
+				});
+		})
 		.addToggle((toggle) => {
 			toggle
 				.setValue(record.command)
 				.onChange(async (on) => {
+					const existing = (await store.getScripts())[id];
 					if (on) {
-						// P5: resolveScriptFn returns a placeholder until real module loader exists
-						const fn = resolveScriptFn(id);
-						commandManager.register(id, id, fn, getState);
-						const scripts = await store.getScripts();
-						const existing = scripts[id];
+						const name = existing !== undefined ? effectiveName(existing) : id;
+						commandManager.register(id, name, resolveScriptFn(id), getState);
 						if (existing !== undefined) {
 							await store.setRecord(id, { ...existing, command: true });
 						}
 					} else {
 						commandManager.unregister(id);
-						const scripts = await store.getScripts();
-						const existing = scripts[id];
 						if (existing !== undefined) {
 							await store.setRecord(id, { ...existing, command: false });
 						}

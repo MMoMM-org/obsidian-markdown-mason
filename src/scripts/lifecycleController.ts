@@ -34,6 +34,8 @@ import type { ScriptInfo } from "./disclosure";
 import { materialize } from "./materializer";
 import type { MaterializeReason } from "./materializer";
 import { sha256Bytes } from "./checksum";
+import { extractScriptDescription } from "./loader";
+import { debug } from "../core/debug";
 import { RAW_BASE, PINNED_REF } from "./catalog/pinnedRef";
 import type { CatalogSource, CatalogEntry } from "./catalog/catalogSource";
 import type { FingerprintStore } from "./materializedFingerprint";
@@ -80,6 +82,14 @@ export interface LifecycleControllerDeps {
 	pickCjsFile?: (paths: string[]) => Promise<string | null>;
 	/** Unregister the script's Obsidian command (in-memory only, no persistence). */
 	unregisterCommand?: (id: string) => void;
+	/**
+	 * Re-register the script's Obsidian command with a FRESH module + state snapshot.
+	 * Called after a successful (re)materialize so a command that was bound to an old
+	 * module (or registered with a frozen non-Active state) picks up the new code and
+	 * becomes runnable again — without a plugin reload. No-op when the script has no
+	 * command (command:false). Optional: omitted by tests that don't exercise commands.
+	 */
+	reRegisterCommand?: (id: string) => void | Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -121,16 +131,22 @@ export class LifecycleController {
 	 */
 	async enable(id: string): Promise<void> {
 		const rec = (await this._d.store.getScripts())[id];
-		if (rec === undefined) { this._d.rerender(); return; }
+		if (rec === undefined) {
+			debug("[MarkdownMason] enable: no record for", id, "— nothing to enable");
+			this._d.rerender();
+			return;
+		}
 
 		const identity = await this._resolveIdentity(id, rec);
 		if (identity === null) {
+			debug("[MarkdownMason] enable: could not resolve identity for", id, "(source:", rec.source, ")");
 			new Notice("Mason: could not load the script to enable.");
 			this._d.rerender();
 			return;
 		}
 
 		const consented = this._isConsented(rec, identity);
+		debug("[MarkdownMason] enable:", id, "consented=", consented);
 		if (consented) {
 			await this._commitEnable(id, rec, identity);
 			this._d.rerender();
@@ -142,7 +158,9 @@ export class LifecycleController {
 			fileSizeBytes: identity.fileSizeBytes,
 			version: identity.version,
 			checksum: identity.checksum,
+			description: identity.description,
 		});
+		debug("[MarkdownMason] enable:", id, "disclosure decision=", decision);
 
 		if (decision === "enable-session") {
 			await this._commitEnable(id, rec, identity);
@@ -178,6 +196,7 @@ export class LifecycleController {
 		const result = await this._materialize(id, rec);
 		if (result.ok) {
 			await this._d.fingerprints.setVersion(id, rec.okayed.version);
+			await this._d.reRegisterCommand?.(id);
 		} else {
 			new Notice(`Mason: retry failed — ${reasonText(result.reason)}.`);
 		}
@@ -204,6 +223,7 @@ export class LifecycleController {
 			fileSizeBytes: await this._curatedSize(entry),
 			version: entry.version,
 			checksum: entry.checksum,
+			description: entry.description || rec.description,
 		});
 
 		if (decision === "enable-session") {
@@ -215,6 +235,7 @@ export class LifecycleController {
 			const result = await this._materialize(id, next);
 			if (result.ok) {
 				await this._d.fingerprints.setVersion(id, entry.version);
+				await this._d.reRegisterCommand?.(id);
 			} else {
 				new Notice(`Mason: update failed — ${reasonText(result.reason)}.`);
 			}
@@ -240,6 +261,7 @@ export class LifecycleController {
 			fileSizeBytes: 0,
 			version: rec.okayed.version,
 			checksum: rec.okayed.checksum,
+			description: rec.description,
 		};
 
 		const decision = await this._ask({
@@ -247,6 +269,7 @@ export class LifecycleController {
 			fileSizeBytes: info.fileSizeBytes,
 			version: rec.okayed.version,
 			checksum: rec.okayed.checksum,
+			description: info.description,
 		});
 
 		if (decision === "enable-session") {
@@ -309,13 +332,46 @@ export class LifecycleController {
 		}
 	}
 
+	/**
+	 * Install a curated entry chosen in the Browse-official modal.
+	 *
+	 * Browse-official lists CATALOG entries — most have no stored record yet, and
+	 * enable() silently no-ops on a missing record. So create the curated record
+	 * first (source = the catalog path, for display/view-source), THEN run the
+	 * shared enable (disclosure → materialize) flow. This mirrors importFromVault()
+	 * on the curated side.
+	 */
+	async enableOfficial(id: string): Promise<void> {
+		const existing = (await this._d.store.getScripts())[id];
+		if (existing === undefined) {
+			const entry = await this._catalogEntry(id);
+			if (entry === null) {
+				new Notice("Mason: could not reach the official catalog.");
+				this._d.rerender();
+				return;
+			}
+			const rec: ScriptRecord = {
+				provenance: "curated",
+				enabled: false,
+				okayed: null,
+				source: entry.path,
+				command: false,
+				...(entry.description ? { description: entry.description } : {}),
+			};
+			await this._d.store.setRecord(id, rec);
+		}
+		await this.enable(id);
+	}
+
 	// -------------------------------------------------------------------------
 	// importFromVault — pick a .cjs → create imported record → enable flow
 	// -------------------------------------------------------------------------
 
 	async importFromVault(): Promise<void> {
 		const candidates = await this._listCjs();
+		debug("[MarkdownMason] importFromVault: candidates", candidates.length, candidates);
 		const picked = await this._pickCjs(candidates);
+		debug("[MarkdownMason] importFromVault: picked", picked);
 		if (picked === null) {
 			// Cancelled — nothing to do (no coming-soon stub).
 			this._d.rerender();
@@ -327,6 +383,7 @@ export class LifecycleController {
 		// Collision guard: refuse to silently overwrite an existing record.
 		const existing = (await this._d.store.getScripts())[id];
 		if (existing !== undefined) {
+			debug("[MarkdownMason] importFromVault: id collision", id);
 			new Notice(`Mason: a script named "${id}" already exists — rename the file or remove the existing one first.`);
 			this._d.rerender();
 			return;
@@ -339,7 +396,12 @@ export class LifecycleController {
 			source: picked,
 			command: false,
 		};
+		// Best-effort: surface a "// description:" header the user wrote in the
+		// script. Parsed from source text — no execution before consent.
+		const description = await this._readDescription(picked);
+		if (description !== undefined) rec.description = description;
 		await this._d.store.setRecord(id, rec);
+		debug("[MarkdownMason] importFromVault: created imported record", id, "→ running enable flow");
 
 		// Run the same disclosure → materialize flow as enable().
 		await this.enable(id);
@@ -365,8 +427,10 @@ export class LifecycleController {
 		};
 		await this._d.store.setRecord(id, next);
 		const result = await this._materialize(id, next);
+		debug("[MarkdownMason] enable: materialize", id, result.ok ? "ok" : `failed (${result.reason})`);
 		if (result.ok) {
 			await this._d.fingerprints.setVersion(id, identity.version);
+			await this._d.reRegisterCommand?.(id);
 		} else {
 			new Notice(`Mason: could not install the script — ${reasonText(result.reason)}.`);
 		}
@@ -394,6 +458,7 @@ export class LifecycleController {
 				checksum: entry.checksum,
 				fileSizeBytes: await this._curatedSize(entry),
 				vaultRelativePath: entry.path,
+				description: entry.description || rec.description,
 			};
 		}
 		// Imported: read the vault source bytes for size + checksum.
@@ -405,9 +470,25 @@ export class LifecycleController {
 				checksum: sha256Bytes(bytes),
 				fileSizeBytes: bytes.byteLength,
 				vaultRelativePath: rec.source,
+				// Prefer the live header (may have changed) over the stored copy.
+				description: extractScriptDescription(new TextDecoder().decode(bytes)) ?? rec.description,
 			};
 		} catch {
 			return null;
+		}
+	}
+
+	/**
+	 * Best-effort read of a "// description:" header from a vault script source.
+	 * Returns undefined when the file can't be read or declares no description.
+	 */
+	private async _readDescription(vaultPath: string): Promise<string | undefined> {
+		try {
+			const buf = await this._d.vault.readBinary(vaultPath);
+			const text = new TextDecoder().decode(new Uint8Array(buf));
+			return extractScriptDescription(text);
+		} catch {
+			return undefined;
 		}
 	}
 
@@ -450,7 +531,7 @@ export class LifecycleController {
 				await this._d.vault.remove(path);
 			}
 		} catch (err: unknown) {
-			console.debug("[MarkdownMason] could not delete materialized script:", err);
+			debug("[MarkdownMason] could not delete materialized script:", err);
 		}
 	}
 
@@ -486,6 +567,7 @@ interface ResolvedIdentity {
 	checksum: string;
 	fileSizeBytes: number;
 	vaultRelativePath: string;
+	description?: string;
 }
 
 /** Sentence-case human reason for a materialize failure. */

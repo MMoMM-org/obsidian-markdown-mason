@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { cascade, normalize } from "../../src/core/headings";
+import { cascade, cascadeOrInsert, normalize } from "../../src/core/headings";
 import type { OperationContext } from "../../src/core/types";
 
 // ---------------------------------------------------------------------------
@@ -214,6 +214,87 @@ describe("cascade — no headings in input", () => {
 	it("returns noContextHeading=false (context heading exists; input simply has none)", () => {
 		const result = cascade(ctx);
 		expect(result.noContextHeading).toBe(false);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// cascadeOrInsert — never drops the body (paste safety)
+// ---------------------------------------------------------------------------
+
+describe("cascadeOrInsert — never drops the body", () => {
+	it("blank note (no heading above cursor): inserts the body verbatim at the cursor", () => {
+		const input = "# Title\n\nContent.\n";
+		const ctx = makeCtx({ doc: "", cursor: 0, input });
+		// cascade() alone would return an empty plan here (the data-loss bug).
+		expect(cascade(ctx).plan).toHaveLength(0);
+		const plan = cascadeOrInsert(ctx);
+		expect(plan).toEqual([{ from: 0, to: 0, insert: input }]);
+	});
+
+	it("input has no headings but a context heading exists: still inserts verbatim", () => {
+		const doc = "## Section\n\n";
+		const input = "Just plain prose.\n";
+		const ctx = makeCtx({ doc, cursor: doc.length, input });
+		expect(cascade(ctx).plan).toHaveLength(0);
+		expect(cascadeOrInsert(ctx)).toEqual([{ from: doc.length, to: doc.length, insert: input }]);
+	});
+
+	it("context heading present + input headings: delegates to cascade (shifted insert)", () => {
+		const doc = "## Section\n\n";
+		const input = "# Title\n\nContent.\n";
+		const ctx = makeCtx({ doc, cursor: doc.length, input });
+		expect(cascadeOrInsert(ctx)).toEqual(cascade(ctx).plan);
+	});
+
+	it("genuinely nothing to insert (empty input): returns an empty plan", () => {
+		const ctx = makeCtx({ doc: "", cursor: 0, input: "" });
+		expect(cascadeOrInsert(ctx)).toHaveLength(0);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// cascade / cascadeOrInsert — replaceRange (format-in-place / command path)
+//
+// When ctx.replaceRange is set, the body Edit REPLACES that range instead of
+// inserting at the cursor — so a paste-formatter run as a command on a selection
+// transforms the selected raw text in place rather than duplicating it.
+// ---------------------------------------------------------------------------
+
+describe("cascade — replaceRange replaces the selection instead of inserting at cursor", () => {
+	it("emits a replace Edit over replaceRange (cascaded body)", () => {
+		// "## Section\n\n" then the raw selection sits right after it.
+		const doc = "## Section\n\n# Raw\n\nbody\n";
+		const from = "## Section\n\n".length;
+		const to = doc.length;
+		const input = "# Raw\n\nbody\n";
+		const ctx = makeCtx({ doc, cursor: from, input, replaceRange: { from, to } });
+
+		const edit = cascade(ctx).plan[0];
+		expect(edit.from).toBe(from);
+		expect(edit.to).toBe(to); // a real range replacement, not a zero-width insert
+		// Shifted under "## Section" → "# Raw" becomes "### Raw".
+		expect(edit.insert).toContain("### Raw");
+	});
+
+	it("without replaceRange still inserts at the cursor (paste behaviour unchanged)", () => {
+		const doc = "## Section\n\n";
+		const input = "# Title\n\nContent.\n";
+		const ctx = makeCtx({ doc, cursor: doc.length, input });
+		const edit = cascade(ctx).plan[0];
+		expect(edit.from).toBe(doc.length);
+		expect(edit.to).toBe(doc.length); // zero-width insert
+	});
+});
+
+describe("cascadeOrInsert — replaceRange honoured in the verbatim fallback", () => {
+	it("no context heading: replaces the range verbatim (does not insert at cursor)", () => {
+		const input = "# Title\n\nContent.\n";
+		const doc = `${input}trailing`;
+		const to = input.length;
+		// Blank-ish context (cursor at 0, no heading above) → cascade empty → fallback.
+		const ctx = makeCtx({ doc, cursor: 0, input, replaceRange: { from: 0, to } });
+		expect(cascade(ctx).plan).toHaveLength(0);
+		expect(cascadeOrInsert(ctx)).toEqual([{ from: 0, to, insert: input }]);
 	});
 });
 

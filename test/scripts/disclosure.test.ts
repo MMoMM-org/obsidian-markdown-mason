@@ -89,6 +89,39 @@ function pressEscape(modal: ScriptDisclosureModal): void {
 }
 
 // ---------------------------------------------------------------------------
+// Description rendering
+// ---------------------------------------------------------------------------
+
+describe("ScriptDisclosureModal — description", () => {
+	it("renders the description text when provided", () => {
+		const modal = new ScriptDisclosureModal(new App() as never, {
+			vaultRelativePath: "scripts/my-script.cjs",
+			fileSizeBytes: 10,
+			version: 1,
+			checksum: "sha256:x",
+			description: "Prefix every heading with =>.",
+		});
+		modal.present();
+		expect(mockEl(modal)._collectText()).toContain("Prefix every heading with =>.");
+		modal.close();
+	});
+
+	it("omits the description element when none is provided", () => {
+		const modal = new ScriptDisclosureModal(new App() as never, {
+			vaultRelativePath: "scripts/my-script.cjs",
+			fileSizeBytes: 10,
+			version: 1,
+			checksum: "sha256:x",
+		});
+		modal.present();
+		// The meta lines still render; there is just no description line.
+		const text = mockEl(modal)._collectText();
+		expect(text).toContain("Version: 1");
+		modal.close();
+	});
+});
+
+// ---------------------------------------------------------------------------
 // (a) present() resolves for each button decision
 // ---------------------------------------------------------------------------
 

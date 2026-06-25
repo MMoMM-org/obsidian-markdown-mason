@@ -34,6 +34,11 @@ const copyToVault = {
 		build.onEnd(() => {
 			if (!existsSync(VAULT_PLUGIN_DIR)) return;
 			copyFileSync("main.js", `${VAULT_PLUGIN_DIR}/main.js`);
+			// styles.css is auto-loaded by Obsidian from the plugin root; copy it
+			// alongside main.js so the running vault always has current styling.
+			if (existsSync("styles.css")) {
+				copyFileSync("styles.css", `${VAULT_PLUGIN_DIR}/styles.css`);
+			}
 			writeDevManifest(VAULT_PLUGIN_DIR);
 			console.log(`  Copied build to ${VAULT_PLUGIN_DIR}/ (manifest dev-stamped)`);
 		});

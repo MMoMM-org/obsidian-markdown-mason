@@ -42,7 +42,7 @@
 import { evaluateState } from "./lifecycle";
 import type { EvaluateStateInput, LifecycleState } from "./lifecycle";
 import { sha256Bytes } from "./checksum";
-import type { CatalogIndex } from "./catalog/catalogSource";
+import type { CatalogIndex, CatalogEntry } from "./catalog/catalogSource";
 import type { CatalogSource } from "./catalog/catalogSource";
 import type { VaultAdapterPort } from "./runtime";
 import type { ScriptRecord } from "./store";
@@ -177,7 +177,7 @@ export class LifecycleResolver {
 	 */
 	async resolveItems(records: Record<string, ScriptRecord>): Promise<ScriptItem[]> {
 		// Pre-fetch catalog once so the cache is warm before per-entry delegation.
-		await this._fetchIndexCached();
+		const catalogResult = await this._fetchIndexCached();
 
 		const items: ScriptItem[] = [];
 
@@ -185,11 +185,12 @@ export class LifecycleResolver {
 			// Delegate to resolveInput — uses the already-cached index (no extra fetch).
 			const input = await this.resolveInput(id, record);
 			const state = evaluateState(input);
+			const catalogEntry = catalogResult.ok ? catalogResult.index.scripts[id] : undefined;
 
 			items.push({
 				id,
 				displayName: id,
-				description: `Source: ${record.source}`,
+				description: describeScript(record, catalogEntry),
 				record,
 				state,
 				version: record.okayed?.version ?? 0,
@@ -267,4 +268,24 @@ export class LifecycleResolver {
 
 		return { version, checksum };
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Module-private helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Pick the description shown in the Scripts list:
+ *   - curated  → the live catalog blurb (kept fresh), else the stored copy
+ *   - imported → the description captured from the script's header comment
+ *   - neither  → a "Source: <path>" fallback
+ */
+function describeScript(record: ScriptRecord, catalogEntry: CatalogEntry | undefined): string {
+	if (record.provenance === "curated" && catalogEntry?.description) {
+		return catalogEntry.description;
+	}
+	if (record.description !== undefined && record.description.length > 0) {
+		return record.description;
+	}
+	return `Source: ${record.source}`;
 }

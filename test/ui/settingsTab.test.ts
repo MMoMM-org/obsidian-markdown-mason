@@ -267,7 +267,7 @@ describe("MasonSettingTab — segment navigation", () => {
 		expect(debugSetting).toBeUndefined();
 	});
 
-	it("selecting the Commands segment shows a Commands heading and no General or Advanced controls", async () => {
+	it("selecting the Commands segment shows Commands controls and no General or Advanced controls", async () => {
 		const plugin = makePlugin();
 		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
 		clearCapturedSettings();
@@ -278,12 +278,20 @@ describe("MasonSettingTab — segment navigation", () => {
 
 		clearCapturedSettings();
 		commandsButton!._click();
+		// Commands renders asynchronously (getScripts + resolveItems).
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
 
 		const settings = capturedSettings() as unknown as CapturedSetting[];
 
-		// Commands heading must appear.
-		const commandsHeading = settings.find((s) => s.isHeading && s.name === "Commands");
-		expect(commandsHeading).toBeDefined();
+		// A Commands control for the enabled script must appear (per-script toggle row).
+		const commandRow = settings.find(
+			(s) => !s.isHeading && s.name === "perplexity-auto",
+		);
+		expect(commandRow).toBeDefined();
 
 		// resourcesName must NOT appear.
 		const resourcesSetting = settings.find(
@@ -316,10 +324,10 @@ describe("MasonSettingTab — segment navigation", () => {
 		await Promise.resolve();
 
 		const settings = capturedSettings() as unknown as CapturedSetting[];
+		const container = tab.containerEl as unknown as MockHTMLElement;
 
-		// Scripts heading must appear.
-		const scriptsHeading = settings.find((s) => s.isHeading && s.name === "Scripts");
-		expect(scriptsHeading).toBeDefined();
+		// Script cards must appear (rendered into the container, not as Setting rows).
+		expect(container._collectText()).toContain("perplexity-auto");
 
 		// resourcesName must NOT appear.
 		const resourcesSetting = settings.find(
@@ -330,38 +338,48 @@ describe("MasonSettingTab — segment navigation", () => {
 });
 
 // ---------------------------------------------------------------------------
-// SECTION HEADINGS
+// ACTIVE SEGMENT INDICATION
+//
+// The active section is conveyed by the tab itself (the mason-segment-active
+// class + aria-selected), NOT by a redundant bold section heading. These tests
+// lock in that contract: no setHeading() section headers, and exactly one
+// active tab at a time.
 // ---------------------------------------------------------------------------
 
-describe("MasonSettingTab — section headings", () => {
-	it("renders the General heading when General segment is active", async () => {
+describe("MasonSettingTab — active segment indication", () => {
+	it("marks the General tab active by default", async () => {
 		const plugin = makePlugin();
-		const settings = await renderTab(plugin);
+		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
+		await tab.display();
 
-		const headings = settings.filter((s) => s.isHeading).map((s) => s.name);
-		expect(headings).toContain("General");
+		const container = tab.containerEl as unknown as MockHTMLElement;
+		const general = container._findButtonByText("General");
+		expect(general).toBeDefined();
+		expect(general!._hasClass("mason-segment-active")).toBe(true);
+		expect(general!._attr("aria-selected")).toBe("true");
 	});
 
-	it("does not render the Advanced heading when General segment is active", async () => {
+	it("does not mark a non-active tab active", async () => {
 		const plugin = makePlugin();
-		const settings = await renderTab(plugin);
+		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
+		await tab.display();
 
-		const headings = settings.filter((s) => s.isHeading).map((s) => s.name);
-		expect(headings).not.toContain("Advanced");
+		const container = tab.containerEl as unknown as MockHTMLElement;
+		const advanced = container._findButtonByText("Advanced");
+		expect(advanced).toBeDefined();
+		expect(advanced!._hasClass("mason-segment-active")).toBe(false);
+		expect(advanced!._attr("aria-selected")).toBe("false");
 	});
 
-	it("all headings use setHeading() not a bare h2 tag", async () => {
+	it("renders no setHeading() section headings in any segment", async () => {
 		const plugin = makePlugin();
 		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
 		clearCapturedSettings();
 		await tab.display();
 
-		// Check each segment produces setHeading()-marked headings.
-		// Drain microtasks after each click so _rendering is false before the next click.
-		// Scripts and Commands both have async chains that need at least 5 ticks to fully
-		// flush (click → _selectSegment → _renderSegment → section renderer → getScripts).
-		// Using 5 ticks uniformly covers both async segments and all sync segments.
-		const allHeadings: string[] = [];
+		// Visit each segment. Drain microtasks after each click so _rendering is
+		// false before the next click. Scripts and Commands have async render
+		// chains that need several ticks to fully flush; 5 ticks covers all.
 		for (const label of ["General", "Scripts", "Commands", "Advanced"]) {
 			clearCapturedSettings();
 			const btn = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText(label);
@@ -371,17 +389,16 @@ describe("MasonSettingTab — section headings", () => {
 			await Promise.resolve();
 			await Promise.resolve();
 			await Promise.resolve();
+
 			const captured = capturedSettings() as unknown as CapturedSetting[];
-			const headings = captured.filter((s) => s.isHeading);
-			for (const h of headings) {
-				expect(h.isHeading).toBe(true);
-				allHeadings.push(h.name);
-			}
+			expect(captured.filter((s) => s.isHeading)).toHaveLength(0);
+
+			// Exactly one tab is marked active — the one we just clicked.
+			const buttons = (tab.containerEl as unknown as MockHTMLElement)._findAllButtons();
+			const active = buttons.filter((b) => b._hasClass("mason-segment-active"));
+			expect(active).toHaveLength(1);
+			expect(active[0]._text).toBe(label);
 		}
-		expect(allHeadings).toContain("General");
-		expect(allHeadings).toContain("Scripts");
-		expect(allHeadings).toContain("Commands");
-		expect(allHeadings).toContain("Advanced");
 	});
 });
 
@@ -508,11 +525,13 @@ describe("MasonSettingTab — Scripts section (card tab integration)", () => {
 		return { settings: capturedSettings() as unknown as CapturedSetting[], container };
 	}
 
-	it("renders the Scripts heading as a Setting heading", async () => {
+	it("renders the Scripts card tab with no redundant Setting heading", async () => {
 		const plugin = makePlugin();
-		const { settings } = await renderScriptsSegment(plugin);
-		const heading = settings.find((s) => s.isHeading && s.name === "Scripts");
-		expect(heading).toBeDefined();
+		const { settings, container } = await renderScriptsSegment(plugin);
+		// The active tab labels the section — there is no separate bold heading.
+		expect(settings.find((s) => s.isHeading && s.name === "Scripts")).toBeUndefined();
+		// The card tab still renders into the container.
+		expect(container._collectText()).toContain("perplexity-auto");
 	});
 
 	it("lists each installed script from the store as a card", async () => {
@@ -639,14 +658,15 @@ describe("MasonSettingTab — concurrent render guard", () => {
 		await Promise.resolve();
 		await Promise.resolve();
 
-		const settings = capturedSettings() as unknown as CapturedSetting[];
+		const container = tab.containerEl as unknown as MockHTMLElement;
 
-		// The Scripts heading must appear exactly once (no duplication, no blank).
-		const scriptsHeadings = settings.filter((s) => s.isHeading && s.name === "Scripts");
-		expect(scriptsHeadings).toHaveLength(1);
+		// The toolbar must appear exactly once (no duplication, no torn/blank tab).
+		// One render → one "Browse official" button; a torn double-render shows two.
+		const browseButtons = container._findAllButtons().filter((b) => b._text === "Browse official");
+		expect(browseButtons).toHaveLength(1);
 
-		// The container must be non-empty: at least one setting must be rendered.
-		expect(settings.length).toBeGreaterThan(0);
+		// The container must hold rendered script content.
+		expect(container._collectText()).toContain("perplexity-auto");
 	});
 
 	it("two synchronous lifecycle op toggles re-render exactly one valid Scripts view", async () => {
@@ -684,12 +704,11 @@ describe("MasonSettingTab — concurrent render guard", () => {
 		await Promise.resolve();
 		await Promise.resolve();
 
-		const settings = capturedSettings() as unknown as CapturedSetting[];
 		const container2 = tab.containerEl as unknown as MockHTMLElement;
 
-		// The Scripts heading must appear exactly once (no duplication, no blank).
-		const scriptsHeadings = settings.filter((s) => s.isHeading && s.name === "Scripts");
-		expect(scriptsHeadings).toHaveLength(1);
+		// The toolbar must appear exactly once (no duplication, no torn/blank tab).
+		const browseButtons = container2._findAllButtons().filter((b) => b._text === "Browse official");
+		expect(browseButtons).toHaveLength(1);
 
 		// Both script ids must still be present in the rendered container text.
 		const text = container2._collectText();
@@ -974,5 +993,85 @@ describe("MasonSettingTab — T6.2 lifecycle ops delegate to controller", () => 
 		await Promise.resolve();
 		await Promise.resolve();
 		expect(controller.listOfficial).toHaveBeenCalledOnce();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// SCRIPTS SEGMENT UPDATE BADGE
+//
+// The Scripts segment button carries a count badge for scripts in the
+// UpdateAvailable lifecycle state. The count is read from plugin.updatableScriptCount
+// (seeded by the plugin at startup) and refreshed in place whenever the Scripts
+// section resolves its items.
+// ---------------------------------------------------------------------------
+
+describe("MasonSettingTab — Scripts update badge", () => {
+	/** A fake resolver whose resolveItems yields the given per-id lifecycle states. */
+	function makeFakeResolver(states: Record<string, LifecycleState>): LifecycleResolver {
+		return {
+			resolveItems: vi.fn().mockImplementation((records: Record<string, unknown>) =>
+				Promise.resolve(
+					Object.keys(records).map((id) => ({
+						id,
+						displayName: id,
+						description: "",
+						record: records[id],
+						state: states[id] ?? { kind: "Disabled" },
+						version: 1,
+						provenance: "curated",
+						catalogVersion: undefined,
+					})),
+				),
+			),
+			clearCache: vi.fn(),
+		} as unknown as LifecycleResolver;
+	}
+
+	function scriptsButton(tab: InstanceType<typeof MasonSettingTab>): MockHTMLElement {
+		const container = tab.containerEl as unknown as MockHTMLElement;
+		return container._findButtonByText("Scripts")!;
+	}
+
+	it("renders the count on the Scripts segment when updatableScriptCount > 0", async () => {
+		const plugin = makePlugin();
+		(plugin as unknown as { updatableScriptCount: number }).updatableScriptCount = 2;
+
+		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
+		await tab.display();
+
+		// Default tab is General; the badge still renders from the cached count.
+		expect(scriptsButton(tab)._collectText()).toContain("2");
+	});
+
+	it("renders no count digits when updatableScriptCount is 0", async () => {
+		const plugin = makePlugin();
+		(plugin as unknown as { updatableScriptCount: number }).updatableScriptCount = 0;
+
+		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
+		await tab.display();
+
+		expect(scriptsButton(tab)._collectText()).not.toMatch(/\d/);
+	});
+
+	it("refreshes the count from resolved items when the Scripts tab renders", async () => {
+		// perplexity-auto is UpdateAvailable; perplexity-web is Active → count should be 1.
+		const resolver = makeFakeResolver({
+			"perplexity-auto": { kind: "UpdateAvailable" },
+			"perplexity-web": { kind: "Active" },
+		});
+		const plugin = makePlugin({ lifecycleResolver: resolver });
+
+		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
+		await tab.display();
+
+		scriptsButton(tab)._click();
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect((plugin as unknown as { updatableScriptCount: number }).updatableScriptCount).toBe(1);
+		expect(scriptsButton(tab)._collectText()).toContain("1");
 	});
 });
