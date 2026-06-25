@@ -47,9 +47,11 @@ export interface ScriptLogger {
  * The single argument passed to every user script.
  *
  * Fields:
- *   input  — clipboard text (paste) or selection text; empty string for command invocations
+ *   input  — the text to transform: clipboard text (paste) or the selected text
+ *            (selection / command on a selection). Empty string for a command run
+ *            with no selection.
  *   source — how this script was triggered; lets scripts branch on trigger type
- *   op     — full OperationContext: doc, cursor, selection?, input?, settings
+ *   op     — full OperationContext: doc, cursor, selection?, replaceRange?, input?, settings
  *   mason  — versioned mason.* API (headings, footnotes, util); version-gated
  *   logger — surface messages to the user; backed by console in default config
  */

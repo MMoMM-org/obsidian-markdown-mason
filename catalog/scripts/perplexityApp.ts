@@ -31,7 +31,8 @@
 // 3. fromCitations(pr) → EditPlan against pr.body; apply → bodyFC ([^n] form)
 // 4. resolveFootnoteIdentity(citedSources, []) → { idMap, newRefs }
 // 5. applyFootnoteInlineRename(bodyFC, idMap) → edits against bodyFC; apply → finalBody
-// 6. cascade with ctx.op.input = finalBody → one insert at cursor in doc
+// 6. cascade with ctx.op.input = finalBody → one placement in doc
+//    (insert at cursor, or replace-over-selection in command mode — see header)
 // 7. moveToResources(ctx.op, newRefDefinitions(newRefs)) → insert defs into Resources
 
 import type { ScriptContext, ScriptFunction } from "../../src/scripts/context";

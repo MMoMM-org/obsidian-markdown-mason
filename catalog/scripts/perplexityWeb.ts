@@ -31,7 +31,8 @@
 //    (fromCitations is app-only; web/download markers are not bare [n] patterns.)
 // 3. resolveFootnoteIdentity(pr.sources, []) → { idMap, newRefs }
 // 4. applyFootnoteInlineRename(bodyFC, idMap) → edits against bodyFC; apply → finalBody
-// 5. cascade with ctx.op.input = finalBody → one insert at cursor in doc
+// 5. cascade with ctx.op.input = finalBody → one placement in doc
+//    (insert at cursor, or replace-over-selection in command mode — see header)
 // 6. moveToResources(ctx.op, compactRefDefinitions(newRefs)) → insert single-line defs into Resources
 
 import type { ScriptContext, ScriptFunction } from "../../src/scripts/context";
