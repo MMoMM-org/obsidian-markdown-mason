@@ -1,36 +1,48 @@
 name: Release
 
-# Obsidian community plugin convention: version tags carry NO "v" prefix
-# (e.g. "0.0.1", not "v0.0.1"). The release tag must exactly equal the
-# `version` field in manifest.json.
+# Automated, commit-driven releases via semantic-release.
+#
+# Every push to main is analysed: a `fix:` commit cuts a patch, `feat:` a minor,
+# and a `BREAKING CHANGE:` a major. Commits of type chore/ci/docs/test/refactor
+# produce NO release. There is no manual tag step — the Conventional Commit
+# message is the release trigger, so a release can never be forgotten.
+#
+# When a release is warranted, semantic-release: computes the version, updates
+# CHANGELOG.md, runs `node version-bump.mjs && npm run build` (stamping
+# manifest.json + versions.json and producing the production main.js), commits
+# those files back to main with `[skip ci]`, tags the commit (no "v" prefix —
+# Obsidian convention), and publishes a GitHub Release with main.js,
+# manifest.json and styles.css. The bytes are then attested for provenance.
 on:
   push:
-    tags:
-      - "[0-9]+.[0-9]+.[0-9]+"
-      - "[0-9]+.[0-9]+.[0-9]+-*"
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Version tag to release (e.g. 0.0.1) — must match manifest.json version"
-        required: true
+    branches: [main]
 
 # Required for:
-#   contents: write   — create GitHub Release and upload assets
-#   id-token: write   — OIDC token for build-provenance attestation
+#   contents: write     — create the GitHub Release, push the release commit + tag
+#   issues / pull-requests: write — semantic-release success comments
+#   id-token: write     — OIDC token for build-provenance attestation
 #   attestations: write — store the attestation via actions/attest-build-provenance
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
   id-token: write
   attestations: write
 
 jobs:
   release:
-    name: Build, attest, and publish
+    name: Build, release, and attest
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # Full history so semantic-release can read tags + commits since the
+          # last release. persist-credentials:false hands credential control to
+          # semantic-release (it uses GITHUB_TOKEN for the push).
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -41,6 +53,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Pre-release gates: fail fast before semantic-release does anything.
       - name: Type-check and build
         run: npm run build
 
@@ -53,79 +66,22 @@ jobs:
       - name: Test (includes compliance sweep)
         run: npm test
 
-      # Resolve the release tag: prefer the git tag that triggered the push
-      # event; fall back to the workflow_dispatch input.
-      # INPUT_TAG is passed via env: to avoid interpolating an untrusted
-      # workflow_dispatch input directly into shell source (CI shell-injection).
-      # github.event_name is a GitHub-controlled enum — safe to inline.
-      - name: Resolve release tag
-        id: tag
+      # semantic-release reruns `node version-bump.mjs && npm run build` via its
+      # exec prepareCmd, so main.js / manifest.json / styles.css on disk carry
+      # the freshly-bumped version after this step.
+      - name: Release
         env:
-          INPUT_TAG: ${{ github.event.inputs.tag }}
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            TAG="${GITHUB_REF#refs/tags/}"
-          else
-            TAG="${INPUT_TAG}"
-          fi
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
 
-      # Guard: the tag must exactly match manifest.json version.
-      # TAG is passed via env: because steps.tag.outputs.tag derives from the
-      # tainted workflow_dispatch input — never interpolate it directly in shell.
-      - name: Verify tag matches manifest version
-        env:
-          TAG: ${{ steps.tag.outputs.tag }}
-        run: |
-          MANIFEST_VERSION=$(node -e "process.stdout.write(require('./manifest.json').version)")
-          if [ "$TAG" != "$MANIFEST_VERSION" ]; then
-            echo "::error::Tag ($TAG) does not match manifest.json version ($MANIFEST_VERSION)"
-            exit 1
-          fi
-          echo "Tag '${TAG}' matches manifest version. Proceeding."
-
-      # Attest build provenance for every release asset that ships in the plugin
-      # bundle. Obsidian's review checks each uploaded asset for an attestation —
-      # main.js (built by esbuild at the repo root) AND styles.css (tracked source
-      # shipped verbatim). manifest.json is metadata, not a built artifact, so it
-      # is not attested. subject-path takes a newline-separated list.
+      # Attest the exact bytes semantic-release uploaded. If no release was cut
+      # (chore/ci/docs commits), this still attests the pre-release build —
+      # harmless, since nothing was published. Verify with:
+      #   gh attestation verify main.js --owner MMoMM-org
       - name: Attest build provenance for release assets
-        id: attest
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
             main.js
             styles.css
-
-      # Collect release assets. styles.css is optional — only upload if it
-      # exists. softprops/action-gh-release expects a NEWLINE-separated list:
-      # a single space-separated string is parsed as one glob and matches
-      # nothing ("Pattern '...' does not match any files"), publishing an
-      # asset-less release. Emit a multiline GITHUB_OUTPUT value instead.
-      - name: Collect release assets
-        id: assets
-        run: |
-          {
-            echo "files<<EOF"
-            echo "main.js"
-            echo "manifest.json"
-            [ -f styles.css ] && echo "styles.css"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Create GitHub Release and upload assets
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          name: ${{ steps.tag.outputs.tag }}
-          body: |
-            Release ${{ steps.tag.outputs.tag }}
-
-            Build provenance attestations are attached. Verify with:
-            ```
-            gh attestation verify main.js --repo ${{ github.repository }}
-            gh attestation verify styles.css --repo ${{ github.repository }}
-            ```
-          files: ${{ steps.assets.outputs.files }}
-          draft: false
-          prerelease: false
+            manifest.json
