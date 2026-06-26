@@ -74,6 +74,20 @@ sandbox. Safety comes from policy, disclosure, and consent, in two tiers:
 
 To write your own, see **[docs/SCRIPT_AUTHORING.md](docs/SCRIPT_AUTHORING.md)**.
 
+### Permissions and data access
+
+Obsidian's automated review flags two capabilities this plugin uses. Both are
+intrinsic to its features and disclosed here so you know exactly what they do:
+
+- **Direct filesystem access** — Mason stores and runs its script library as real
+  files in the plugin folder, using Node's `fs` module rather than the vault API.
+  This is why the plugin is **desktop-only**: it can read and write files on the
+  device outside the vault. Script execution is consent-gated (see above), and the
+  reviewed official library is limited to editing Markdown in the current note.
+- **Clipboard access** — the **Paste and format** command reads the system
+  clipboard to reshape what you paste. Content copied from outside Obsidian passes
+  through the plugin only when you invoke that command; nothing is sent anywhere.
+
 ## Support
 
 If you find Markdown Mason useful, you can support development via

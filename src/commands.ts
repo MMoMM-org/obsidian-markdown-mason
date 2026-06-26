@@ -154,7 +154,7 @@ function cascadeSelectionPlan(
 	// Remap insert-at-cursor → replace-over-selection.
 	// ctx.selection is always set by selectionContext; non-null assertion is safe here.
 	const sel = ctx.selection!;
-	const transformedText = result.plan[0]!.insert;
+	const transformedText = result.plan[0].insert;
 	const replacePlan: Edit[] = [{ from: sel.from, to: sel.to, insert: transformedText }];
 	return { plan: replacePlan, noContextHeading: false };
 }
@@ -318,14 +318,24 @@ function fusedFormatNote(editor: Editor, settings: MasonSettings): EditPlan {
 // ---------------------------------------------------------------------------
 
 /**
+ * Minimal host surface this module needs from the plugin: command registration
+ * plus the live settings. Declaring `settings` here (rather than via `Plugin &
+ * { settings }`) keeps the access resolving to Mason's own field instead of the
+ * official `Plugin.settings` slot — that slot only exists in Obsidian ≥1.13.0
+ * (Catalyst beta), and depending on it would force minAppVersion past stable.
+ */
+interface CommandHost {
+	addCommand: Plugin["addCommand"];
+	settings: MasonSettings;
+}
+
+/**
  * Registers all Mason commands via plugin.addCommand.
  *
  * Called from MarkdownMasonPlugin.onLayoutReady() once the workspace is ready.
  * Presets are registered first (SDD: presets registered first).
  */
-export function registerCommands(
-	plugin: Plugin & { settings: MasonSettings },
-): void {
+export function registerCommands(plugin: CommandHost): void {
 	const { entries } = buildRegistry();
 
 	// -------------------------------------------------------------------------

@@ -21,7 +21,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import esbuild from "esbuild";
-import builtins from "builtin-modules";
+import { builtinModules } from "node:module";
 
 // The unique marker string embedded in src/scripts/catalog/devDirAdapter.ts.
 // If prod bundle contains this string, DCE failed — the dev path was NOT removed.
@@ -71,7 +71,8 @@ async function buildBundle(opts: {
 			"electron",
 			"@codemirror/*",
 			"@lezer/*",
-			...builtins,
+			...builtinModules,
+			...builtinModules.map((m) => `node:${m}`),
 		],
 		outfile: opts.outfile,
 		define: {

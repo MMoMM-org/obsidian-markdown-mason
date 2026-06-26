@@ -141,7 +141,7 @@ export class ScriptStore {
 		if (raw === null || typeof raw !== "object") {
 			return {};
 		}
-		return raw as PluginData;
+		return raw;
 	}
 }
 

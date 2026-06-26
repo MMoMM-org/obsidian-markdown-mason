@@ -1,5 +1,5 @@
 import esbuild from "esbuild";
-import builtins from "builtin-modules";
+import { builtinModules } from "node:module";
 import { copyFileSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 
 const isProd = process.argv[2] === "production";
@@ -64,7 +64,8 @@ const context = await esbuild.context({
 		"electron",
 		"@codemirror/*",
 		"@lezer/*",
-		...builtins,
+		...builtinModules,
+		...builtinModules.map((m) => `node:${m}`),
 	],
 	outfile: "main.js",
 	plugins: [copyToVault],
