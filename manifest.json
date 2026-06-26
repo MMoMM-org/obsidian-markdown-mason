@@ -1,7 +1,7 @@
 {
 	"id": "markdown-mason",
 	"name": "Markdown Mason",
-	"version": "0.1.1",
+	"version": "0.2.0",
 	"minAppVersion": "1.7.2",
 	"description": "Reshape pasted or whole-note Markdown to fit a note's structure — heading cascade, footnote renumbering and dedup — plus a runnable, consent-gated script library.",
 	"author": "Marcus Breiden",

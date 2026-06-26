@@ -1,3 +1,10 @@
+# [0.2.0](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.1.1...0.2.0) (2026-06-26)
+
+
+### Features
+
+* **footnotes:** Resources section at any heading level ([7dffab4](https://github.com/MMoMM-org/obsidian-markdown-mason/commit/7dffab47ddc76420014bb9dd866102c97562f733))
+
 # Changelog
 
 All notable changes to this project are documented here. From 0.2.0 onward this
