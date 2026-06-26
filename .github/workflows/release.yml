@@ -36,7 +36,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           # Full history so semantic-release can read tags + commits since the
           # last release. persist-credentials:false hands credential control to
@@ -45,9 +45,10 @@ jobs:
           persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          # semantic-release 25 requires Node ^22.14 || >=24.10.
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
@@ -79,7 +80,7 @@ jobs:
       # harmless, since nothing was published. Verify with:
       #   gh attestation verify main.js --owner MMoMM-org
       - name: Attest build provenance for release assets
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             main.js
