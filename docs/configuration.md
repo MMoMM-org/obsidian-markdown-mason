@@ -17,6 +17,8 @@ to the plugin). The settings are organised into four segments:
   on demand.
 - **Advanced** — Debug logging.
 
+![Markdown Mason General settings tab: the Resources section heading field (default ## Resources), Show update notes, and Numeric-only footnotes](../assets/settings-general.png)
+
 Your choices are stored in the plugin's `data.json` file
 (`<vault>/.obsidian/plugins/markdown-mason/data.json`), alongside the script library. You
 should not normally need to edit this file directly — use the settings tab instead.
