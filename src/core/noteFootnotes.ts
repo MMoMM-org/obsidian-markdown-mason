@@ -55,6 +55,11 @@
 import type { EditPlan, OperationContext } from "./types";
 import { applyToString } from "./applyToString";
 import { normalizeUrl } from "./url";
+import {
+	resourcesSectionName,
+	resourcesCreateHeading,
+	findResourcesSectionByName,
+} from "./resourcesHeading";
 
 // ---------------------------------------------------------------------------
 // Public types returned by parseNoteFootnotes
@@ -298,35 +303,10 @@ function isInDefLine(offset: number, defRanges: Range[]): boolean {
 // ---------------------------------------------------------------------------
 
 function findResourcesSection(lines: string[], resourcesName: string, docLength: number): NoteResourcesSection | null {
-	const headingLine = `## ${resourcesName}`;
-	let inSection = false;
-	let sectionFrom = 0;
-	let offset = 0;
-
-	for (let i = 0; i < lines.length; i++) {
-		const line = lines[i];
-		const lineLen = line.length + 1;
-
-		if (!inSection) {
-			if (line === headingLine) {
-				inSection = true;
-				sectionFrom = offset;
-			}
-			offset += lineLen;
-			continue;
-		}
-
-		// Inside section: stop at next ## heading
-		if (line.startsWith("## ") && line !== headingLine) {
-			return { from: sectionFrom, to: offset };
-		}
-
-		offset += lineLen;
-	}
-
-	if (!inSection) return null;
-
-	return { from: sectionFrom, to: Math.min(offset, docLength) };
+	// Name-based, level-agnostic: an existing section with this name is adopted
+	// at whatever heading level it already has (see resourcesHeading.ts).
+	const section = findResourcesSectionByName(lines, resourcesSectionName(resourcesName), docLength);
+	return section === null ? null : { from: section.from, to: section.to };
 }
 
 // ---------------------------------------------------------------------------
@@ -544,8 +524,10 @@ export function wholeNoteMove(ctx: OperationContext): EditPlan {
 		plan.push({ from: def.from, to: def.to, insert: "" });
 	}
 
-	// Insert all defs into the Resources section (or create it).
-	const headingLine = `## ${settings.resourcesName}`;
+	// Insert all defs into the Resources section (or create it). When the section
+	// already exists, headingLine is unused (we insert at its end); when it does
+	// not, the configured heading — at the user's chosen level — is created.
+	const headingLine = resourcesCreateHeading(settings.resourcesName);
 	const insertOffset = parse.resourcesSection
 		? findSectionInsertOffset(doc, headingLine, parse.resourcesSection)
 		: null;

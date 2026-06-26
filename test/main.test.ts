@@ -41,8 +41,8 @@ describe("MarkdownMasonPlugin", () => {
 			expect(DEFAULT_SETTINGS.debugLogging).toBe(false);
 		});
 
-		it("has resourcesName defaulting to 'Resources'", () => {
-			expect(DEFAULT_SETTINGS.resourcesName).toBe("Resources");
+		it("has resourcesName defaulting to the level-2 '## Resources' heading", () => {
+			expect(DEFAULT_SETTINGS.resourcesName).toBe("## Resources");
 		});
 	});
 

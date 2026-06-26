@@ -7,7 +7,12 @@
 export interface MasonSettings {
 	/** Enable verbose console.debug traces. Off by default. */
 	debugLogging: boolean;
-	/** Folder name used as a Resources section when building heading cascades. */
+	/**
+	 * Heading where "Tidy / Move footnotes" collects footnote definitions. Carries
+	 * an optional ATX level prefix (e.g. "## Resources", "### Resources") so the
+	 * user controls the heading level. An existing section with this name is reused
+	 * at whatever level it already has. See core/resourcesHeading.ts.
+	 */
 	resourcesName: string;
 	/**
 	 * When true (default), only numeric footnote references are processed;
@@ -47,7 +52,7 @@ export interface MasonSettings {
 
 export const DEFAULT_SETTINGS: MasonSettings = {
 	debugLogging: false,
-	resourcesName: "Resources",
+	resourcesName: "## Resources",
 	numericOnly: true,
 	showUpdateSplash: true,
 	lastSeenVersion: "",

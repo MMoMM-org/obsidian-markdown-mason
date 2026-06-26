@@ -17,6 +17,8 @@ Out of the box, no scripts are active. Enable one, then run it:
 4. Run it from the command palette: **Markdown Mason: Paste and format** formats whatever is on your
    clipboard, or **Markdown Mason: Run script…** lets you pick an Active script to run.
 
+![Markdown Mason Scripts settings tab listing official and imported scripts with their state, version, and enable toggles](../assets/settings-scripts.png)
+
 ## Common workflows
 
 - **Paste and format from the clipboard.** Copy text (e.g. a Perplexity answer), place your

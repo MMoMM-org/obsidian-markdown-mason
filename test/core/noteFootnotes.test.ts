@@ -491,6 +491,66 @@ describe("wholeNoteMove — moves scattered defs into ## Resources", () => {
 });
 
 // ---------------------------------------------------------------------------
+// wholeNoteMove — Resources section at any heading level (Hybrid)
+// ---------------------------------------------------------------------------
+
+describe("wholeNoteMove — adopts existing section at any level, creates at configured level", () => {
+	it("adopts an existing ### Resources (H3) section instead of creating a new ## Resources", () => {
+		const doc =
+			"Text [^1] and [^2].\n\n[^1]: body snip\n[B](https://b.com)\n\n### Resources\n\n[^2]: existing\n[E](https://e.com)\n";
+		const ctx = makeCtx(doc); // default resourcesName "## Resources" → name "Resources"
+		const plan = wholeNoteMove(ctx);
+		const result = applyToString(doc, plan);
+
+		// Exactly one Resources heading, and it stays at H3 — no second H2 was created.
+		expect(result.match(/^#+ Resources$/gm)).toHaveLength(1);
+		expect(result).toMatch(/^### Resources$/m);
+		expect(result).not.toMatch(/^## Resources$/m);
+
+		// [^1] moved into the H3 section; [^2] preserved there.
+		const resourcesIdx = result.indexOf("### Resources");
+		const section = result.slice(resourcesIdx);
+		expect(section).toContain("[^1]: body snip");
+		expect(section).toContain("[^2]: existing");
+		expect(result.slice(0, resourcesIdx).match(/^\[\^1\]:/gm)).toBeNull();
+	});
+
+	it("creates the section at the user's configured level when none exists", () => {
+		const doc = "Text [^1].\n[^1]: snip\n[T](https://t.com)\n";
+		const ctx = makeCtx(doc, { resourcesName: "### Resources" });
+		const plan = wholeNoteMove(ctx);
+		const result = applyToString(doc, plan);
+
+		expect(result).toMatch(/^### Resources$/m);
+		expect(result).not.toMatch(/^## Resources$/m);
+		const headingIdx = result.indexOf("### Resources");
+		expect(result.indexOf("[^1]: snip")).toBeGreaterThan(headingIdx);
+	});
+
+	it("adopts a section at a shallower level (H1) too", () => {
+		const doc =
+			"Body [^1] [^2].\n\n[^1]: body\n[B](https://b.com)\n\n# Resources\n\n[^2]: kept\n[K](https://k.com)\n";
+		const ctx = makeCtx(doc);
+		const plan = wholeNoteMove(ctx);
+		const result = applyToString(doc, plan);
+
+		expect(result.match(/^#+ Resources$/gm)).toHaveLength(1);
+		expect(result).toMatch(/^# Resources$/m);
+		const section = result.slice(result.indexOf("# Resources"));
+		expect(section).toContain("[^1]: body");
+		expect(section).toContain("[^2]: kept");
+	});
+
+	it("tolerates a bare-name setting (no '#') and creates a level-2 section", () => {
+		const doc = "Text [^1].\n[^1]: snip\n[T](https://t.com)\n";
+		const ctx = makeCtx(doc, { resourcesName: "Resources" });
+		const plan = wholeNoteMove(ctx);
+		const result = applyToString(doc, plan);
+		expect(result).toMatch(/^## Resources$/m);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // tidyFootnotes — C → O+D → M composed as one plan (Tidy Footnotes preset)
 // ---------------------------------------------------------------------------
 

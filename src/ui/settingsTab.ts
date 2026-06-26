@@ -227,12 +227,14 @@ export class MasonSettingTab extends PluginSettingTab {
 	/** Render the General section controls. The active tab labels the section. */
 	private _renderGeneralSection(containerEl: HTMLElement): void {
 		new Setting(containerEl)
-			.setName("Resources section name")
-			.setDesc("Folder name used as the Resources section in heading cascades.")
+			.setName("Resources section heading")
+			.setDesc(
+				"Heading where Tidy footnotes collects footnote definitions. Set the level with leading #'s — e.g. ### Resources for a level-3 section. An existing section with this name is reused at its current level.",
+			)
 			.addText((text) => {
 				text
 					.setValue(this._plugin.settings.resourcesName)
-					.setPlaceholder("Resources")
+					.setPlaceholder("## Resources")
 					.onChange(async (value) => {
 						this._plugin.settings.resourcesName = value;
 						await this._plugin.saveSettings();
