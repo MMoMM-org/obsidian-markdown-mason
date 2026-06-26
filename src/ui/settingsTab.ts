@@ -110,13 +110,16 @@ export class MasonSettingTab extends PluginSettingTab {
 	 * Clears containerEl first so repeated calls do not duplicate controls.
 	 * Renders the header, segment nav, then the active segment's content.
 	 */
-	override async display(): Promise<void> {
+	override display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
 
 		new HeaderSection({ manifest: this._plugin.manifest }).render(containerEl);
 		this._renderSegmentNav(containerEl);
-		await this._renderSegment(containerEl, this._activeSegment);
+		// PluginSettingTab.display() is typed void and Obsidian never awaits it;
+		// fire-and-forget the async segment render (same pattern as the nav/segment
+		// switch handlers) so we don't surface a Promise where void is expected.
+		void this._renderSegment(containerEl, this._activeSegment);
 	}
 
 	// -------------------------------------------------------------------------

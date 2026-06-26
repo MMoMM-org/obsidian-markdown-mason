@@ -176,7 +176,7 @@ export class FsScriptLoader {
 		}
 		if (matches.length === 0) return null;
 
-		const absolutePath = path.join(absoluteDir, matches[0]!);
+		const absolutePath = path.join(absoluteDir, matches[0]);
 
 		// Fingerprint: soft-fail to undefined if stat throws.
 		let fingerprint: { size: number; mtimeMs: number } | undefined;
@@ -255,8 +255,8 @@ export function loadScriptModule(absolutePath: string, requireFn: RequireFn): Sc
 	let envelope: unknown;
 	if (isEnvelopeCandidate(mod) && "run" in mod) {
 		envelope = mod;
-	} else if (isEnvelopeCandidate(mod) && isEnvelopeCandidate((mod as Record<string, unknown>)["default"])) {
-		envelope = (mod as Record<string, unknown>)["default"];
+	} else if (isEnvelopeCandidate(mod) && isEnvelopeCandidate(mod["default"])) {
+		envelope = mod["default"];
 	} else {
 		envelope = mod;
 	}
@@ -359,7 +359,7 @@ export function buildRequireFn(scriptsDir: string): RequireFn {
 		// Non-Electron environment or invalid path: return a stub that always throws.
 		const stub = (): never => { throw new Error("require unavailable"); };
 		(stub as unknown as RequireFn).resolve = (): never => { throw new Error("require unavailable"); };
-		(stub as unknown as RequireFn).cache = {} as Record<string, unknown>;
+		(stub as unknown as RequireFn).cache = {};
 		return stub as unknown as RequireFn;
 	}
 }

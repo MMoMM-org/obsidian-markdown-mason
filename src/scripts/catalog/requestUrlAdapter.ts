@@ -168,5 +168,5 @@ export class RequestUrlCatalogSource implements CatalogSource {
  * RequestUrlCatalogSource directly.
  */
 export function createCatalogSource(): CatalogSource {
-	return new RequestUrlCatalogSource(requestUrl as unknown as RequestUrlFn);
+	return new RequestUrlCatalogSource(requestUrl);
 }

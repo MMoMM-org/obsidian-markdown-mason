@@ -184,7 +184,7 @@ export class MarkdownMasonPlugin extends Plugin {
 		this.store = new ScriptStore(pluginDataPort);
 		this.commandManager = new CommandManager(
 			{
-				addCommand: (spec) => this.addCommand(spec as Parameters<typeof this.addCommand>[0]),
+				addCommand: (spec) => this.addCommand(spec),
 				removeCommand: (fullId: string) => this.removeCommand(fullId),
 				pluginId: this.manifest.id,
 			},
@@ -522,7 +522,7 @@ export class MarkdownMasonPlugin extends Plugin {
 		// namespace) and potentially other keys. Overlay only the canonical settings
 		// fields onto the freshly-loaded blob so concurrent ScriptStore writes — e.g.
 		// a script enabled earlier this session — are never clobbered.
-		const persisted = await this.loadData();
+		const persisted: unknown = await this.loadData();
 		const base =
 			persisted !== null && typeof persisted === "object"
 				? (persisted as Record<string, unknown>)
@@ -808,7 +808,7 @@ export function pickSettingsFields(data: unknown): Partial<MasonSettings> {
 			if (rec[key] !== undefined) out[key] = rec[key];
 		}
 	}
-	return out as Partial<MasonSettings>;
+	return out;
 }
 
 /** Production clipboard reader — wraps navigator.clipboard (requires secure context). */

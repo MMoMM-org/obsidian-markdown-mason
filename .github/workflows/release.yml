@@ -84,14 +84,18 @@ jobs:
           fi
           echo "Tag '${TAG}' matches manifest version. Proceeding."
 
-      # Attest build provenance for main.js.
-      # Subject path must point to the built artifact at the repo root —
-      # esbuild outputs main.js directly there (not into dist/).
-      - name: Attest build provenance for main.js
+      # Attest build provenance for every release asset that ships in the plugin
+      # bundle. Obsidian's review checks each uploaded asset for an attestation —
+      # main.js (built by esbuild at the repo root) AND styles.css (tracked source
+      # shipped verbatim). manifest.json is metadata, not a built artifact, so it
+      # is not attested. subject-path takes a newline-separated list.
+      - name: Attest build provenance for release assets
         id: attest
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: main.js
+          subject-path: |
+            main.js
+            styles.css
 
       # Collect release assets. styles.css is optional — only upload if it
       # exists. softprops/action-gh-release expects a NEWLINE-separated list:
@@ -117,9 +121,10 @@ jobs:
           body: |
             Release ${{ steps.tag.outputs.tag }}
 
-            Build provenance attestation is attached. Verify with:
+            Build provenance attestations are attached. Verify with:
             ```
             gh attestation verify main.js --repo ${{ github.repository }}
+            gh attestation verify styles.css --repo ${{ github.repository }}
             ```
           files: ${{ steps.assets.outputs.files }}
           draft: false

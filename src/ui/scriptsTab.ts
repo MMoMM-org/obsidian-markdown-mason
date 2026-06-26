@@ -210,7 +210,7 @@ function renderToggle(parent: HTMLElement, item: ScriptItem, ops: LifecycleOps):
 	const toggle = parent.createEl("input", {
 		cls: "mason-script-toggle",
 		attr: { type: "checkbox", "aria-label": `Enable ${item.displayName}` },
-	}) as HTMLInputElement;
+	});
 	toggle.checked = on;
 	toggle.addEventListener("change", () => {
 		if (toggle.checked) {

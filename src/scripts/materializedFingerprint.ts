@@ -85,7 +85,7 @@ export class MaterializedFingerprintStore implements FingerprintStore {
 		try {
 			const buf = await this._vault.readBinary(this._manifestPath);
 			const text = new TextDecoder().decode(buf);
-			const parsed = JSON.parse(text);
+			const parsed: unknown = JSON.parse(text);
 			if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
 				return parsed as Record<string, number>;
 			}
