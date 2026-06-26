@@ -1,9 +1,11 @@
 # Commands Reference
 
-Markdown Mason contributes two built-in commands to the Obsidian command palette, plus one
-optional command per script you choose to expose. In the palette they all appear under the
-plugin name — search **Markdown Mason** (or just "Mason") to find them. None ship with a
+Markdown Mason contributes a set of built-in commands to the Obsidian command palette, plus
+one optional command per script you choose to expose. In the palette they all appear under
+the plugin name — search **Markdown Mason** (or just "Mason") to find them. None ship with a
 default hotkey; assign your own under Settings → Hotkeys.
+
+![Obsidian command palette filtered to "mason", listing the Markdown Mason commands](../assets/mason-commands.png)
 
 ## Commands
 
@@ -19,6 +21,8 @@ default hotkey; assign your own under Settings → Hotkeys.
   command (the script's id is used if you leave it blank), then toggle it on. Toggling off
   removes the command; renaming re-registers it so the palette and Hotkeys labels update
   immediately.
+
+  ![Markdown Mason Commands settings tab: a name field and toggle for each script to create a per-script command](../assets/settings-commands.png)
 - **No default hotkeys.** Assign keys for any command under Settings → Hotkeys (search
   "Mason") — Markdown Mason follows Obsidian's guidance against shipping default bindings.
 - **State is re-checked at run time.** A per-script command whose script is no longer Active

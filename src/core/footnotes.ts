@@ -60,6 +60,11 @@
 
 import type { Edit, EditPlan, FootnoteRef, ExistingRef, InlineMarker, ParseResult, OperationContext } from "./types";
 import { normalizeUrl } from "./url";
+import {
+	resourcesSectionName,
+	resourcesCreateHeading,
+	findResourcesSectionByName,
+} from "./resourcesHeading";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -418,63 +423,19 @@ export function moveToResources(ctx: OperationContext, defs: string[]): EditPlan
 	if (defs.length === 0) return [];
 
 	const { doc, settings } = ctx;
-	const headingLine = `## ${settings.resourcesName}`;
-	const insertOffset = findSectionInsertOffset(doc, headingLine);
+	// Adopt an existing section with this name at any level; otherwise create one
+	// at the user's configured heading level (see resourcesHeading.ts).
+	const section = findResourcesSectionByName(
+		doc.split("\n"),
+		resourcesSectionName(settings.resourcesName),
+		doc.length,
+	);
 
-	if (insertOffset === null) {
-		return [buildNoteEndInsert(doc, headingLine, defs)];
+	if (section === null) {
+		return [buildNoteEndInsert(doc, resourcesCreateHeading(settings.resourcesName), defs)];
 	}
 
-	return [buildSectionAppend(insertOffset, defs)];
-}
-
-/**
- * Find the offset in doc at which to insert new defs inside an existing
- * "## <headingLine>" section.  The insertion point is just before the next
- * "## " heading (or EOF if the section runs to the end).
- *
- * Only top-level "## " headings terminate the section scan.  Sub-headings
- * (###, ####, …) inside the Resources section are valid content and do not
- * stop the scan.
- *
- * Returns null if the heading is not found.
- */
-function findSectionInsertOffset(doc: string, headingLine: string): number | null {
-	const lines = doc.split("\n");
-	let inSection = false;
-	let offset = 0;
-	let sectionEndOffset: number | null = null;
-
-	for (let i = 0; i < lines.length; i++) {
-		const line = lines[i];
-
-		if (!inSection) {
-			if (line === headingLine) {
-				inSection = true;
-			}
-			offset += line.length + 1; // +1 for the newline
-			continue;
-		}
-
-		// We are inside the section.  Stop when we hit the next ## heading.
-		if (line.startsWith("## ")) {
-			// Insert just before this heading (after the preceding newline).
-			sectionEndOffset = offset;
-			break;
-		}
-
-		offset += line.length + 1;
-		sectionEndOffset = offset; // tentative: end of current line
-	}
-
-	if (!inSection) return null;
-
-	// sectionEndOffset is set to the accumulated offset at the end of the section.
-	// We want to insert at the end of the section content (offset points to after
-	// the last character of the last line in the section, or before the next ##).
-	// Clamp to doc.length to guard against the trailing-newline off-by-one where
-	// split("\n") yields a final empty element and offset overshoots by 1 (ADR-1).
-	return Math.min(sectionEndOffset!, doc.length);
+	return [buildSectionAppend(section.to, defs)];
 }
 
 /** Build an insert Edit that appends defs at the given offset within the section. */

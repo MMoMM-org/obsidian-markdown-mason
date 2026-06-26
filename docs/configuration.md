@@ -9,7 +9,7 @@ and most take effect right away.
 Open **Settings → Community plugins → Markdown Mason** (or click the options/gear icon next
 to the plugin). The settings are organised into four segments:
 
-- **General** — the everyday options: Resources section name, Show update notes, and
+- **General** — the everyday options: Resources section heading, Show update notes, and
   Numeric-only footnotes.
 - **Scripts** — install, enable, disable, update, and remove curated or imported scripts
   (see [Usage](usage.md) for the script lifecycle).
@@ -21,6 +21,8 @@ Your choices are stored in the plugin's `data.json` file
 (`<vault>/.obsidian/plugins/markdown-mason/data.json`), alongside the script library. You
 should not normally need to edit this file directly — use the settings tab instead.
 
+![Markdown Mason Advanced settings tab showing the Debug logging toggle](../assets/settings-advanced.png)
+
 ## Settings reference
 
 Each row lists a setting's internal name (as stored in `data.json`), its type, default
@@ -29,7 +31,7 @@ value, and what it controls.
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
 | `debugLogging` | `boolean` | `false` | Enable verbose console.debug traces. Off by default. |
-| `resourcesName` | `string` | `"Resources"` | Folder name used as a Resources section when building heading cascades. |
+| `resourcesName` | `string` | `"## Resources"` | Heading where *Tidy / Move footnotes* collects footnote definitions. Carries an optional ATX level prefix (e.g. `## Resources`, `### Resources`) so you choose the heading level. An existing section with this name is reused at whatever level it already has. |
 | `numericOnly` | `boolean` | `true` | When true (default), only numeric footnote references are processed; alpha markers such as [^A] are excluded. Optional to preserve backward compatibility with persisted data and existing test fixtures that do not include this field. Treated as `true` when absent. KNOWN LIMITATION (v0.1): this setting persists and threads into OperationContext.settings, but numericOnly=false is not yet honoured by the core footnote logic. The core already behaves as if numericOnly is always true (ExistingRef is defined as numeric-only; see types.ts). Wiring numericOnly=false to allow alpha markers is a planned follow-up. |
 | `showUpdateSplash` | `boolean` | `true` | When true (default), a one-shot "what's new" splash is shown the first time the plugin runs after its version changes. Surfaces how many curated scripts have a newer catalog version waiting (scripts ride pinned plugin releases, so a plugin update is the only moment a script version can change). User-gated via General settings and the in-splash toggle. Optional for backward-compat with persisted data predating this field; treated as `true` when absent. |
 | `lastSeenVersion` | `string` | `""` | The plugin version (manifest.version) last shown to the user. Compared against the current manifest.version on load to detect an update (mirrors Excalidraw's `previousRelease`). Empty string means "never recorded" → fresh install, which is recorded silently without a splash. Optional for backward-compat; treated as `""` when absent. |
@@ -44,7 +46,7 @@ Every General and Advanced setting maps to a control in the settings tab:
 
 | Setting | Location | Control |
 |---|---|---|
-| `resourcesName` | General → Resources section name | text field |
+| `resourcesName` | General → Resources section heading | text field |
 | `showUpdateSplash` | General → Show update notes | toggle |
 | `numericOnly` | General → Numeric-only footnotes | toggle |
 | `debugLogging` | Advanced → Debug logging | toggle |
@@ -58,8 +60,9 @@ simply restores that default.
 
 The defaults are chosen to work out of the box; a fresh install needs no configuration.
 
-- **`resourcesName`** (`"Resources"`) — change only if your vault uses a different folder
-  name for resource notes in heading cascades.
+- **`resourcesName`** (`"## Resources"`) — the heading that *Tidy / Move footnotes* files
+  definitions under. Add `#`s to choose the level (e.g. `### Resources` for a level-3
+  section); an existing section with this name is reused at its current level.
 - **`numericOnly`** (`true`) — leave enabled. Disabling it is a planned feature: the setting
   persists, but alpha footnote markers such as `[^A]` are not yet honoured by the core, so
   turning it off currently has no effect.
