@@ -52,7 +52,7 @@ export interface MasonPlugin extends Plugin {
 }
 
 // ---------------------------------------------------------------------------
-// Segment labels — the four tabs in the segmented control.
+// Segment labels — the tabs in the segmented control.
 // ---------------------------------------------------------------------------
 
 type Segment = "General" | "Scripts" | "Commands" | "Format selection" | "Advanced";
