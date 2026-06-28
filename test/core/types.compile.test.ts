@@ -1,13 +1,16 @@
 import { describe, it, expect } from "vitest";
+import { DEFAULT_SETTINGS } from "../../src/core/types";
 import type {
 	Edit,
 	EditPlan,
+	MasonSettings,
 	OperationContext,
 	FootnoteRef,
 	ExistingRef,
 	ParseResult,
 	Operation,
 } from "../../src/core/types";
+import type { FormatSelectionRecipe } from "../../src/core/formatSelection";
 
 // ---------------------------------------------------------------------------
 // Compile fixture — verifies that every contract type in src/core/types.ts
@@ -62,6 +65,13 @@ const _operation: Operation = {
 	},
 };
 
+// MasonSettings.formatSelection is OPTIONAL — accepts Partial<FormatSelectionRecipe>
+const _settingsWithPartialFormatSelection: MasonSettings = {
+	debugLogging: false,
+	resourcesName: "Resources",
+	formatSelection: { move: false },
+};
+
 // Suppress unused-variable warnings from noUnusedLocals by referencing values.
 void _edit;
 void _editPlan;
@@ -70,11 +80,25 @@ void _footnoteRef;
 void _existingRef;
 void _parseResult;
 void _operation;
+void _settingsWithPartialFormatSelection;
 
 describe("src/core/types — compile fixture", () => {
 	it("all contract types construct without compile errors", () => {
 		// The real assertion is that tsc accepted this file.
 		// A runtime truth-check keeps vitest from skipping it.
 		expect(true).toBe(true);
+	});
+});
+
+describe("DEFAULT_SETTINGS.formatSelection", () => {
+	it("deep-equals the all-on recipe", () => {
+		const expected: FormatSelectionRecipe = {
+			cascade: true,
+			normalize: true,
+			fromCitations: true,
+			identity: true,
+			move: true,
+		};
+		expect(DEFAULT_SETTINGS.formatSelection).toEqual(expected);
 	});
 });

@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Settings UI"
-status: pending
+status: completed
 version: "1.0"
 phase: 3
 ---
@@ -28,7 +28,7 @@ phase: 3
 
 ## Tasks
 
-- [ ] **T3.1 Format selection settings section** `[activity: build-feature]`
+- [x] **T3.1 Format selection settings section** `[activity: build-feature]`
 
   1. Prime: Read the existing `_render*Section` methods + the segment plumbing in `src/ui/settingsTab.ts`; note sections render NO in-body heading (the tab label is the heading) and the `addToggle(...)` write pattern.
   2. Test (RED): a settings-tab test (mirroring existing UI tests) — rendering the section produces five toggles whose initial values reflect `resolveFormatSelectionRecipe(settings)`; toggling one invokes `saveSettings` and mutates `settings.formatSelection.<key>`; the new "Format selection" segment appears in the nav.

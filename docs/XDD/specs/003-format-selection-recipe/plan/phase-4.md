@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: Integration & verification"
-status: pending
+status: completed
 version: "1.0"
 phase: 4
 ---
@@ -26,7 +26,7 @@ phase: 4
 
 ## Tasks
 
-- [ ] **T4.1 Full gates + manual smoke** `[activity: test-strategy]`
+- [x] **T4.1 Full gates + manual smoke** `[activity: test-strategy]` — automated gates all green (tsc, eslint, vitest 1239, production build, core-purity sweep); manual Obsidian smoke handed to maintainer (requires host Obsidian).
 
   1. Prime: Re-read PRD acceptance criteria and SDD Quality Requirements; map each to a passing test from Phases 1–3.
   2. Test (RED→GREEN already authored in prior phases): ensure the suite covers every EARS criterion — all-on byte-identity, per-step omission, all-off no-op, single-edit invariant, isolation, resolver defaults, settings persistence.

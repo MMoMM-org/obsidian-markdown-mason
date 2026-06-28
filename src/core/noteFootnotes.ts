@@ -575,10 +575,21 @@ function findSectionInsertOffset(doc: string, _headingLine: string, section: Not
 // tidyFootnotes — C → O+D → M fused (whole-note Tidy)
 // ---------------------------------------------------------------------------
 
+/** Selectively enable or disable each stage of the fused tidy pipeline. */
+export interface FootnoteSteps {
+	fromCitations?: boolean;
+	identity?: boolean;
+	move?: boolean;
+}
+
 /**
  * Compose C → O+D → M using intermediate string application to avoid offset drift.
  * Emits ONE EditPlan of edits vs the ORIGINAL ctx.doc (ADR-1), implementing
  * a single atomic undo step.
+ *
+ * Each stage can be independently disabled via `include`; omitted flags default
+ * to `true` so a no-arg call is byte-identical to the original all-stages behaviour.
+ * A skipped stage contributes [] and passes the scratch string through unchanged.
  *
  * Design choice: fused rather than independent chaining.
  *   Independent chaining of C/O+D/M against the same original doc is incorrect
@@ -589,21 +600,26 @@ function findSectionInsertOffset(doc: string, _headingLine: string, section: Not
  *   line-based (delete changed lines, insert new lines) since footnote edits are
  *   line-granular. If the doc is unchanged, return [].
  */
-export function tidyFootnotes(ctx: OperationContext): EditPlan {
+export function tidyFootnotes(ctx: OperationContext, include: FootnoteSteps = {}): EditPlan {
+	const inc = {
+		fromCitations: include.fromCitations ?? true,
+		identity:      include.identity      ?? true,
+		move:          include.move          ?? true,
+	};
 	const original = ctx.doc;
 
-	// Stage 1: C — convert bare citations.
-	const cPlan = wholeNoteFromCitations(ctx);
+	// Stage 1: C — convert bare citations (gated).
+	const cPlan = inc.fromCitations ? wholeNoteFromCitations(ctx) : [];
 	const afterC = applyToString(original, cPlan);
 
-	// Stage 2: O+D — renumber and dedup on the post-C doc.
+	// Stage 2: O+D — renumber and dedup on the post-C doc (gated).
 	const ctxAfterC: OperationContext = { ...ctx, doc: afterC };
-	const odPlan = wholeNoteIdentity(ctxAfterC);
+	const odPlan = inc.identity ? wholeNoteIdentity(ctxAfterC) : [];
 	const afterOD = applyToString(afterC, odPlan);
 
-	// Stage 3: M — move defs on the post-O+D doc.
+	// Stage 3: M — move defs on the post-O+D doc (gated).
 	const ctxAfterOD: OperationContext = { ...ctx, doc: afterOD };
-	const mPlan = wholeNoteMove(ctxAfterOD);
+	const mPlan = inc.move ? wholeNoteMove(ctxAfterOD) : [];
 	const afterM = applyToString(afterOD, mPlan);
 
 	// If nothing changed, return empty plan.

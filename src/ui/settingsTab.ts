@@ -14,6 +14,7 @@ import { BrowseOfficialModal } from "./browseOfficialModal";
 import type { BrowseEntryStatus } from "./browseOfficialModal";
 import { buildRequireFn, loadRunFnSafe, resolveScriptsDir } from "../scripts/loader";
 import { debug, setDebugLogging } from "../core/debug";
+import { resolveFormatSelectionRecipe } from "../core/formatSelection";
 
 // ---------------------------------------------------------------------------
 // Minimal plugin interface — avoids a hard import cycle with main.ts
@@ -51,12 +52,12 @@ export interface MasonPlugin extends Plugin {
 }
 
 // ---------------------------------------------------------------------------
-// Segment labels — the four tabs in the segmented control.
+// Segment labels — the tabs in the segmented control.
 // ---------------------------------------------------------------------------
 
-type Segment = "General" | "Scripts" | "Commands" | "Advanced";
+type Segment = "General" | "Scripts" | "Commands" | "Format selection" | "Advanced";
 
-const SEGMENTS: readonly Segment[] = ["General", "Scripts", "Commands", "Advanced"];
+const SEGMENTS: readonly Segment[] = ["General", "Scripts", "Commands", "Format selection", "Advanced"];
 
 // ---------------------------------------------------------------------------
 // MasonSettingTab
@@ -213,6 +214,9 @@ export class MasonSettingTab extends PluginSettingTab {
 				break;
 			case "Commands":
 				await this._renderCommandsSection(containerEl);
+				break;
+			case "Format selection":
+				this._renderFormatSelectionSection(containerEl);
 				break;
 			case "Advanced":
 				this._renderAdvancedSection(containerEl);
@@ -482,6 +486,88 @@ export class MasonSettingTab extends PluginSettingTab {
 			resolveScriptFn,
 			getState,
 		);
+	}
+
+	// -------------------------------------------------------------------------
+	// Format selection section
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Render the Format selection section controls.
+	 * Five toggles — one per step in the Format selection command.
+	 * All default to true (resolved via resolveFormatSelectionRecipe).
+	 * The active tab label is the section heading; no setHeading() used here.
+	 */
+	private _renderFormatSelectionSection(containerEl: HTMLElement): void {
+		new Setting(containerEl)
+			.setDesc("Choose which steps \"Format selection\" runs.");
+
+		const recipe = resolveFormatSelectionRecipe(this._plugin.settings);
+
+		new Setting(containerEl)
+			.setName("Cascade headings")
+			.setDesc("Promote or demote headings to maintain a consistent hierarchy.")
+			.addToggle((t) => {
+				t.setValue(recipe.cascade).onChange(async (v) => {
+					if (!this._plugin.settings.formatSelection) {
+						this._plugin.settings.formatSelection = {};
+					}
+					this._plugin.settings.formatSelection.cascade = v;
+					await this._plugin.saveSettings();
+				});
+			});
+
+		new Setting(containerEl)
+			.setName("Normalize headings")
+			.setDesc("Standardize heading levels throughout the selection.")
+			.addToggle((t) => {
+				t.setValue(recipe.normalize).onChange(async (v) => {
+					if (!this._plugin.settings.formatSelection) {
+						this._plugin.settings.formatSelection = {};
+					}
+					this._plugin.settings.formatSelection.normalize = v;
+					await this._plugin.saveSettings();
+				});
+			});
+
+		new Setting(containerEl)
+			.setName("Convert citations to footnotes")
+			.setDesc("Rewrite inline citation markers as numbered footnote references.")
+			.addToggle((t) => {
+				t.setValue(recipe.fromCitations).onChange(async (v) => {
+					if (!this._plugin.settings.formatSelection) {
+						this._plugin.settings.formatSelection = {};
+					}
+					this._plugin.settings.formatSelection.fromCitations = v;
+					await this._plugin.saveSettings();
+				});
+			});
+
+		new Setting(containerEl)
+			.setName("Resolve footnote identity")
+			.setDesc("Renumber footnote references to remove gaps and duplicates.")
+			.addToggle((t) => {
+				t.setValue(recipe.identity).onChange(async (v) => {
+					if (!this._plugin.settings.formatSelection) {
+						this._plugin.settings.formatSelection = {};
+					}
+					this._plugin.settings.formatSelection.identity = v;
+					await this._plugin.saveSettings();
+				});
+			});
+
+		new Setting(containerEl)
+			.setName("Move footnotes to resources")
+			.setDesc("Move footnote definitions into your Resources section.")
+			.addToggle((t) => {
+				t.setValue(recipe.move).onChange(async (v) => {
+					if (!this._plugin.settings.formatSelection) {
+						this._plugin.settings.formatSelection = {};
+					}
+					this._plugin.settings.formatSelection.move = v;
+					await this._plugin.saveSettings();
+				});
+			});
 	}
 
 	// -------------------------------------------------------------------------

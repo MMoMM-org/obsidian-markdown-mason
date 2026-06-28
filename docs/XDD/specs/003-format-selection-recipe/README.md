@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-06-28 |
-| **Current Phase** | Ready |
+| **Current Phase** | Implemented |
 | **Last Updated** | 2026-06-28 |
 
 ## Documents
@@ -29,6 +29,7 @@
 | 2026-06-28 | ADR-18: paste flow is compositional — no auto-pipeline/veto | One script wins and explicitly composes mason.* built-ins; suppression = don't call. Continues project ADR sequence (last was ADR-17). |
 | 2026-06-28 | ADR-19: Format selection is the only settings-driven composite | Only fusedFormatNote reads the recipe; Tidy footnotes fixed; individual commands + mason.* API ignore it. |
 | 2026-06-28 | Validated (/validate 003) — 1 FAIL + LOW WARNs, all fixed | 3-agent validation: all code/line claims verified to the digit, cascade-offset gating sound. Fixed: PRD step-order typo (normalize→cascade), tidyFootnotes `= {}` default, SDD null-guard snippet, setHeading-not-a-pattern + 4-spot segment nav, CommandHost orphan, frontmatter status, vague language, added settings-tab test + notice/live-effect tests. |
+| 2026-06-28 | Implementation complete | Branch `spec/003-format-selection-recipe`, 8 commits (`d1285e7`→plan docs). Recipe resolver + settings field + parameterized `tidyFootnotes`; `fusedFormatNote` gated (all-on byte-identical, all-off→"Nothing to format"); 5-toggle settings section (default on); ADR-19 isolation proven. Gates green: tsc + eslint + vitest (1239, +53) + production build + core-purity sweep. Per-task TDD with spec-compliance + code-quality review each. Manual Obsidian smoke handed to maintainer. Ships via semantic-release on merge to main. |
 
 ## Context
 
