@@ -58,7 +58,17 @@ const context = await esbuild.context({
 	// ADR-15: dead-code elimination gate for DevDirAdapter and other dev-only paths.
 	// "false" in production → esbuild eliminates all `if (__MASON_DEV__)` branches.
 	// "true" in dev → branch is live and DevDirAdapter is bundled for local testing.
-	define: { __MASON_DEV__: isProd ? "false" : "true" },
+	//
+	// ADR-15 Phase 5: catalog distribution coordinates. MASON_RAW_BASE /
+	// MASON_PINNED_REF override RAW_BASE / PINNED_REF at build time (the release
+	// workflow exports MASON_PINNED_REF resolved from the catalog repo's HEAD, so
+	// releases auto-pin). Empty string when unset → pinnedRef.ts falls back to its
+	// committed *_DEFAULT (its typeof guard makes "" fall through).
+	define: {
+		__MASON_DEV__: isProd ? "false" : "true",
+		__MASON_RAW_BASE__: JSON.stringify(process.env.MASON_RAW_BASE ?? ""),
+		__MASON_PINNED_REF__: JSON.stringify(process.env.MASON_PINNED_REF ?? ""),
+	},
 	external: [
 		"obsidian",
 		"electron",
