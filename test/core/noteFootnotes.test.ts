@@ -705,6 +705,135 @@ describe("tidyFootnotes — Tidy Footnotes (C → O+D → M) on accumulated note
 });
 
 // ---------------------------------------------------------------------------
+// tidyFootnotes — parameterized stages (T1.3)
+// ---------------------------------------------------------------------------
+
+describe("tidyFootnotes — parameterized FootnoteSteps (T1.3)", () => {
+	// Fixture exercises all three stages:
+	//   C:      bare [3] → [^3]
+	//   O+D:    [^3] (first) → [^1], [^5] (second) → [^2]; def [^5]: → [^2]:
+	//   M:      def [^2]: (in body) → ## Resources
+	const FIXTURE = "Body [3] and [^5].\n[^5]: snip\n[S](https://s.com)\n";
+
+	// REGRESSION — no-arg call must be byte-identical to manual C→O+D→M chain.
+	// Locked before widening the signature so we detect any silent behaviour change.
+	it("regression: no-arg is byte-identical to manual C→O+D→M chain", () => {
+		const doc = FIXTURE;
+		const ctx = makeCtx(doc);
+		const result = applyToString(doc, tidyFootnotes(ctx));
+		// Manual chain
+		const cPlan = wholeNoteFromCitations(ctx);
+		const afterC = applyToString(doc, cPlan);
+		const odPlan = wholeNoteIdentity({ ...ctx, doc: afterC });
+		const afterOD = applyToString(afterC, odPlan);
+		const mPlan = wholeNoteMove({ ...ctx, doc: afterOD });
+		const afterM = applyToString(afterOD, mPlan);
+		expect(result).toBe(afterM);
+	});
+
+	// fromCitations: false — C is skipped; identity + move still run
+	it("fromCitations:false — bare citation stays; identity and move still apply", () => {
+		const doc = FIXTURE;
+		const ctx = makeCtx(doc);
+		const plan = tidyFootnotes(ctx, { fromCitations: false });
+		expect(plan).toHaveLength(1);
+		const result = applyToString(doc, plan);
+		// C skipped: bare [3] is NOT converted
+		expect(result).toMatch(/(?<!\^)\[3\]/);
+		expect(result).not.toContain("[^3]");
+		// identity ran: [^5] renumbered away
+		expect(result).not.toContain("[^5]");
+		// move ran: Resources section created
+		expect(result).toContain("## Resources");
+	});
+
+	// identity: false — O+D is skipped; fromCitations + move still run
+	it("identity:false — no renumber; fromCitations and move still apply", () => {
+		const doc = FIXTURE;
+		const ctx = makeCtx(doc);
+		const plan = tidyFootnotes(ctx, { identity: false });
+		expect(plan).toHaveLength(1);
+		const result = applyToString(doc, plan);
+		// C ran: bare [3] converted to [^3]
+		expect(result).not.toMatch(/(?<!\^)\[3\]/);
+		expect(result).toContain("[^3]");
+		// identity skipped: [^5] inline ref NOT renumbered
+		expect(result).toContain("[^5]");
+		// move ran: Resources section created
+		expect(result).toContain("## Resources");
+	});
+
+	// move: false — M is skipped; fromCitations + identity still run
+	it("move:false — no Resources; fromCitations and identity still apply", () => {
+		const doc = FIXTURE;
+		const ctx = makeCtx(doc);
+		const plan = tidyFootnotes(ctx, { move: false });
+		expect(plan).toHaveLength(1);
+		const result = applyToString(doc, plan);
+		// C ran: bare [3] gone
+		expect(result).not.toMatch(/(?<!\^)\[3\]/);
+		// identity ran: [^5] renumbered away
+		expect(result).not.toContain("[^5]");
+		// move skipped: no Resources section
+		expect(result).not.toContain("## Resources");
+	});
+
+	// fromCitations: false + identity: false — only move runs
+	it("fromCitations:false + identity:false — only move applies", () => {
+		const doc = FIXTURE;
+		const ctx = makeCtx(doc);
+		const plan = tidyFootnotes(ctx, { fromCitations: false, identity: false });
+		expect(plan).toHaveLength(1);
+		const result = applyToString(doc, plan);
+		// C skipped: bare [3] stays
+		expect(result).toMatch(/(?<!\^)\[3\]/);
+		// identity skipped: [^5] not renumbered
+		expect(result).toContain("[^5]");
+		// move ran: Resources section created
+		expect(result).toContain("## Resources");
+	});
+
+	// fromCitations: false + move: false — only identity runs
+	it("fromCitations:false + move:false — only identity applies", () => {
+		const doc = FIXTURE;
+		const ctx = makeCtx(doc);
+		const plan = tidyFootnotes(ctx, { fromCitations: false, move: false });
+		expect(plan).toHaveLength(1);
+		const result = applyToString(doc, plan);
+		// C skipped: bare [3] stays
+		expect(result).toMatch(/(?<!\^)\[3\]/);
+		// identity ran: [^5] renumbered away
+		expect(result).not.toContain("[^5]");
+		// move skipped: no Resources section
+		expect(result).not.toContain("## Resources");
+	});
+
+	// identity: false + move: false — only fromCitations runs
+	it("identity:false + move:false — only fromCitations applies", () => {
+		const doc = FIXTURE;
+		const ctx = makeCtx(doc);
+		const plan = tidyFootnotes(ctx, { identity: false, move: false });
+		expect(plan).toHaveLength(1);
+		const result = applyToString(doc, plan);
+		// C ran: bare [3] converted
+		expect(result).not.toMatch(/(?<!\^)\[3\]/);
+		expect(result).toContain("[^3]");
+		// identity skipped: [^5] stays as-is
+		expect(result).toContain("[^5]");
+		// move skipped: no Resources section
+		expect(result).not.toContain("## Resources");
+	});
+
+	// all-three-off → empty plan (doc unchanged)
+	it("all three off — returns empty plan", () => {
+		const doc = FIXTURE;
+		const ctx = makeCtx(doc);
+		const plan = tidyFootnotes(ctx, { fromCitations: false, identity: false, move: false });
+		expect(plan).toHaveLength(0);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // Regression: no false positives from definition lines
 // ---------------------------------------------------------------------------
 
