@@ -28,6 +28,7 @@
 | 2026-06-28 | Default = all 5 steps ON | Preserves today's Format selection behavior (no behavior change on upgrade). |
 | 2026-06-28 | ADR-18: paste flow is compositional — no auto-pipeline/veto | One script wins and explicitly composes mason.* built-ins; suppression = don't call. Continues project ADR sequence (last was ADR-17). |
 | 2026-06-28 | ADR-19: Format selection is the only settings-driven composite | Only fusedFormatNote reads the recipe; Tidy footnotes fixed; individual commands + mason.* API ignore it. |
+| 2026-06-28 | Validated (/validate 003) — 1 FAIL + LOW WARNs, all fixed | 3-agent validation: all code/line claims verified to the digit, cascade-offset gating sound. Fixed: PRD step-order typo (normalize→cascade), tidyFootnotes `= {}` default, SDD null-guard snippet, setHeading-not-a-pattern + 4-spot segment nav, CommandHost orphan, frontmatter status, vague language, added settings-tab test + notice/live-effect tests. |
 
 ## Context
 

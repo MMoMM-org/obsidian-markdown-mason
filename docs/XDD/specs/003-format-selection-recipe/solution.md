@@ -1,6 +1,6 @@
 ---
 title: "Format selection recipe — configurable per-step toggles"
-status: draft
+status: complete
 version: "1.0"
 ---
 
@@ -118,14 +118,15 @@ graph LR
 │   ├── core/
 │   │   ├── formatSelection.ts      # NEW: FormatSelectionRecipe type + resolveFormatSelectionRecipe (pure)
 │   │   ├── types.ts                # MODIFY: MasonSettings.formatSelection?, DEFAULT_SETTINGS
-│   │   └── noteFootnotes.ts        # MODIFY: tidyFootnotes(ctx, include?: FootnoteSteps)
+│   │   └── noteFootnotes.ts        # MODIFY: tidyFootnotes(ctx, include: FootnoteSteps = {})
 │   ├── commands.ts                 # MODIFY: fusedFormatNote gates steps via resolved recipe
 │   └── ui/
 │       └── settingsTab.ts          # MODIFY: _renderFormatSelectionSection + segment nav entry
 └── test/
     ├── core/formatSelection.test.ts        # NEW: resolver defaults
     ├── scripts/.../tidyFootnotes*.test.ts   # MODIFY/NEW: every include subset
-    └── commands/formatSelection.test.ts     # NEW: all-on byte-identity, per-step omission, all-off, isolation
+    ├── commands/formatSelection.test.ts     # NEW: all-on byte-identity, per-step omission, all-off, isolation
+    └── ui/settingsTab*.test.ts              # NEW/MODIFY: Format selection section renders + persists
 ```
 
 ### Interface Specifications
@@ -151,8 +152,9 @@ NEW src/core/formatSelection.ts:
 
 MODIFY src/core/noteFootnotes.ts:
   interface FootnoteSteps { fromCitations?: boolean; identity?: boolean; move?: boolean }
-  tidyFootnotes(ctx: OperationContext, include?: FootnoteSteps): EditPlan
-    # include defaults to all-true → identical to current behavior for existing callers
+  tidyFootnotes(ctx: OperationContext, include: FootnoteSteps = {}): EditPlan
+    # the `= {}` default is load-bearing: each flag resolves `?? true`, so a no-arg
+    # call (the "Tidy footnotes" command + existing tests) is byte-identical to today.
 ```
 
 #### Application Data Models
@@ -230,8 +232,12 @@ function fusedFormatNote(editor: Editor, settings: MasonSettings): EditPlan {
   if (recipe.cascade && ctx.selection !== undefined) {
     const cascadeEntry = buildRegistry().entries.find((e) => e.id === "headings.cascade");
     if (cascadeEntry) {
-      const { plan, noContextHeading } = cascadeSelectionPlan(cascadeEntry, { ...ctx, doc: afterNormalize });
-      if (!noContextHeading && plan.length > 0) afterCascade = applyToString(afterNormalize, plan);
+      // NOTE: cascadeSelectionPlan returns { plan: null } when there is no edit —
+      // keep the existing null guard (commands.ts:302), do NOT read .length off null.
+      const { plan: cascadePlan, noContextHeading } = cascadeSelectionPlan(cascadeEntry, { ...ctx, doc: afterNormalize });
+      if (!noContextHeading && cascadePlan && cascadePlan.length > 0) {
+        afterCascade = applyToString(afterNormalize, cascadePlan);
+      }
     }
   }
 
@@ -306,11 +312,14 @@ No change. Same single `main.js` bundle, same release pipeline (semantic-release
 
 ### User Interface & UX
 
-**Entry point** — new section in the Mason settings tab (one segment in `_renderSegmentNav`):
+**Entry point** — a NEW segment/tab "Format selection" in the segmented control.
+Per existing convention, the active tab label IS the section heading (settingsTab.ts
+comment: "The active tab labels the section") — sections render NO in-body
+`setHeading`, so this one shouldn't either.
 ```
+[ General | Scripts | Commands | Format selection | Advanced ]
 ┌──────────────────────────────────────────────┐
-│  Format selection                             │
-│  Choose which steps "Format selection" runs.  │
+│  Choose which steps "Format selection" runs.  │  ← intro line (description-only Setting)
 │   [✓] Cascade headings                        │
 │   [✓] Normalize headings                      │
 │   [✓] Convert citations to footnotes          │
@@ -318,8 +327,16 @@ No change. Same single `main.js` bundle, same release pipeline (semantic-release
 │   [✓] Move footnotes to resources             │
 └──────────────────────────────────────────────┘
 ```
-- Components: standard `new Setting(containerEl).setName(...).setDesc(...).addToggle(...)`; section header via `Setting.setHeading()`.
-- Labels: sentence case, matching the command names. Each `onChange` writes `settings.formatSelection.<key>` and calls the existing `saveSettings`.
+- Adding the segment touches FOUR coupled spots (not just `_renderSegmentNav`):
+  (1) the `Segment` union type (`settingsTab.ts:57`), (2) the `SEGMENTS` array
+  (`:59`), (3) the `_renderSegment` switch (`:206`), and (4) the new
+  `_renderFormatSelectionSection` method.
+- Components: standard `new Setting(containerEl).setName(...).setDesc(...).addToggle(...)`
+  rows. No `setHeading` (not used elsewhere in this tab). An optional intro line can be
+  a description-only `Setting`.
+- Labels: sentence case, matching the command names. Each `onChange` writes
+  `settings.formatSelection.<key>` (initializing the object if absent) and calls the
+  existing `saveSettings`.
 - Accessibility: native Obsidian toggles (keyboard/AT supported by the platform).
 
 ## Architecture Decisions

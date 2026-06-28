@@ -15,7 +15,7 @@ phase: 3
 - `[ref: SDD/User Interface & UX]` — the Format selection section + wireframe
 - `[ref: PRD Feature 3]` — five labeled toggles, persistence
 - `[ref: CON-3]` — no unsupported-API surface; standard `Setting`/`addToggle` only
-- Existing code: `src/ui/settingsTab.ts` (`_renderGeneralSection` 228 and `_renderAdvancedSection` 492 as patterns, `_renderSegmentNav` 134, `Setting.setHeading()`), `saveSettings` in `src/main.ts`
+- Existing code: `src/ui/settingsTab.ts` — `_renderGeneralSection` 228 / `_renderAdvancedSection` 492 (section patterns; note: NO in-body heading — the tab label is the heading, comment at 227), the segment plumbing (`Segment` union 57, `SEGMENTS` 59, `_renderSegment` switch 206, `_renderSegmentNav` 134), and the `addToggle(t => t.setValue(...).onChange(...))` write pattern (e.g. 250). `saveSettings` in `src/main.ts`
 
 **Key Decisions**:
 - Bind toggles to `settings.formatSelection.*`; persist via the existing `saveSettings`.
@@ -30,9 +30,9 @@ phase: 3
 
 - [ ] **T3.1 Format selection settings section** `[activity: build-feature]`
 
-  1. Prime: Read the existing `_render*Section` methods and `_renderSegmentNav` in `src/ui/settingsTab.ts`; note `Setting.setHeading()` usage and the `addToggle(t => t.setValue(...).onChange(...))` pattern.
-  2. Test (RED): a settings-tab test (mirroring existing UI tests) — rendering the section produces five toggles whose initial values reflect `resolveFormatSelectionRecipe(settings)`; toggling one invokes `saveSettings` and mutates `settings.formatSelection.<key>`; the section appears in the segment nav.
-  3. Implement (GREEN): add `_renderFormatSelectionSection(containerEl)` rendering a `Setting.setHeading()` "Format selection" + a short description, then five `new Setting(...).setName(<sentence-case>).setDesc(<effect>).addToggle(...)` rows for cascade / normalize / fromCitations / identity / move, each reading `resolveFormatSelectionRecipe(this._plugin.settings)` and writing the chosen key back into `this._plugin.settings.formatSelection` before `await this._plugin.saveSettings()`. Register the section in the segment nav alongside the others. Ensure `formatSelection` is initialized (default object) before writing a key.
+  1. Prime: Read the existing `_render*Section` methods + the segment plumbing in `src/ui/settingsTab.ts`; note sections render NO in-body heading (the tab label is the heading) and the `addToggle(...)` write pattern.
+  2. Test (RED): a settings-tab test (mirroring existing UI tests) — rendering the section produces five toggles whose initial values reflect `resolveFormatSelectionRecipe(settings)`; toggling one invokes `saveSettings` and mutates `settings.formatSelection.<key>`; the new "Format selection" segment appears in the nav.
+  3. Implement (GREEN): wire a new "Format selection" segment by editing the FOUR coupled spots — add it to the `Segment` union (`:57`) and the `SEGMENTS` array (`:59`), add a `case "Format selection"` to the `_renderSegment` switch (`:206`), and add a `_renderFormatSelectionSection(containerEl)` method. The method renders an optional description-only intro `Setting`, then five `new Setting(...).setName(<sentence-case>).setDesc(<effect>).addToggle(...)` rows for cascade / normalize / fromCitations / identity / move — each reading `resolveFormatSelectionRecipe(this._plugin.settings)` for its value and writing the chosen key into `this._plugin.settings.formatSelection` (initialize the object if absent) before `await this._plugin.saveSettings()`. Do NOT add `setHeading` (none of the other sections use it).
   4. Validate: tests pass; `tsc -noEmit`; `eslint`. Visual check that labels are sentence case and descriptions explain the effect (e.g. "Move footnote definitions into your Resources section").
   - Success: five labeled toggles render, reflect state, persist across reload, and take effect on the next "Format selection" run `[ref: SDD/User Interface & UX; PRD Feature 3]`.
 

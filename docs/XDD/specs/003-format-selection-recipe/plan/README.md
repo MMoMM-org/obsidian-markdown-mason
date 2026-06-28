@@ -1,6 +1,6 @@
 ---
 title: "Format selection recipe — Implementation Plan"
-status: draft
+status: complete
 version: "1.0"
 ---
 
