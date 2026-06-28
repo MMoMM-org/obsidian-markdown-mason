@@ -1,3 +1,10 @@
+# [0.4.0](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.3.0...0.4.0) (2026-06-28)
+
+
+### Features
+
+* configurable Format selection recipe (5 per-step toggles) [spec 003] ([#17](https://github.com/MMoMM-org/obsidian-markdown-mason/issues/17)) ([9acc818](https://github.com/MMoMM-org/obsidian-markdown-mason/commit/9acc818057e67ea64ecfec28b5757ce42c89dedb))
+
 # [0.3.0](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.2.0...0.3.0) (2026-06-28)
 
 
