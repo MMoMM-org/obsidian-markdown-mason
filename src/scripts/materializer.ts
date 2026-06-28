@@ -35,6 +35,7 @@
 //             T7.5 sync-spike (device-B safety test).
 
 import { sha256Bytes } from "./checksum";
+import { debug } from "../core/debug";
 import type { ScriptRecord } from "./store";
 import type { CatalogSource } from "./catalog/catalogSource";
 import type { VaultAdapterPort } from "./runtime";
@@ -102,7 +103,8 @@ async function materializeCurated(
 	let index;
 	try {
 		index = await catalog.fetchIndex();
-	} catch {
+	} catch (err) {
+		debug("[MarkdownMason] materialize: fetchIndex failed for", id, "—", err);
 		return { ok: false, reason: "offline" };
 	}
 
@@ -116,7 +118,8 @@ async function materializeCurated(
 	let bytes: Uint8Array;
 	try {
 		bytes = await catalog.fetchScript(entry);
-	} catch {
+	} catch (err) {
+		debug("[MarkdownMason] materialize: fetchScript failed for", id, "—", err);
 		return { ok: false, reason: "offline" };
 	}
 

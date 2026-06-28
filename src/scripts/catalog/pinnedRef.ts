@@ -9,17 +9,15 @@
 // maintainers bump these values manually and commit the change.
 //
 // RAW_BASE: base URL for the curated script repository's raw content.
-//           Replace <owner> with the actual GitHub org/user before first release.
-// PINNED_REF: 40-character git SHA of the tagged catalog revision to ship.
-//             The placeholder SHA below is intentionally all-zeros — set it
-//             to a real commit SHA at release time.
+// PINNED_REF: 40-character git SHA of the catalog revision to ship. Bump this
+//             (and republish the catalog repo) to roll out curated script updates.
 
 /** Base raw-content URL for the markdown-mason-scripts repository. */
 export const RAW_BASE =
-	"https://raw.githubusercontent.com/<owner>/markdown-mason-scripts";
+	"https://raw.githubusercontent.com/MMoMM-org/markdown-mason-scripts";
 
 /**
  * Git SHA pinned at build time (ADR-13).
- * Placeholder: all-zeros SHA — MUST be replaced with a real commit SHA at release.
+ * Points at the reviewed catalog commit in MMoMM-org/markdown-mason-scripts.
  */
-export const PINNED_REF = "0000000000000000000000000000000000000000";
+export const PINNED_REF = "452468d2f88755e037639ecc4c0b037bc5311663";
