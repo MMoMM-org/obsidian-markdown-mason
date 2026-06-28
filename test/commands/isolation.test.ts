@@ -20,7 +20,7 @@ import { tidyFootnotes } from "../../src/core/noteFootnotes";
 import { buildRegistry } from "../../src/core/registry";
 import { applyToString } from "../../src/core/applyToString";
 import { DEFAULT_SETTINGS } from "../../src/core/types";
-import type { MasonSettings, OperationContext } from "../../src/core/types";
+import type { MasonSettings, OperationContext, ParseResult } from "../../src/core/types";
 import type { FormatSelectionRecipe } from "../../src/core/formatSelection";
 
 // ---------------------------------------------------------------------------
@@ -208,5 +208,86 @@ describe("T2.2.3 — buildRegistry().api.* output is unaffected by formatSelecti
 		const result2 = api.util.normalizeUrl("https://Example.COM/path/");
 		// Both calls with same input must produce the same output
 		expect(result1).toBe(result2);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// T2.2.4 — api.footnotes.* is unaffected by settings.formatSelection
+//
+// These three methods are the core of the format-selection recipe but they
+// belong to the mason.* API which must never read ctx.settings.formatSelection.
+// Each test compares all-on vs all-off (and one partial) recipe to prove that
+// the recipe toggle values do not leak into the API output.
+// ---------------------------------------------------------------------------
+
+/** Minimal ParseResult fixture with one inline citation and one source. */
+const makeParseResult = (overrides: Partial<ParseResult> = {}): ParseResult => ({
+	body: "Text with [1] citation.",
+	inline: [{ marker: "[1]", n: 1 }],
+	sources: [
+		{
+			incomingId: 1,
+			snippet: "Example snippet",
+			title: "Example source",
+			url: "https://example.com",
+		},
+	],
+	...overrides,
+});
+
+/** Partial recipe: only the heading toggles differ; footnote toggles stay default. */
+const RECIPE_PARTIAL: FormatSelectionRecipe = {
+	cascade: false, normalize: false, fromCitations: true, identity: true, move: true,
+};
+
+describe("T2.2.4 — api.footnotes.* output is unaffected by formatSelection", () => {
+	const { api } = buildRegistry();
+
+	it("api.footnotes.fromCitations is identical for all-on vs all-off recipe", () => {
+		const parseResult = makeParseResult();
+		const planAllOn  = api.footnotes.fromCitations(makeCtx(FIXTURE_CITATIONS, RECIPE_ALL_ON),  parseResult);
+		const planAllOff = api.footnotes.fromCitations(makeCtx(FIXTURE_CITATIONS, RECIPE_ALL_OFF), parseResult);
+		expect(planAllOn).toEqual(planAllOff);
+	});
+
+	it("api.footnotes.fromCitations is identical for all-on vs partial recipe", () => {
+		const parseResult = makeParseResult();
+		const planAllOn   = api.footnotes.fromCitations(makeCtx(FIXTURE_CITATIONS, RECIPE_ALL_ON),  parseResult);
+		const planPartial = api.footnotes.fromCitations(makeCtx(FIXTURE_CITATIONS, RECIPE_PARTIAL), parseResult);
+		expect(planAllOn).toEqual(planPartial);
+	});
+
+	it("api.footnotes.identity is identical for all-on vs all-off recipe", () => {
+		const parseResult = makeParseResult({
+			body: "See [^3] ref.\n\n[^3]: def\n[https://x.com](https://x.com)\n",
+			inline: [{ marker: "[^3]", n: 3 }],
+			sources: [],
+		});
+		const planAllOn  = api.footnotes.identity(makeCtx(FIXTURE_IDENTITY, RECIPE_ALL_ON),  parseResult);
+		const planAllOff = api.footnotes.identity(makeCtx(FIXTURE_IDENTITY, RECIPE_ALL_OFF), parseResult);
+		expect(planAllOn).toEqual(planAllOff);
+	});
+
+	it("api.footnotes.identity is identical for all-on vs partial recipe", () => {
+		const parseResult = makeParseResult({
+			body: "See [^3] ref.\n\n[^3]: def\n[https://x.com](https://x.com)\n",
+			inline: [{ marker: "[^3]", n: 3 }],
+			sources: [],
+		});
+		const planAllOn   = api.footnotes.identity(makeCtx(FIXTURE_IDENTITY, RECIPE_ALL_ON),  parseResult);
+		const planPartial = api.footnotes.identity(makeCtx(FIXTURE_IDENTITY, RECIPE_PARTIAL), parseResult);
+		expect(planAllOn).toEqual(planPartial);
+	});
+
+	it("api.footnotes.move is identical for all-on vs all-off recipe", () => {
+		const planAllOn  = api.footnotes.move(makeCtx(FIXTURE_MOVE, RECIPE_ALL_ON));
+		const planAllOff = api.footnotes.move(makeCtx(FIXTURE_MOVE, RECIPE_ALL_OFF));
+		expect(planAllOn).toEqual(planAllOff);
+	});
+
+	it("api.footnotes.move is identical for all-on vs partial recipe", () => {
+		const planAllOn   = api.footnotes.move(makeCtx(FIXTURE_MOVE, RECIPE_ALL_ON));
+		const planPartial = api.footnotes.move(makeCtx(FIXTURE_MOVE, RECIPE_PARTIAL));
+		expect(planAllOn).toEqual(planPartial);
 	});
 });
