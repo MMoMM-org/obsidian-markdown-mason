@@ -332,7 +332,8 @@ export class LifecycleController {
 		try {
 			const index = await this._d.catalog.fetchIndex();
 			return Object.values(index.scripts);
-		} catch {
+		} catch (err) {
+			debug("[MarkdownMason] listOfficial: catalog fetch failed —", err);
 			new Notice("Mason: could not reach the official catalog.");
 			return [];
 		}
@@ -503,7 +504,8 @@ export class LifecycleController {
 		try {
 			const index = await this._d.catalog.fetchIndex();
 			return index.scripts[id] ?? null;
-		} catch {
+		} catch (err) {
+			debug("[MarkdownMason] _catalogEntry: catalog fetch failed for", id, "—", err);
 			return null;
 		}
 	}
@@ -513,7 +515,8 @@ export class LifecycleController {
 		try {
 			const bytes = await this._d.catalog.fetchScript(entry);
 			return bytes.byteLength;
-		} catch {
+		} catch (err) {
+			debug("[MarkdownMason] _curatedSize: script fetch failed for", entry.id, "—", err);
 			return 0;
 		}
 	}

@@ -15,3 +15,17 @@
  * not be tree-shaken.
  */
 declare const __MASON_DEV__: boolean;
+
+/**
+ * Build-time catalog distribution overrides (ADR-15 Phase 5).
+ *
+ * Injected by esbuild `define` from the MASON_RAW_BASE / MASON_PINNED_REF env
+ * vars. Each is the empty string when its env var is unset, in which case
+ * src/scripts/catalog/pinnedRef.ts falls back to its committed *_DEFAULT.
+ *
+ * Declared optional because no runner other than esbuild defines them — the
+ * vitest runner leaves them undefined, and pinnedRef.ts guards the read with
+ * `typeof`. NEVER read these directly; import RAW_BASE / PINNED_REF instead.
+ */
+declare const __MASON_RAW_BASE__: string | undefined;
+declare const __MASON_PINNED_REF__: string | undefined;

@@ -42,6 +42,7 @@
 import { evaluateState } from "./lifecycle";
 import type { EvaluateStateInput, LifecycleState } from "./lifecycle";
 import { sha256Bytes } from "./checksum";
+import { debug } from "../core/debug";
 import type { CatalogIndex, CatalogEntry } from "./catalog/catalogSource";
 import type { CatalogSource } from "./catalog/catalogSource";
 import type { VaultAdapterPort } from "./runtime";
@@ -220,6 +221,7 @@ export class LifecycleResolver {
 		}
 
 		if (!this._deps.onlineProbe()) {
+			debug("[MarkdownMason] resolver: offline (onlineProbe false) — skipping catalog fetch");
 			this._cachedIndex = { ok: false };
 			return this._cachedIndex;
 		}
@@ -227,7 +229,8 @@ export class LifecycleResolver {
 		try {
 			const index = await this._deps.catalog.fetchIndex();
 			this._cachedIndex = { ok: true, index };
-		} catch {
+		} catch (err) {
+			debug("[MarkdownMason] resolver: catalog fetchIndex failed —", err);
 			this._cachedIndex = { ok: false };
 		}
 
