@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-06-28 |
-| **Current Phase** | PRD |
+| **Current Phase** | SDD |
 | **Last Updated** | 2026-06-28 |
 
 ## Documents
@@ -13,7 +13,7 @@
 | Document | Status | Notes |
 |----------|--------|-------|
 | requirements.md | completed | 7 must-have features, 38 Gherkin acceptance criteria, 0 clarifications |
-| solution.md | pending | |
+| solution.md | completed | 5 ADRs (ADR-20..24, all confirmed), 38 EARS criteria, pipeline order + markdownBlocks segmenter design |
 | plan/ | pending | |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
@@ -30,6 +30,12 @@
 | 2026-06-28 | `dewrap` default ON | Behavior-preserving model, conditioned on solid markdown-awareness + comprehensive edge-case tests. |
 | 2026-06-28 | Markdown-awareness is THE differentiator | Reference plugin `benature/obsidian-text-format` is markdown-blind (destroys lists/code/tables). Mason's text transforms must segment markdown blocks and never corrupt structure. Defaults: bullet→`-`; ordered sequential per-level; dehyphenate lowercase→lowercase on `-\n` before dewrap; roman/alpha + tabs untouched. |
 | 2026-06-28 | PRD complete (4-agent research: Requirements/Technical/Source/UX) | 7 features (one per transform + recipe-integration/isolation), 38 Gherkin AC, 0 clarifications. Idempotency added as an explicit invariant. |
+| 2026-06-28 | ADR-20: markdown-awareness via custom pure line-based segmenter (`src/core/markdownBlocks.ts`) | No parser dependency — CON-2 purity, zero deps, bundle size, unit-testable. Trade-off: hand-maintained block detection (covered by exhaustive tests). Confirmed. |
+| 2026-06-28 | ADR-21: step order Cleanup → Lists → Headings → Footnotes | dehyphenate before dewrap (keys on `-\n`); existing 5 keep relative order so the 003 byte-identity regression holds. Confirmed. |
+| 2026-06-28 | ADR-22: flat recipe keys + two pure modules | `dewrap/dehyphenate/decomposeLigatures/tidyWhitespace/normalizeBullets/normalizeOrdered` on FormatSelectionRecipe; `src/core/cleanup.ts` + `src/core/lists.ts` + `markdownBlocks.ts`. Matches the flat 003 pattern. Confirmed. |
+| 2026-06-28 | ADR-23: settings toggles grouped via `setHeading` | Cleanup/Lists/Headings/Footnotes sub-groups; 11 flat toggles unscannable. setHeading is supported standard API. Evolves the 003 no-setHeading choice. Confirmed. |
+| 2026-06-28 | ADR-24: full built-in exposure | Each transform = individual command + `mason.*` API + recipe toggle, under ADR-19 isolation (commands/API ignore the recipe). Confirmed. |
+| 2026-06-28 | SDD complete | 1240 lines, 5 ADRs, 38 EARS criteria, 0 clarifications. Pipeline insertion design + markdownBlocks segmenter + dewrap example + setHeading UI wireframe. |
 
 ## Context
 
