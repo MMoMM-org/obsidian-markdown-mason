@@ -3,9 +3,8 @@ import type { MasonSettings } from "./types";
 
 // ---------------------------------------------------------------------------
 // FormatSelectionRecipe — five per-step toggles for the Format selection command.
-// T1.2 will add formatSelection?: Partial<FormatSelectionRecipe> to MasonSettings.
-// Until then we access the field via a cast so this module compiles without
-// modifying types.ts.
+// MasonSettings.formatSelection?: Partial<FormatSelectionRecipe> is defined in
+// types.ts; absent field resolves to all-on via resolveFormatSelectionRecipe().
 // ---------------------------------------------------------------------------
 
 export interface FormatSelectionRecipe {
@@ -17,8 +16,7 @@ export interface FormatSelectionRecipe {
 }
 
 export function resolveFormatSelectionRecipe(s: MasonSettings): FormatSelectionRecipe {
-	// T1.2 adds formatSelection to MasonSettings; cast until then.
-	const r = (s as { formatSelection?: Partial<FormatSelectionRecipe> }).formatSelection ?? {};
+	const r = s.formatSelection ?? {};
 	return {
 		cascade:       r.cascade       ?? true,
 		normalize:     r.normalize     ?? true,

@@ -1,4 +1,5 @@
 // No obsidian import — this module is pure domain; unit-testable without Obsidian.
+import type { FormatSelectionRecipe } from "./formatSelection";
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -48,6 +49,12 @@ export interface MasonSettings {
 	 * Optional for backward-compat; treated as `""` when absent.
 	 */
 	lastSeenVersion?: string;
+	/**
+	 * Per-step toggles for the Format selection command. All five toggles default to
+	 * true when absent. Absent field (older persisted data) resolves to all-on via
+	 * resolveFormatSelectionRecipe(). See spec 003.
+	 */
+	formatSelection?: Partial<FormatSelectionRecipe>;
 }
 
 export const DEFAULT_SETTINGS: MasonSettings = {
@@ -56,6 +63,7 @@ export const DEFAULT_SETTINGS: MasonSettings = {
 	numericOnly: true,
 	showUpdateSplash: true,
 	lastSeenVersion: "",
+	formatSelection: { cascade: true, normalize: true, fromCitations: true, identity: true, move: true },
 };
 
 // ---------------------------------------------------------------------------

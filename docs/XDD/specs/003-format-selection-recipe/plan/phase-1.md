@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: Pure core foundations"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 1
 ---
@@ -29,7 +29,7 @@ phase: 1
 
 ## Tasks
 
-- [ ] **T1.1 Recipe type + resolver** `[activity: domain-modeling]` `[parallel: true]`
+- [x] **T1.1 Recipe type + resolver** `[activity: domain-modeling]` `[parallel: true]`
 
   1. Prime: Read the resolver example `[ref: SDD/Implementation Examples/resolver]` and `MasonSettings` in `src/core/types.ts`.
   2. Test (RED): `test/core/formatSelection.test.ts` — `resolveFormatSelectionRecipe({})` → all five `true`; a partial `{ move: false }` → `move:false`, other four `true`; an explicit all-false object is returned verbatim; result has exactly the five keys.
