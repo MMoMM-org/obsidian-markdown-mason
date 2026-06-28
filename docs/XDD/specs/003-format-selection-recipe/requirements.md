@@ -1,6 +1,6 @@
 ---
 title: "Format selection recipe — configurable per-step toggles"
-status: draft
+status: complete
 version: "1.0"
 ---
 
@@ -52,7 +52,7 @@ its built-in steps run, instead of being forced into the full fused pipeline.
 
 ### Problem Statement
 Mason's **"Format selection"** command fuses five built-in steps —
-cascade → normalize → convert-citations → resolve-identity → move-to-resources —
+normalize → cascade → convert-citations → resolve-identity → move-to-resources —
 and **always runs all five** (`fusedFormatNote`, `src/commands.ts:276`). A user who
 wants most of that recipe but not one step (e.g. keep footnotes inline rather than
 moving definitions to a Resources section, or skip heading normalization) has no way
@@ -139,11 +139,11 @@ None.
 - **User Story:** As a user, if I disable every step, I want a clear, harmless result
   rather than a confusing partial edit.
 - **Acceptance Criteria (Gherkin Format):**
-  - [ ] Given all five steps are disabled, When I run "Format selection", Then nothing is applied and the user is informed (e.g. a "Nothing to format" notice), with no document change and no error.
+  - [ ] Given all five steps are disabled, When I run "Format selection", Then nothing is applied and the user is informed via the existing "Nothing to format" notice, with no document change and no error.
 
 ### Should Have Features
-- Sensible label/help text on each toggle so the effect is self-explanatory (e.g.
-  "Move footnote definitions into your Resources section").
+- Each toggle carries a `setDesc` line stating its concrete effect (e.g. the "move"
+  toggle reads "Move footnote definitions into your Resources section").
 
 ### Could Have Features
 - A one-line summary of the active recipe shown in the section header (e.g. "Runs:
@@ -214,7 +214,9 @@ and the compliance sweep, not runtime events.
 ### Constraints
 - Obsidian plugin: settings persist via the plugin data store; UI uses the standard
   Settings API. No new unsupported-API surface (the `Plugin.settings` typing already
-  forces a minAppVersion concern — see SDD; use the established CommandHost pattern).
+  forces a minAppVersion concern — see SDD CON-3). This feature adds only a plain
+  settings field + standard toggles; it does NOT touch command registration, so the
+  CommandHost / `addCommand`/`removeCommand` machinery is not involved.
 - Behavior must be preserved by default (existing users, published 0.3.0 install base).
 - Core transforms stay pure (`src/core/*` has zero Obsidian imports).
 

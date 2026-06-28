@@ -34,11 +34,13 @@ phase: 2
   1. Prime: Read `fusedFormatNote` (`src/commands.ts:276`) and the SDD gating example.
   2. Test (RED): `test/commands/formatSelection.test.ts` —
      - all-on: output equals the legacy (pre-change) fused output on a fixture covering headings + citations + defs (byte-identical regression);
-     - `move:false` (others on): no `## Resources` section is created / defs stay inline;
+     - `move:false` (others on): no `## Resources` section is created / defs stay inline AND citations are still converted + renumbered (assert the positive half too, so the full F1.2 sentence is covered at the command level);
      - `normalize:false`: heading gaps are not closed but other steps still apply;
      - each single step off omits exactly that step;
      - all-off: returns `[]`;
-     - any non-empty result is exactly one `Edit` (atomicity).
+     - any non-empty result is exactly one `Edit` (atomicity);
+     - empty-recipe notice: the "Format selection" command path fires the existing "Nothing to format" Notice when the plan is `[]` (assert at the command level, not just manual smoke);
+     - live effect: running `fusedFormatNote`, flipping a flag on the SAME `settings` object, then running again yields the changed result — locks the fresh-read-per-invocation invariant against future caching.
   3. Implement (GREEN): in `fusedFormatNote`, resolve the recipe; gate the `normalize` and `cascade` scratch stages on `recipe.normalize` / `recipe.cascade` (skip ⇒ pass the prior string through); call `tidyFootnotes(tidyCtx, { fromCitations: recipe.fromCitations, identity: recipe.identity, move: recipe.move })`; keep the final `diffToEditPlan(original, afterTidy)`.
   4. Validate: tests pass; `tsc -noEmit`; `eslint`. Confirm the existing "Format selection" command's empty-plan path still shows "Nothing to format".
   - Success: per-step omission works; all-on is byte-identical; all-off is a no-op notice; one undo step `[ref: SDD/Implementation Examples/fusedFormatNote; PRD Feature 1, 5]`.
