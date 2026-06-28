@@ -76,9 +76,9 @@ Build:   node esbuild.config.mjs            # prod: append "production"
 
 ## Phases
 
-- [ ] [Phase 1: Pure core foundations](phase-1.md)
-- [ ] [Phase 2: Command wiring](phase-2.md)
-- [ ] [Phase 3: Settings UI](phase-3.md)
+- [x] [Phase 1: Pure core foundations](phase-1.md)
+- [x] [Phase 2: Command wiring](phase-2.md)
+- [x] [Phase 3: Settings UI](phase-3.md)
 - [ ] [Phase 4: Integration & verification](phase-4.md)
 
 ## Dependency Graph

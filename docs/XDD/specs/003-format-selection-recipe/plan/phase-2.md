@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: Command wiring"
-status: pending
+status: completed
 version: "1.0"
 phase: 2
 ---
@@ -29,7 +29,7 @@ phase: 2
 
 ## Tasks
 
-- [ ] **T2.1 Gate `fusedFormatNote` on the recipe** `[activity: build-feature]`
+- [x] **T2.1 Gate `fusedFormatNote` on the recipe** `[activity: build-feature]`
 
   1. Prime: Read `fusedFormatNote` (`src/commands.ts:276`) and the SDD gating example.
   2. Test (RED): `test/commands/formatSelection.test.ts` —
@@ -45,7 +45,7 @@ phase: 2
   4. Validate: tests pass; `tsc -noEmit`; `eslint`. Confirm the existing "Format selection" command's empty-plan path still shows "Nothing to format".
   - Success: per-step omission works; all-on is byte-identical; all-off is a no-op notice; one undo step `[ref: SDD/Implementation Examples/fusedFormatNote; PRD Feature 1, 5]`.
 
-- [ ] **T2.2 Isolation guarantees** `[activity: test-strategy]` `[parallel: true]`
+- [x] **T2.2 Isolation guarantees** `[activity: test-strategy]` `[parallel: true]`
 
   1. Prime: Read the "Tidy footnotes" command (`src/commands.ts:351`) and the per-entry command loop (406); re-read ADR-19.
   2. Test (RED): with `settings.formatSelection` set to several non-default recipes (incl. all-off) —

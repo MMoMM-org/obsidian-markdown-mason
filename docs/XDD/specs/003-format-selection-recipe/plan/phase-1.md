@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: Pure core foundations"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 1
 ---
@@ -37,7 +37,7 @@ phase: 1
   4. Validate: unit tests pass; `tsc -noEmit`; `eslint`.
   - Success: missing/partial settings resolve to all-on; explicit false respected `[ref: PRD Feature 2; SDD/Implementation Examples/resolver]`.
 
-- [ ] **T1.2 Settings field + defaults** `[activity: data-architecture]`
+- [x] **T1.2 Settings field + defaults** `[activity: data-architecture]`
 
   1. Prime: Read `MasonSettings` + `DEFAULT_SETTINGS` in `src/core/types.ts`; import the new `FormatSelectionRecipe` from T1.1.
   2. Test (RED): extend a types/defaults test — `DEFAULT_SETTINGS.formatSelection` has all five `true`; `MasonSettings.formatSelection` is optional and accepts a `Partial`.
@@ -45,7 +45,7 @@ phase: 1
   4. Validate: tests pass; `tsc -noEmit`; `eslint`.
   - Success: defaults are all-on; older saved data without the field still resolves to all-on via T1.1 `[ref: SDD/Data Storage Changes; PRD Feature 2]`.
 
-- [ ] **T1.3 Parameterize `tidyFootnotes`** `[activity: domain-modeling]`
+- [x] **T1.3 Parameterize `tidyFootnotes`** `[activity: domain-modeling]`
 
   1. Prime: Read `tidyFootnotes` (`src/core/noteFootnotes.ts:592`) and `diffToEditPlan`; note the offset-fused scratch-string stages C→O+D→M.
   2. Test (RED): in `test/scripts/.../tidyFootnotes` (existing) + new cases — `tidyFootnotes(ctx)` (no arg) is byte-identical to the current behavior on a fixture with all three operations (regression); for EACH subset of `{fromCitations, identity, move}` the omitted stage's effect is absent and the others still apply; all-skipped → `[]`; any included-but-changed result is a single `Edit` (via `diffToEditPlan`).
