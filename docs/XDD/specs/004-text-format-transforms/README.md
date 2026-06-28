@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-06-28 |
-| **Current Phase** | SDD |
+| **Current Phase** | Ready |
 | **Last Updated** | 2026-06-28 |
 
 ## Documents
@@ -14,7 +14,7 @@
 |----------|--------|-------|
 | requirements.md | completed | 7 must-have features, 38 Gherkin acceptance criteria, 0 clarifications |
 | solution.md | completed | 5 ADRs (ADR-20..24, all confirmed), 38 EARS criteria, pipeline order + markdownBlocks segmenter design |
-| plan/ | pending | |
+| plan/ | completed | 6 phases, 14 tasks; alignment-checked against current code (no drift) |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
 
@@ -36,6 +36,7 @@
 | 2026-06-28 | ADR-23: settings toggles grouped via `setHeading` | Cleanup/Lists/Headings/Footnotes sub-groups; 11 flat toggles unscannable. setHeading is supported standard API. Evolves the 003 no-setHeading choice. Confirmed. |
 | 2026-06-28 | ADR-24: full built-in exposure | Each transform = individual command + `mason.*` API + recipe toggle, under ADR-19 isolation (commands/API ignore the recipe). Confirmed. |
 | 2026-06-28 | SDD complete | 1240 lines, 5 ADRs, 38 EARS criteria, 0 clarifications. Pipeline insertion design + markdownBlocks segmenter + dewrap example + setHeading UI wireframe. |
+| 2026-06-28 | PLAN complete → spec Ready | 6 phases, 14 tasks (TDD Prime→Test→Implement→Validate). Graph: P1→{P2,P3,P5}; {P2,P3}→P4; {P4,P5}→P6. Alignment-checked: all modify-targets exist in current code; the 3 new modules don't yet exist (correct). |
 
 ## Context
 
