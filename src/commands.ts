@@ -51,6 +51,7 @@ import type { RegistryEntry } from "./core/registry";
 import { debug } from "./core/debug";
 import { tidyFootnotes, diffToEditPlan } from "./core/noteFootnotes";
 import { normalize } from "./core/headings";
+import { resolveFormatSelectionRecipe } from "./core/formatSelection";
 import { applyEditPlan } from "./sources/apply";
 import { applyToString } from "./core/applyToString";
 import { selectionContext } from "./sources/selection";
@@ -274,42 +275,40 @@ function runOperation(
 // ---------------------------------------------------------------------------
 
 function fusedFormatNote(editor: Editor, settings: MasonSettings): EditPlan {
+	const recipe = resolveFormatSelectionRecipe(settings);
 	const ctx = selectionContext(editor, settings);
 	const original = ctx.doc;
 
-	// Step 1: normalize — close heading gaps in the original doc.
-	const normalizeCtx: OperationContext = { ...ctx, doc: original };
-	const normalizePlan = normalize(normalizeCtx);
-	const afterNormalize = applyToString(original, normalizePlan);
+	// Step 1: normalize — close heading gaps in the original doc (gated by recipe).
+	const afterNormalize = recipe.normalize
+		? applyToString(original, normalize({ ...ctx, doc: original }))
+		: original;
 
-	// Step 2: cascade — selection-scoped, remap insert→replace on post-normalize doc.
-	// Update cursor/selection to be valid against afterNormalize.  Since normalize
-	// only replaces heading lines in-place (same offset range, same or shorter text),
-	// the cursor and selection offsets are still valid as long as normalize did not
-	// change content before the selection start.  In practice heading levels differ by
-	// at most 5 chars, and the selection offset may shift.  For v0.1 we recompute
-	// the selection against the original offsets (conservative: may slightly mis-align
-	// on pathological docs, but correct for the common case).
+	// Step 2: cascade — selection-scoped, remap insert→replace on post-normalize doc
+	// (gated by recipe).  cascadeSelectionPlan returns { plan: null } when there is
+	// no edit — keep the existing null guard; do NOT read .length off null.
 	let afterCascade = afterNormalize;
-	const cascadeEntry = buildRegistry().entries.find((e) => e.id === "headings.cascade");
-	if (cascadeEntry && ctx.selection !== undefined) {
-		// Build a post-normalize context with the original selection offsets.
-		// The cascade plan is: insert transformed input at cursor.
-		// cascadeSelectionPlan remaps to: replace [sel.from..sel.to] with transformed input.
-		// We apply this against afterNormalize.
-		const ctxForCascade: OperationContext = { ...ctx, doc: afterNormalize };
-		const { plan: cascadePlan, noContextHeading } = cascadeSelectionPlan(cascadeEntry, ctxForCascade);
-		if (!noContextHeading && cascadePlan && cascadePlan.length > 0) {
-			afterCascade = applyToString(afterNormalize, cascadePlan);
+	if (recipe.cascade && ctx.selection !== undefined) {
+		const cascadeEntry = buildRegistry().entries.find((e) => e.id === "headings.cascade");
+		if (cascadeEntry) {
+			const { plan: cascadePlan, noContextHeading } = cascadeSelectionPlan(cascadeEntry, { ...ctx, doc: afterNormalize });
+			if (!noContextHeading && cascadePlan && cascadePlan.length > 0) {
+				afterCascade = applyToString(afterNormalize, cascadePlan);
+			}
 		}
 	}
 
-	// Step 3: tidyFootnotes (C→O+D→M) — fused footnote pipeline on the post-heading doc.
-	const tidyCtx: OperationContext = { ...ctx, doc: afterCascade };
-	const tidyPlan = tidyFootnotes(tidyCtx);
+	// Step 3: tidyFootnotes (C→O+D→M) — fused footnote pipeline on the post-heading
+	// doc, with per-stage gates from the recipe.
+	const tidyPlan = tidyFootnotes({ ...ctx, doc: afterCascade }, {
+		fromCitations: recipe.fromCitations,
+		identity:      recipe.identity,
+		move:          recipe.move,
+	});
 	const afterTidy = applyToString(afterCascade, tidyPlan);
 
 	// Step 4: diff original→final — one non-overlapping edit (single undo step).
+	// Empty result when nothing changed → caller shows "Nothing to format".
 	return diffToEditPlan(original, afterTidy);
 }
 
