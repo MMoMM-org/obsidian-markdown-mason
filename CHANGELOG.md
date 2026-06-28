@@ -1,3 +1,15 @@
+# [0.3.0](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.2.0...0.3.0) (2026-06-28)
+
+
+### Bug Fixes
+
+* **scripts:** wire live catalog and log catalog fetch failures ([ad888eb](https://github.com/MMoMM-org/obsidian-markdown-mason/commit/ad888eb20515493c41f8b66d4d21b399da8ead30))
+
+
+### Features
+
+* **catalog:** inject RAW_BASE/PINNED_REF at build time and auto-pin on release ([bef667c](https://github.com/MMoMM-org/obsidian-markdown-mason/commit/bef667cce3e1c8bac94c7c855e4b23a68d873c4e))
+
 # [0.2.0](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.1.1...0.2.0) (2026-06-26)
 
 
