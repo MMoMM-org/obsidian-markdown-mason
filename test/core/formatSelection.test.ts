@@ -193,6 +193,246 @@ describe("resolveFormatSelectionRecipe — partial { dewrap: false }", () => {
 	});
 });
 
+describe("resolveFormatSelectionRecipe — partial { dehyphenate: false }", () => {
+	const recipe = resolveFormatSelectionRecipe(makeSettings({ dehyphenate: false }));
+
+	it("sets dehyphenate=false", () => {
+		expect(recipe.dehyphenate).toBe(false);
+	});
+
+	it("keeps cascade=true", () => {
+		expect(recipe.cascade).toBe(true);
+	});
+
+	it("keeps normalize=true", () => {
+		expect(recipe.normalize).toBe(true);
+	});
+
+	it("keeps fromCitations=true", () => {
+		expect(recipe.fromCitations).toBe(true);
+	});
+
+	it("keeps identity=true", () => {
+		expect(recipe.identity).toBe(true);
+	});
+
+	it("keeps move=true", () => {
+		expect(recipe.move).toBe(true);
+	});
+
+	it("keeps dewrap=true", () => {
+		expect(recipe.dewrap).toBe(true);
+	});
+
+	it("keeps decomposeLigatures=true", () => {
+		expect(recipe.decomposeLigatures).toBe(true);
+	});
+
+	it("keeps tidyWhitespace=true", () => {
+		expect(recipe.tidyWhitespace).toBe(true);
+	});
+
+	it("keeps normalizeBullets=true", () => {
+		expect(recipe.normalizeBullets).toBe(true);
+	});
+
+	it("keeps normalizeOrdered=true", () => {
+		expect(recipe.normalizeOrdered).toBe(true);
+	});
+});
+
+describe("resolveFormatSelectionRecipe — partial { decomposeLigatures: false }", () => {
+	const recipe = resolveFormatSelectionRecipe(makeSettings({ decomposeLigatures: false }));
+
+	it("sets decomposeLigatures=false", () => {
+		expect(recipe.decomposeLigatures).toBe(false);
+	});
+
+	it("keeps cascade=true", () => {
+		expect(recipe.cascade).toBe(true);
+	});
+
+	it("keeps normalize=true", () => {
+		expect(recipe.normalize).toBe(true);
+	});
+
+	it("keeps fromCitations=true", () => {
+		expect(recipe.fromCitations).toBe(true);
+	});
+
+	it("keeps identity=true", () => {
+		expect(recipe.identity).toBe(true);
+	});
+
+	it("keeps move=true", () => {
+		expect(recipe.move).toBe(true);
+	});
+
+	it("keeps dewrap=true", () => {
+		expect(recipe.dewrap).toBe(true);
+	});
+
+	it("keeps dehyphenate=true", () => {
+		expect(recipe.dehyphenate).toBe(true);
+	});
+
+	it("keeps tidyWhitespace=true", () => {
+		expect(recipe.tidyWhitespace).toBe(true);
+	});
+
+	it("keeps normalizeBullets=true", () => {
+		expect(recipe.normalizeBullets).toBe(true);
+	});
+
+	it("keeps normalizeOrdered=true", () => {
+		expect(recipe.normalizeOrdered).toBe(true);
+	});
+});
+
+describe("resolveFormatSelectionRecipe — partial { tidyWhitespace: false }", () => {
+	const recipe = resolveFormatSelectionRecipe(makeSettings({ tidyWhitespace: false }));
+
+	it("sets tidyWhitespace=false", () => {
+		expect(recipe.tidyWhitespace).toBe(false);
+	});
+
+	it("keeps cascade=true", () => {
+		expect(recipe.cascade).toBe(true);
+	});
+
+	it("keeps normalize=true", () => {
+		expect(recipe.normalize).toBe(true);
+	});
+
+	it("keeps fromCitations=true", () => {
+		expect(recipe.fromCitations).toBe(true);
+	});
+
+	it("keeps identity=true", () => {
+		expect(recipe.identity).toBe(true);
+	});
+
+	it("keeps move=true", () => {
+		expect(recipe.move).toBe(true);
+	});
+
+	it("keeps dewrap=true", () => {
+		expect(recipe.dewrap).toBe(true);
+	});
+
+	it("keeps dehyphenate=true", () => {
+		expect(recipe.dehyphenate).toBe(true);
+	});
+
+	it("keeps decomposeLigatures=true", () => {
+		expect(recipe.decomposeLigatures).toBe(true);
+	});
+
+	it("keeps normalizeBullets=true", () => {
+		expect(recipe.normalizeBullets).toBe(true);
+	});
+
+	it("keeps normalizeOrdered=true", () => {
+		expect(recipe.normalizeOrdered).toBe(true);
+	});
+});
+
+describe("resolveFormatSelectionRecipe — partial { normalizeBullets: false }", () => {
+	const recipe = resolveFormatSelectionRecipe(makeSettings({ normalizeBullets: false }));
+
+	it("sets normalizeBullets=false", () => {
+		expect(recipe.normalizeBullets).toBe(false);
+	});
+
+	it("keeps cascade=true", () => {
+		expect(recipe.cascade).toBe(true);
+	});
+
+	it("keeps normalize=true", () => {
+		expect(recipe.normalize).toBe(true);
+	});
+
+	it("keeps fromCitations=true", () => {
+		expect(recipe.fromCitations).toBe(true);
+	});
+
+	it("keeps identity=true", () => {
+		expect(recipe.identity).toBe(true);
+	});
+
+	it("keeps move=true", () => {
+		expect(recipe.move).toBe(true);
+	});
+
+	it("keeps dewrap=true", () => {
+		expect(recipe.dewrap).toBe(true);
+	});
+
+	it("keeps dehyphenate=true", () => {
+		expect(recipe.dehyphenate).toBe(true);
+	});
+
+	it("keeps decomposeLigatures=true", () => {
+		expect(recipe.decomposeLigatures).toBe(true);
+	});
+
+	it("keeps tidyWhitespace=true", () => {
+		expect(recipe.tidyWhitespace).toBe(true);
+	});
+
+	it("keeps normalizeOrdered=true", () => {
+		expect(recipe.normalizeOrdered).toBe(true);
+	});
+});
+
+describe("resolveFormatSelectionRecipe — partial { normalizeOrdered: false }", () => {
+	const recipe = resolveFormatSelectionRecipe(makeSettings({ normalizeOrdered: false }));
+
+	it("sets normalizeOrdered=false", () => {
+		expect(recipe.normalizeOrdered).toBe(false);
+	});
+
+	it("keeps cascade=true", () => {
+		expect(recipe.cascade).toBe(true);
+	});
+
+	it("keeps normalize=true", () => {
+		expect(recipe.normalize).toBe(true);
+	});
+
+	it("keeps fromCitations=true", () => {
+		expect(recipe.fromCitations).toBe(true);
+	});
+
+	it("keeps identity=true", () => {
+		expect(recipe.identity).toBe(true);
+	});
+
+	it("keeps move=true", () => {
+		expect(recipe.move).toBe(true);
+	});
+
+	it("keeps dewrap=true", () => {
+		expect(recipe.dewrap).toBe(true);
+	});
+
+	it("keeps dehyphenate=true", () => {
+		expect(recipe.dehyphenate).toBe(true);
+	});
+
+	it("keeps decomposeLigatures=true", () => {
+		expect(recipe.decomposeLigatures).toBe(true);
+	});
+
+	it("keeps tidyWhitespace=true", () => {
+		expect(recipe.tidyWhitespace).toBe(true);
+	});
+
+	it("keeps normalizeBullets=true", () => {
+		expect(recipe.normalizeBullets).toBe(true);
+	});
+});
+
 // ---------------------------------------------------------------------------
 // Explicit all-false — returned verbatim, no defaults applied over explicit false
 // ---------------------------------------------------------------------------
