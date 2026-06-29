@@ -63,7 +63,11 @@ export const DEFAULT_SETTINGS: MasonSettings = {
 	numericOnly: true,
 	showUpdateSplash: true,
 	lastSeenVersion: "",
-	formatSelection: { cascade: true, normalize: true, fromCitations: true, identity: true, move: true },
+	formatSelection: {
+		cascade: true, normalize: true, fromCitations: true, identity: true, move: true,
+		dewrap: true, dehyphenate: true, decomposeLigatures: true,
+		tidyWhitespace: true, normalizeBullets: true, normalizeOrdered: true,
+	},
 };
 
 // ---------------------------------------------------------------------------

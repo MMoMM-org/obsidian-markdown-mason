@@ -98,6 +98,12 @@ describe("DEFAULT_SETTINGS.formatSelection", () => {
 			fromCitations: true,
 			identity: true,
 			move: true,
+			dewrap: true,
+			dehyphenate: true,
+			decomposeLigatures: true,
+			tidyWhitespace: true,
+			normalizeBullets: true,
+			normalizeOrdered: true,
 		};
 		expect(DEFAULT_SETTINGS.formatSelection).toEqual(expected);
 	});

@@ -30,11 +30,15 @@ import type { FormatSelectionRecipe } from "../../src/core/formatSelection";
 /** Create a minimal all-stages-included recipe (all toggles ON). */
 const RECIPE_ALL_ON: FormatSelectionRecipe = {
 	cascade: true, normalize: true, fromCitations: true, identity: true, move: true,
+	dewrap: true, dehyphenate: true, decomposeLigatures: true,
+	tidyWhitespace: true, normalizeBullets: true, normalizeOrdered: true,
 };
 
 /** Create a recipe with every toggle OFF. */
 const RECIPE_ALL_OFF: FormatSelectionRecipe = {
 	cascade: false, normalize: false, fromCitations: false, identity: false, move: false,
+	dewrap: false, dehyphenate: false, decomposeLigatures: false,
+	tidyWhitespace: false, normalizeBullets: false, normalizeOrdered: false,
 };
 
 function makeSettings(recipe: Partial<FormatSelectionRecipe>): MasonSettings {
@@ -238,6 +242,8 @@ const makeParseResult = (overrides: Partial<ParseResult> = {}): ParseResult => (
 /** Partial recipe: only the heading toggles differ; footnote toggles stay default. */
 const RECIPE_PARTIAL: FormatSelectionRecipe = {
 	cascade: false, normalize: false, fromCitations: true, identity: true, move: true,
+	dewrap: true, dehyphenate: true, decomposeLigatures: true,
+	tidyWhitespace: true, normalizeBullets: true, normalizeOrdered: true,
 };
 
 describe("T2.2.4 — api.footnotes.* output is unaffected by formatSelection", () => {

@@ -363,6 +363,8 @@ describe("T2.1(g) — all-off: empty plan → Nothing to format Notice, doc unch
 
 	const ALL_OFF: FormatSelectionRecipe = {
 		cascade: false, normalize: false, fromCitations: false, identity: false, move: false,
+		dewrap: false, dehyphenate: false, decomposeLigatures: false,
+		tidyWhitespace: false, normalizeBullets: false, normalizeOrdered: false,
 	};
 
 	it("doc is unchanged when all recipe flags are false", () => {
