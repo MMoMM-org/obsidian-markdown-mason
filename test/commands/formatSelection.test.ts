@@ -651,7 +651,6 @@ describe("T4.1(d) — live-read: dewrap toggle on same settings object", () => {
 
 		// Flip dewrap off on the same settings object (same reference the closure holds)
 		host.settings.formatSelection = { dewrap: false };
-		settings.formatSelection = { dewrap: false };
 
 		// Second call: dewrap=false — lines should stay separate
 		const editor2 = makeCmEditor(fixture);
@@ -664,4 +663,28 @@ describe("T4.1(d) — live-read: dewrap toggle on same settings object", () => {
 		// Specific: second result keeps the newline between the two lines
 		expect(result2).toContain("First line\nsecond line.");
 	});
+});
+
+// ---------------------------------------------------------------------------
+// T4.1(e) — known limitation: offset-staleness when cleanup modifies text before selection
+//
+// cascade uses ctx.selection.from/to offsets from the original doc. If a cleanup
+// step (e.g. decomposeLigatures expanding "ﬁ" → "fi") changes the length of
+// content BEFORE the selection boundary, those offsets are stale in the
+// post-cleanup scratch string. This is a pre-existing design trade-off: the
+// selection context is captured once from the editor before any transforms run.
+//
+// KNOWN LIMITATION: tracked for future fix. The combination of
+//   (a) a length-changing cleanup step modifying content before the selection AND
+//   (b) cascade enabled with an active selection
+// may produce incorrect output. The most common real-world case (cleanup
+// affecting paragraph text; cascade affecting a heading selection that comes
+// AFTER that text) is the affected scenario.
+// ---------------------------------------------------------------------------
+
+describe("T4.1(e) — known limitation: offset-staleness with cleanup + cascade", () => {
+	it.todo(
+		"cascade + decomposeLigatures: if a ligature before the selection expands, " +
+		"cascade lands at the wrong offset in the post-cleanup doc — tracked for future fix",
+	);
 });
