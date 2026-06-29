@@ -548,8 +548,8 @@ export class MarkdownMasonPlugin extends Plugin {
 
 	private _registerPasteCommand(): void {
 		this.addCommand({
-			id: "mason.pasteAndFormat",
-			name: "Paste and format",
+			id: "mason.pasteAndRunScripts",
+			name: "Paste and run scripts",
 			// Obsidian editorCallback return type is `any`, so returning Promise<void>
 			// is valid and lets tests await the async work without fire-and-forget.
 			// Arrow function captures `this` lexically — no alias needed.
@@ -755,7 +755,7 @@ async function runPasteCommand(
 
 	if (handler === undefined) {
 		// No recognized format: insert the raw clipboard text at cursor (plain paste semantics)
-		// and inform the user. This avoids a silent no-op when the user invokes "Paste and format"
+		// and inform the user. This avoids a silent no-op when the user invokes "Paste and run scripts"
 		// on text that no enabled script recognizes.
 		effects.rawFallback();
 		effects.notify("Mason: no recognized format — pasted as-is.");

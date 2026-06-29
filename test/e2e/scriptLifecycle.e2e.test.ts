@@ -1133,8 +1133,8 @@ describe("Flow 6b — PASTE NO-MATCH: empty chain → raw fallback + notice", ()
 			pasteScripts: [],
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
-		expect(cmd, "mason.pasteAndFormat must be registered").toBeDefined();
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
+		expect(cmd, "mason.pasteAndRunScripts must be registered").toBeDefined();
 
 		clearNoticeLog();
 		await cmd.editorCallback(editor);

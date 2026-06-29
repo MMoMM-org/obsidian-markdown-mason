@@ -350,7 +350,7 @@ describe("T5.5B importScript — vault import flow", () => {
 // ---------------------------------------------------------------------------
 // Part C: Paste command wiring via main.ts
 //
-// Tests verify the paste command (id: "mason.pasteAndFormat") registered in
+// Tests verify the paste command (id: "mason.pasteAndRunScripts") registered in
 // main.ts:
 //   - On success: applyPlan spy receives the EditPlan (no partial edits)
 //   - On failure (script throws): rawFallback is called, applyPlan is NOT called
@@ -499,19 +499,19 @@ function findCommand(plugin: InstanceType<typeof MarkdownMasonPlugin>, id: strin
 // C1: paste command is registered
 // ---------------------------------------------------------------------------
 
-describe("T5.5C — mason.pasteAndFormat command registration", () => {
+describe("T5.5C — mason.pasteAndRunScripts command registration", () => {
 	beforeEach(() => clearNoticeLog());
 
-	it("registers 'mason.pasteAndFormat' command after onLayoutReady", async () => {
+	it("registers 'mason.pasteAndRunScripts' command after onLayoutReady", async () => {
 		const plugin = await makePluginAndFireLayout();
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
-		expect(cmd, "mason.pasteAndFormat command must be registered").toBeDefined();
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
+		expect(cmd, "mason.pasteAndRunScripts command must be registered").toBeDefined();
 	});
 
-	it("'mason.pasteAndFormat' command name does not start with 'Mason:' (Obsidian prepends plugin name)", async () => {
+	it("'mason.pasteAndRunScripts' command name does not start with 'Mason:' (Obsidian prepends plugin name)", async () => {
 		const plugin = await makePluginAndFireLayout();
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
-		expect(cmd?.name).toBe("Paste and format");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
+		expect(cmd?.name).toBe("Paste and run scripts");
 	});
 });
 
@@ -560,7 +560,7 @@ describe("T5.5C — paste command success path", () => {
 			pasteScripts: [curatedPerplexityAppPasteScript()],
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
 		expect(cmd).toBeDefined();
 
 		// editorCallback is async (fire-and-forget in production); await it in tests
@@ -591,7 +591,7 @@ describe("T5.5C — paste command success path", () => {
 			pasteScripts: [curatedPerplexityAppPasteScript()],
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
 		expect(cmd).toBeDefined();
 
 		clearNoticeLog();
@@ -634,7 +634,7 @@ describe("T5.5C — paste command success path", () => {
 			],
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
 		expect(cmd).toBeDefined();
 
 		clearNoticeLog();
@@ -674,7 +674,7 @@ describe("T5.5C — paste command raw fallback on script failure", () => {
 			failScript: true, // force the runner script to throw
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
 		expect(cmd).toBeDefined();
 
 		await cmd.editorCallback(editor);
@@ -708,7 +708,7 @@ describe("T5.5C — paste command raw fallback on script failure", () => {
 			failScript: true,
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
 		await cmd.editorCallback(editor);
 
 		const notices = noticeLog();
@@ -733,7 +733,7 @@ describe("T5.5C — paste command with empty clipboard", () => {
 			applyPlan: applyPlanSpy,
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
 		expect(cmd).toBeDefined();
 
 		await cmd.editorCallback(editor);
@@ -784,7 +784,7 @@ describe("T5.5C — paste command noop path: raw fallback fires when matched han
 			],
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
 		expect(cmd).toBeDefined();
 
 		clearNoticeLog();
@@ -815,7 +815,7 @@ describe("T5.5C — paste command noop path: raw fallback fires when matched han
 // ---------------------------------------------------------------------------
 // C6: data-driven paste chain — first-canHandle-match dispatch + provenance shadowing
 //
-// These drive the REAL mason.pasteAndFormat command with an injected
+// These drive the REAL mason.pasteAndRunScripts command with an injected
 // _commandInjection.pasteScripts set, proving the command dispatches through
 // buildPasteChain (T3.3, ADR-16) with source:"paste":
 //   - the first handler whose canHandle(clipboardText) returns true runs;
@@ -824,7 +824,7 @@ describe("T5.5C — paste command noop path: raw fallback fires when matched han
 //   - an empty chain → no handler → rawFallback + "no recognized format" notice.
 // ---------------------------------------------------------------------------
 
-describe("T3.3 — data-driven paste chain dispatch via mason.pasteAndFormat", () => {
+describe("T3.3 — data-driven paste chain dispatch via mason.pasteAndRunScripts", () => {
 	beforeEach(() => clearNoticeLog());
 
 	it("runs the first chain handler whose canHandle matches the clipboard text (source:'paste')", async () => {
@@ -848,7 +848,7 @@ describe("T3.3 — data-driven paste chain dispatch via mason.pasteAndFormat", (
 			pasteScripts: [matchingHandler],
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
 		await cmd.editorCallback(editor);
 
 		// The matched handler's run must have been invoked with the clipboard text and source:"paste"
@@ -888,7 +888,7 @@ describe("T3.3 — data-driven paste chain dispatch via mason.pasteAndFormat", (
 			pasteScripts: [importedCatchAll, curatedCatchAll],
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
 		await cmd.editorCallback(editor);
 
 		expect(ran, "exactly one handler runs — the chain stops at the first match").toEqual(["curated"]);
@@ -908,7 +908,7 @@ describe("T3.3 — data-driven paste chain dispatch via mason.pasteAndFormat", (
 			pasteScripts: [], // empty — mirrors the P3 production chain
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
 		await cmd.editorCallback(editor);
 
 		expect(editor._replaced, "empty chain must fall back to a plain paste").toContain(rawText);

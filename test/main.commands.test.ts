@@ -145,7 +145,7 @@ const EXPECTED_COMMAND_IDS = [
 	"footnotes.fromCitations",
 	"footnotes.identity",
 	"footnotes.move",
-	// Preset command ids (preset.pasteAndFormat stub removed in Phase 5; real command is mason.pasteAndFormat)
+	// Preset command ids (preset.pasteAndFormat stub removed in Phase 5; real command is mason.pasteAndRunScripts)
 	"preset.tidyFootnotes",
 	"preset.formatSelection",
 ];
@@ -700,8 +700,8 @@ describe("T3.4(f) — cascade REPLACES selection; no document doubling", () => {
 // (g) Paste and format — stub removed, real command present
 //
 // The Phase-3 stub "preset.pasteAndFormat" (which showed "not available yet")
-// was removed in Phase 5.  The real command "mason.pasteAndFormat" (registered
-// by main.ts _registerPasteCommand) is now the ONLY "Paste and format" command.
+// was removed in Phase 5.  The real command "mason.pasteAndRunScripts" (registered
+// by main.ts _registerPasteCommand) is now the paste-script command.
 // ---------------------------------------------------------------------------
 
 describe("T3.4(g) — preset.pasteAndFormat stub removed; real command present", () => {
@@ -722,7 +722,7 @@ describe("T3.4(g) — preset.pasteAndFormat stub removed; real command present",
 		).toBeUndefined();
 	});
 
-	it("mason.pasteAndFormat real command IS registered (registered by main.ts)", async () => {
+	it("mason.pasteAndRunScripts real command IS registered (registered by main.ts)", async () => {
 		const plugin = makePlugin();
 		await plugin.onload();
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -730,15 +730,15 @@ describe("T3.4(g) — preset.pasteAndFormat stub removed; real command present",
 
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const commands = (plugin as any)._commands as Array<{ id: string; name: string }>;
-		const realCmd = commands.find((c) => c.id === "mason.pasteAndFormat");
+		const realCmd = commands.find((c) => c.id === "mason.pasteAndRunScripts");
 		expect(
 			realCmd,
-			"mason.pasteAndFormat real command must be registered",
+			"mason.pasteAndRunScripts real command must be registered",
 		).toBeDefined();
-		expect(realCmd!.name).toBe("Paste and format");
+		expect(realCmd!.name).toBe("Paste and run scripts");
 	});
 
-	it("exactly ONE command has name 'Paste and format' — no duplicates", async () => {
+	it("exactly ONE command has name 'Paste and run scripts' — no duplicates", async () => {
 		const plugin = makePlugin();
 		await plugin.onload();
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -746,10 +746,10 @@ describe("T3.4(g) — preset.pasteAndFormat stub removed; real command present",
 
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const commands = (plugin as any)._commands as Array<{ name: string }>;
-		const pasteCommands = commands.filter((c) => c.name === "Paste and format");
+		const pasteCommands = commands.filter((c) => c.name === "Paste and run scripts");
 		expect(
 			pasteCommands.length,
-			`expected exactly 1 "Paste and format" command; found ${pasteCommands.length}`,
+			`expected exactly 1 "Paste and run scripts" command; found ${pasteCommands.length}`,
 		).toBe(1);
 	});
 });
