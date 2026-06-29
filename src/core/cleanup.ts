@@ -115,6 +115,78 @@ export function decomposeLigatures(ctx: OperationContext): EditPlan {
 }
 
 // ---------------------------------------------------------------------------
+// T2.4 — tidyWhitespace
+// ---------------------------------------------------------------------------
+
+/**
+ * Three sub-passes over non-fencedCode/non-indentedCode blocks:
+ *   1. Collapse runs of 2+ spaces in the non-leading portion of each line.
+ *      Skips tableRow blocks entirely (alignment spaces are significant).
+ *   2. Strip trailing whitespace ([ \t]+$) from each line.
+ *   3. Collapse runs of 3+ consecutive blank lines to a single blank line.
+ *
+ * Passes 1+2 are merged into one edit per changed line to avoid overlap.
+ * Pass 3 emits one contiguous edit per qualifying blank run.
+ */
+export function tidyWhitespace(ctx: OperationContext): EditPlan {
+	const blocks = segmentBlocks(ctx.doc);
+	const plan: EditPlan = [];
+
+	// Passes 1+2: per-line edits on non-code, non-blank, non-tableRow blocks
+	for (const block of blocks) {
+		if (isSkippedForCode(block.kind)) continue;
+		if (block.kind === "blank") continue;
+		if (block.kind === "tableRow") continue;
+
+		const text = ctx.doc.slice(block.startOffset, block.endOffset);
+		const lines = text.split("\n");
+		let lineOffset = block.startOffset;
+
+		for (const line of lines) {
+			if (line.length > 0) {
+				// Pass 1: collapse non-leading double-space runs
+				const leadingLen = /^\s*/.exec(line)![0].length;
+				const leading = line.slice(0, leadingLen);
+				const body = line.slice(leadingLen).replace(/  +/g, " ");
+				// Pass 2: strip trailing whitespace
+				const tidy = (leading + body).replace(/[ \t]+$/, "");
+				if (tidy !== line) {
+					plan.push({ from: lineOffset, to: lineOffset + line.length, insert: tidy });
+				}
+			}
+			lineOffset += line.length + 1;
+		}
+	}
+
+	// Pass 3: blank-line squeeze — 3+ consecutive blank blocks → keep first, remove rest
+	const blankRuns: Array<typeof blocks> = [];
+	let currentRun: typeof blocks = [];
+
+	for (const block of blocks) {
+		if (block.kind === "blank") {
+			currentRun.push(block);
+		} else if (currentRun.length > 0) {
+			blankRuns.push(currentRun);
+			currentRun = [];
+		}
+	}
+	if (currentRun.length > 0) blankRuns.push(currentRun);
+
+	for (const run of blankRuns) {
+		if (run.length >= 3) {
+			// One contiguous edit: remove blanks [1..end] in one slice
+			plan.push({
+				from: run[1]!.startOffset,
+				to: run[run.length - 1]!.endOffset,
+				insert: "",
+			});
+		}
+	}
+
+	return plan;
+}
+
+// ---------------------------------------------------------------------------
 // T2.2 — dewrap
 // ---------------------------------------------------------------------------
 

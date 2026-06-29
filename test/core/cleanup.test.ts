@@ -3,7 +3,7 @@
 
 import { describe, it, expect } from "vitest";
 import type { OperationContext } from "../../src/core/types";
-import { dehyphenate, dewrap, decomposeLigatures, GLYPH_MAP } from "../../src/core/cleanup";
+import { dehyphenate, dewrap, decomposeLigatures, GLYPH_MAP, tidyWhitespace } from "../../src/core/cleanup";
 import { applyToString } from "../../src/core/applyToString";
 
 const makeSettings = () => ({ debugLogging: false as const, resourcesName: "Resources" });
@@ -234,5 +234,81 @@ describe("decomposeLigatures — safety constraints", () => {
 		const doc = "ﬁle…done\n";
 		const first = applyToString(doc, decomposeLigatures(makeCtx(doc)));
 		expect(decomposeLigatures(makeCtx(first))).toHaveLength(0);
+	});
+});
+
+// ============================================================
+// T2.4 — tidyWhitespace
+// ============================================================
+
+describe("tidyWhitespace — double-space collapse", () => {
+	it("collapses two consecutive body spaces to one", () => {
+		const doc = "hello  world\n";
+		expect(applyToString(doc, tidyWhitespace(makeCtx(doc)))).toBe("hello world\n");
+	});
+
+	it("collapses three or more consecutive body spaces to one", () => {
+		const doc = "hello   world\n";
+		expect(applyToString(doc, tidyWhitespace(makeCtx(doc)))).toBe("hello world\n");
+	});
+
+	it("preserves leading spaces (only non-leading runs are collapsed)", () => {
+		const doc = "  hello  world\n";
+		expect(applyToString(doc, tidyWhitespace(makeCtx(doc)))).toBe("  hello world\n");
+	});
+});
+
+describe("tidyWhitespace — trailing whitespace removal", () => {
+	it("removes trailing spaces from a line", () => {
+		const doc = "hello world   \n";
+		expect(applyToString(doc, tidyWhitespace(makeCtx(doc)))).toBe("hello world\n");
+	});
+
+	it("removes trailing tab from a line", () => {
+		const doc = "hello world\t\n";
+		expect(applyToString(doc, tidyWhitespace(makeCtx(doc)))).toBe("hello world\n");
+	});
+});
+
+describe("tidyWhitespace — blank-line squeeze", () => {
+	it("collapses three consecutive blank lines to one", () => {
+		const doc = "a\n\n\n\nb\n";
+		expect(applyToString(doc, tidyWhitespace(makeCtx(doc)))).toBe("a\n\nb\n");
+	});
+
+	it("collapses four consecutive blank lines to one", () => {
+		const doc = "a\n\n\n\n\nb\n";
+		expect(applyToString(doc, tidyWhitespace(makeCtx(doc)))).toBe("a\n\nb\n");
+	});
+
+	it("preserves exactly two consecutive blank lines", () => {
+		const doc = "a\n\n\nb\n";
+		expect(tidyWhitespace(makeCtx(doc))).toHaveLength(0);
+	});
+});
+
+describe("tidyWhitespace — structural block skipping", () => {
+	it("leaves double spaces and trailing whitespace inside fenced code untouched", () => {
+		const doc = "```\nhello  world   \n```\n";
+		expect(tidyWhitespace(makeCtx(doc))).toHaveLength(0);
+	});
+
+	it("leaves a markdown table row with alignment spaces untouched", () => {
+		const doc = "| col1  | col2  |\n";
+		expect(tidyWhitespace(makeCtx(doc))).toHaveLength(0);
+	});
+
+	it("processes a paragraph immediately after a table while leaving the table alone", () => {
+		const doc = "| col1  | col2 |\nparagraph  line\n";
+		const result = applyToString(doc, tidyWhitespace(makeCtx(doc)));
+		expect(result).toBe("| col1  | col2 |\nparagraph line\n");
+	});
+});
+
+describe("tidyWhitespace — idempotency", () => {
+	it("second pass returns [] after double-space, trailing, and blank-squeeze changes", () => {
+		const doc = "hello  world   \n\n\n\nend\n";
+		const first = applyToString(doc, tidyWhitespace(makeCtx(doc)));
+		expect(tidyWhitespace(makeCtx(first))).toHaveLength(0);
 	});
 });
