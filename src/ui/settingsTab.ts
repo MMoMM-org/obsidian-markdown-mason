@@ -503,7 +503,7 @@ export class MasonSettingTab extends PluginSettingTab {
 	 */
 	private _renderFormatSelectionSection(containerEl: HTMLElement): void {
 		new Setting(containerEl)
-			.setDesc("Choose which steps \"Format selection\" runs.");
+			.setDesc("Choose which steps run. Format selection runs all of these; Paste and format runs the cleanup, lists, and normalize-headings steps only.");
 
 		const recipe = resolveFormatSelectionRecipe(this._plugin.settings);
 
@@ -596,7 +596,7 @@ export class MasonSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Cascade headings")
-			.setDesc("Promote or demote headings to maintain a consistent hierarchy.")
+			.setDesc("Promote or demote headings to maintain a consistent hierarchy. Format selection only — not applied by Paste and format.")
 			.addToggle((t) => {
 				t.setValue(recipe.cascade).onChange(async (v) => {
 					if (!this._plugin.settings.formatSelection) {
@@ -625,7 +625,7 @@ export class MasonSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Convert citations to footnotes")
-			.setDesc("Rewrite inline citation markers as numbered footnote references.")
+			.setDesc("Rewrite inline citation markers as numbered footnote references. Format selection only — not applied by Paste and format.")
 			.addToggle((t) => {
 				t.setValue(recipe.fromCitations).onChange(async (v) => {
 					if (!this._plugin.settings.formatSelection) {
@@ -638,7 +638,7 @@ export class MasonSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Resolve footnote identity")
-			.setDesc("Renumber footnote references to remove gaps and duplicates.")
+			.setDesc("Renumber footnote references to remove gaps and duplicates. Format selection only — not applied by Paste and format.")
 			.addToggle((t) => {
 				t.setValue(recipe.identity).onChange(async (v) => {
 					if (!this._plugin.settings.formatSelection) {
@@ -651,7 +651,7 @@ export class MasonSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Move footnotes to resources")
-			.setDesc("Move footnote definitions into your Resources section.")
+			.setDesc("Move footnote definitions into your Resources section. Format selection only — not applied by Paste and format.")
 			.addToggle((t) => {
 				t.setValue(recipe.move).onChange(async (v) => {
 					if (!this._plugin.settings.formatSelection) {
