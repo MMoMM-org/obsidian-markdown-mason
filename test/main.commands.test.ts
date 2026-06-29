@@ -174,7 +174,7 @@ describe("T3.4(a) — command registration", () => {
 	it("no command name starts with 'Mason:' (Obsidian auto-prepends plugin name)", async () => {
 		// Obsidian prepends "Markdown Mason: " to every command name in the palette.
 		// Command names must NOT carry their own "Mason: " prefix — that would
-		// produce "Markdown Mason: Mason: Paste and format" in the palette.
+		// produce "Markdown Mason: Mason: Paste and run scripts" in the palette.
 		const plugin = makePlugin();
 		await plugin.onload();
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -697,7 +697,7 @@ describe("T3.4(f) — cascade REPLACES selection; no document doubling", () => {
 });
 
 // ---------------------------------------------------------------------------
-// (g) Paste and format — stub removed, real command present
+// (g) Paste and run scripts — stub removed, real command present
 //
 // The Phase-3 stub "preset.pasteAndFormat" (which showed "not available yet")
 // was removed in Phase 5.  The real command "mason.pasteAndRunScripts" (registered

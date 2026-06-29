@@ -531,7 +531,7 @@ export class MarkdownMasonPlugin extends Plugin {
 	}
 
 	// -------------------------------------------------------------------------
-	// Mason: Paste and format — Phase 5 real implementation (T5.5C)
+	// Mason: Paste and run scripts — Phase 5 real implementation (T5.5C)
 	//
 	// RunnerEffects wiring:
 	//   applyPlan  → injected spy (tests) OR applyEditPlan(editor, plan) (production)

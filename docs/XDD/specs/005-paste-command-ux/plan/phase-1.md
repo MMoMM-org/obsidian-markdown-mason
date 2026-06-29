@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: Shared cleanup helper & fusedFormatNote refactor"
-status: pending
+status: completed
 version: "1.0"
 phase: 1
 ---
@@ -32,7 +32,7 @@ phase: 1
 
 This phase establishes the shared pure cleanup pipeline and proves the "Format selection" command is unaffected.
 
-- [ ] **T1.1 `src/core/formatPipeline.ts` — `applyTextCleanup` pure helper** `[activity: domain-modeling]`
+- [x] **T1.1 `src/core/formatPipeline.ts` — `applyTextCleanup` pure helper** `[activity: domain-modeling]`
 
   1. Prime: Read `[ref: SDD/Implementation Examples/Example 1]` (full reference impl) and `[ref: SDD/Interface Specifications/Internal API Changes]`. Confirm `normalize` (headings) reads only `ctx.doc`. Read `src/core/applyToString.ts` for the scratch-chaining model.
   2. Test (RED): `test/core/formatPipeline.test.ts` — write before the file exists:
@@ -46,7 +46,7 @@ This phase establishes the shared pure cleanup pipeline and proves the "Format s
   4. Validate: unit tests pass; `tsc -noEmit`; `eslint`; `grep -rn "obsidian" src/core/formatPipeline.ts` → none.
   - Success: 7 gated steps run in order; toggles respected; idempotent; pure; logger optional `[ref: SDD/Example 1; SDD/ADR-25; PRD Feature 2 / AC — cleanup steps]`.
 
-- [ ] **T1.2 Refactor `fusedFormatNote` to delegate steps 1–7 + recipe-path logging (4b)** `[activity: build-feature]`
+- [x] **T1.2 Refactor `fusedFormatNote` to delegate steps 1–7 + recipe-path logging (4b)** `[activity: build-feature]`
 
   1. Prime: Read `src/commands.ts` `fusedFormatNote` in full (current inline `s1..s9`). Read `[ref: SDD/Implementation Examples/Example 2]` and `[ref: SDD/ADR-28]`. **Before changing code**, capture `fusedFormatNote`'s current output on several dirty fixtures (for the regression assertion).
   2. Test (RED):
