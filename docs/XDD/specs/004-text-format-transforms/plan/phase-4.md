@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: Command wiring, registry & API"
-status: pending
+status: completed
 version: "1.0"
 phase: 4
 ---
@@ -36,7 +36,7 @@ phase: 4
 
 ## Tasks
 
-- [ ] **T4.1 Extend `fusedFormatNote` to the 11-step gated pipeline** `[activity: build-feature]`
+- [x] **T4.1 Extend `fusedFormatNote` to the 11-step gated pipeline** `[activity: build-feature]`
 
   1. Prime: Read `src/commands.ts` in full — find `fusedFormatNote`, `selectionContext`, the cascade null-guard, `diffToEditPlan`, `EMPTY_NOTICES`, and the "Tidy footnotes" command (confirm it calls `tidyFootnotes(ctx)` with no include arg — must NOT change). Read `[ref: SDD/Implementation Examples/Example 4]` — the complete new `fusedFormatNote` body including the exact variable names `s1`–`s9`, import lines, and offset-fusion comment. Read `[ref: SDD/ADR-21]` for ordering rationale. Read `[ref: SDD/Risks and Technical Debt/Implementation Gotchas]` item 9 — each step receives `{ ...ctx, doc: sN }`.
   2. Test (RED): `test/commands/formatSelection.test.ts` — extend existing test file:
@@ -51,7 +51,7 @@ phase: 4
   4. Validate: tests pass; `tsc -noEmit`; `eslint`. Run the full existing test suite — zero regressions. Confirm "Tidy footnotes" test still passes.
   - Success: all-on is byte-identical to pre-004; per-step omission works; all-off is `[]`; result is always 0 or 1 edit; live-read invariant holds `[ref: SDD/Implementation Examples/Example 4; SDD/ADR-21; PRD Feature 7 / AC]`.
 
-- [ ] **T4.2 Six `RegistryEntry` factories + extend `MasonApi`** `[activity: build-feature]`
+- [x] **T4.2 Six `RegistryEntry` factories + extend `MasonApi`** `[activity: build-feature]`
 
   1. Prime: Read `src/core/registry.ts` in full — existing `RegistryEntry` shape, `buildEntries()`, `buildApi()`, `MasonApi` interface. Read `[ref: SDD/Implementation Examples/Example 5]` — the six factory functions and the extended `MasonApi` interface with `cleanup` and `lists` namespaces. Note: each factory's `run(ctx)` calls the pure transform directly and reads NO settings.
   2. Test (RED): add to the registry tests (or create `test/core/registry.test.ts` if none exists):
@@ -64,7 +64,7 @@ phase: 4
   4. Validate: registry tests pass; `tsc -noEmit`; `eslint`. Confirm existing `mason.headings.*` and `mason.footnotes.*` API is unchanged.
   - Success: 6 new entries in registry; 6 new API methods callable; command names sentence-case; ADR-19 isolation structural — `run(ctx)` reads no recipe `[ref: SDD/Implementation Examples/Example 5; SDD/ADR-24; SDD/ADR-19]`.
 
-- [ ] **T4.3 Isolation tests: individual commands + `mason.*` API + "Tidy footnotes" unaffected** `[activity: test-strategy]`
+- [x] **T4.3 Isolation tests: individual commands + `mason.*` API + "Tidy footnotes" unaffected** `[activity: test-strategy]`
 
   1. Prime: Re-read `[ref: SDD/ADR-19]` and `[ref: SDD/ADR-24]`. Read the "Tidy footnotes" command in `src/commands.ts` — it calls `tidyFootnotes(ctx)` with no include arg and must remain so. Review the `mason.*` API output from T4.2.
   2. Test (RED): add isolation tests to `test/commands/formatSelection.test.ts` or a dedicated `test/commands/isolation.test.ts`:
