@@ -52,6 +52,8 @@ import { debug } from "./core/debug";
 import { tidyFootnotes, diffToEditPlan } from "./core/noteFootnotes";
 import { normalize } from "./core/headings";
 import { resolveFormatSelectionRecipe } from "./core/formatSelection";
+import { dewrap, dehyphenate, decomposeLigatures, tidyWhitespace } from "./core/cleanup";
+import { normalizeBullets, normalizeOrdered } from "./core/lists";
 import { applyEditPlan } from "./sources/apply";
 import { applyToString } from "./core/applyToString";
 import { selectionContext } from "./sources/selection";
@@ -67,6 +69,12 @@ const EMPTY_NOTICES: Record<string, string> = {
 	"footnotes.fromCitations": "No citations found to convert",
 	"footnotes.identity": "No numeric footnotes found",
 	"footnotes.move": "No footnotes to move",
+	"cleanup.dewrap":             "No wrapped paragraphs to join",
+	"cleanup.dehyphenate":        "No hyphenated line breaks to join",
+	"cleanup.decomposeLigatures": "No ligatures or smart punctuation to decompose",
+	"cleanup.tidyWhitespace":     "No whitespace to tidy",
+	"lists.normalizeBullets":     "No bullet markers to normalize",
+	"lists.normalizeOrdered":     "No ordered lists to renumber",
 };
 
 const DEFAULT_EMPTY_NOTICE = "Nothing to do";
@@ -257,19 +265,24 @@ function runOperation(
 // offsets would be stale against the pre-heading doc), we compose ALL steps
 // in-memory on a scratch string and emit a SINGLE diffToEditPlan result.
 //
-// Pipeline:
-//   1. normalize (whole-note): close heading gaps in the original doc first,
-//      before cascade so that normalize does not undo the cascade shift.
-//   2. cascade (selection-scoped): shift selected headings relative to context.
-//      Applied after normalize so the shifted result is not treated as a gap.
-//   3. tidyFootnotes (C→O+D→M): fused footnote pipeline on the post-heading doc.
-//   4. diff original→final: one non-overlapping EditPlan → one CM6 transaction.
+// Pipeline (9 gated transforms → 1 fused edit; final diff is unconditional):
+//   1. dehyphenate:       join end-of-line hyphenated words (MUST precede dewrap)
+//   2. dewrap:            join soft-wrapped paragraph lines into one line per para
+//   3. tidyWhitespace:    collapse double spaces, strip trailing whitespace
+//   4. decomposeLigatures: replace smart quotes and ligatures with ASCII
+//   5. normalizeBullets:  replace non-'-' bullet markers with '-'
+//   6. normalizeOrdered:  renumber ordered list items sequentially
+//   7. normalize:         close heading level gaps (whole-note)
+//   8. cascade:           shift selected headings relative to context heading
+//   9. tidyFootnotes:     C → O+D → M fused footnote pipeline
+//  10. diff original→final: one non-overlapping EditPlan → one CM6 transaction
 //
-// Ordering rationale: normalize then cascade avoids a semantic conflict where
-// cascade produces H1→H3 (gap) and normalize then demotes it back to H2.
-// Running normalize on the original first closes pre-existing gaps, then
-// cascade applies the relative shift to the post-normalize doc. This matches
-// user intent: "normalize existing headings, then cascade my selection".
+// Ordering rationale:
+//   dehyphenate before dewrap: dehyphenation removes the hyphen-newline sequence
+//     so dewrap sees a single logical line and does not incorrectly join it.
+//   normalize before cascade: closes pre-existing gaps before cascade shifts
+//     headings, avoiding a conflict where cascade produces a gap that normalize
+//     would undo (user intent: normalize then cascade the selection).
 //
 // Returns [] when nothing changed; returns a single Edit otherwise.
 // ---------------------------------------------------------------------------
@@ -279,37 +292,47 @@ function fusedFormatNote(editor: Editor, settings: MasonSettings): EditPlan {
 	const ctx = selectionContext(editor, settings);
 	const original = ctx.doc;
 
-	// Step 1: normalize — close heading gaps in the original doc (gated by recipe).
-	const afterNormalize = recipe.normalize
-		? applyToString(original, normalize({ ...ctx, doc: original }))
-		: original;
+	// Step 1: dehyphenate — MUST precede dewrap
+	const s1 = recipe.dehyphenate ? applyToString(original, dehyphenate({ ...ctx, doc: original })) : original;
+	// Step 2: dewrap
+	const s2 = recipe.dewrap ? applyToString(s1, dewrap({ ...ctx, doc: s1 })) : s1;
+	// Step 3: tidyWhitespace
+	const s3 = recipe.tidyWhitespace ? applyToString(s2, tidyWhitespace({ ...ctx, doc: s2 })) : s2;
+	// Step 4: decomposeLigatures
+	const s4 = recipe.decomposeLigatures ? applyToString(s3, decomposeLigatures({ ...ctx, doc: s3 })) : s3;
+	// Step 5: normalizeBullets
+	const s5 = recipe.normalizeBullets ? applyToString(s4, normalizeBullets({ ...ctx, doc: s4 })) : s4;
+	// Step 6: normalizeOrdered
+	const s6 = recipe.normalizeOrdered ? applyToString(s5, normalizeOrdered({ ...ctx, doc: s5 })) : s5;
 
-	// Step 2: cascade — selection-scoped, remap insert→replace on post-normalize doc
-	// (gated by recipe).  cascadeSelectionPlan returns { plan: null } when there is
-	// no edit — keep the existing null guard; do NOT read .length off null.
-	let afterCascade = afterNormalize;
+	// Step 7: normalize (EXISTING) — close heading gaps
+	const s7 = recipe.normalize
+		? applyToString(s6, normalize({ ...ctx, doc: s6 }))
+		: s6;
+
+	// Step 8: cascade (EXISTING — preserve the current null-guard EXACTLY)
+	let s8 = s7;
 	if (recipe.cascade && ctx.selection !== undefined) {
 		const cascadeEntry = buildRegistry().entries.find((e) => e.id === "headings.cascade");
 		if (cascadeEntry) {
-			const { plan: cascadePlan, noContextHeading } = cascadeSelectionPlan(cascadeEntry, { ...ctx, doc: afterNormalize });
+			const { plan: cascadePlan, noContextHeading } = cascadeSelectionPlan(cascadeEntry, { ...ctx, doc: s7 });
 			if (!noContextHeading && cascadePlan && cascadePlan.length > 0) {
-				afterCascade = applyToString(afterNormalize, cascadePlan);
+				s8 = applyToString(s7, cascadePlan);
 			}
 		}
 	}
 
-	// Step 3: tidyFootnotes (C→O+D→M) — fused footnote pipeline on the post-heading
-	// doc, with per-stage gates from the recipe.
-	const tidyPlan = tidyFootnotes({ ...ctx, doc: afterCascade }, {
+	// Step 9: tidyFootnotes (EXISTING) — with per-stage gates from recipe
+	const tidyPlan = tidyFootnotes({ ...ctx, doc: s8 }, {
 		fromCitations: recipe.fromCitations,
 		identity:      recipe.identity,
 		move:          recipe.move,
 	});
-	const afterTidy = applyToString(afterCascade, tidyPlan);
+	const s9 = applyToString(s8, tidyPlan);
 
-	// Step 4: diff original→final — one non-overlapping edit (single undo step).
+	// Step 10: diff original→final — one non-overlapping edit (single undo step).
 	// Empty result when nothing changed → caller shows "Nothing to format".
-	return diffToEditPlan(original, afterTidy);
+	return diffToEditPlan(original, s9);
 }
 
 // ---------------------------------------------------------------------------

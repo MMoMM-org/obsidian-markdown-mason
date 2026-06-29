@@ -1,6 +1,6 @@
 ---
 title: "Phase 6: Integration & verification"
-status: pending
+status: completed
 version: "1.0"
 phase: 6
 ---
@@ -33,7 +33,7 @@ phase: 6
 
 ## Tasks
 
-- [ ] **T6.1 Full gates: type-check, lint, test suite, compliance sweep, production build, manual smoke** `[activity: test-strategy]`
+- [x] **T6.1 Full gates: type-check, lint, test suite, compliance sweep, production build, manual smoke** `[activity: test-strategy]` _(automated gates + CON-2 sweep + 38/38 AC map + prod build all green; manual Obsidian smoke — 4 scenarios — passed 2026-06-29)_
 
   1. Prime: Read `test/compliance.test.ts` — understand the purity sweep mechanism. Read `[ref: SDD/Implementation Examples/Example 6]` for the exact test assertion patterns for each of the four integration scenarios (regression, omission, isolation, idempotency, all-off). Read `[ref: PRD Feature 7 / AC]` all 7 criteria. Read `[ref: PRD Feature 1-6 / AC]` — 31 criteria across the six transforms.
   2. Test (RED → verify GREEN):

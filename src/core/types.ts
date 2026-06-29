@@ -50,9 +50,9 @@ export interface MasonSettings {
 	 */
 	lastSeenVersion?: string;
 	/**
-	 * Per-step toggles for the Format selection command. All five toggles default to
+	 * Per-step toggles for the Format selection command. All eleven toggles default to
 	 * true when absent. Absent field (older persisted data) resolves to all-on via
-	 * resolveFormatSelectionRecipe(). See spec 003.
+	 * resolveFormatSelectionRecipe(). See spec 003 and spec 004.
 	 */
 	formatSelection?: Partial<FormatSelectionRecipe>;
 }
@@ -63,7 +63,11 @@ export const DEFAULT_SETTINGS: MasonSettings = {
 	numericOnly: true,
 	showUpdateSplash: true,
 	lastSeenVersion: "",
-	formatSelection: { cascade: true, normalize: true, fromCitations: true, identity: true, move: true },
+	formatSelection: {
+		cascade: true, normalize: true, fromCitations: true, identity: true, move: true,
+		dewrap: true, dehyphenate: true, decomposeLigatures: true,
+		tidyWhitespace: true, normalizeBullets: true, normalizeOrdered: true,
+	},
 };
 
 // ---------------------------------------------------------------------------

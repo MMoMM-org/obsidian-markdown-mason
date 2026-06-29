@@ -5,8 +5,8 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-06-28 |
-| **Current Phase** | Ready |
-| **Last Updated** | 2026-06-28 |
+| **Current Phase** | Implemented |
+| **Last Updated** | 2026-06-29 |
 
 ## Documents
 
@@ -37,6 +37,9 @@
 | 2026-06-28 | ADR-24: full built-in exposure | Each transform = individual command + `mason.*` API + recipe toggle, under ADR-19 isolation (commands/API ignore the recipe). Confirmed. |
 | 2026-06-28 | SDD complete | 1240 lines, 5 ADRs, 38 EARS criteria, 0 clarifications. Pipeline insertion design + markdownBlocks segmenter + dewrap example + setHeading UI wireframe. |
 | 2026-06-28 | PLAN complete → spec Ready | 6 phases, 14 tasks (TDD Prime→Test→Implement→Validate). Graph: P1→{P2,P3,P5}; {P2,P3}→P4; {P4,P5}→P6. Alignment-checked: all modify-targets exist in current code; the 3 new modules don't yet exist (correct). |
+| 2026-06-29 | Phase 1 implemented (T1.1–T1.3) | `markdownBlocks.ts` segmenter + masker; `FormatSelectionRecipe` 5→11 keys + resolver; `DEFAULT_SETTINGS` 11 all-true. 1375 tests green; CON-2 holds. T1.3 landed within the T1.2 commit (`e101fc3`). |
+| 2026-06-29 | SDD Example 1 corrected (drift fix) | The SDD segmenter code sample ordered thematicBreak before the setext-underline check, which would misclassify `---` after a paragraph as a thematic break — contradicting SDD Gotcha #3 and the plan's edge-case test. Implementation correctly checks setext first; SDD Example 1 + detection-priority list updated to match. |
+| 2026-06-29 | Implementation complete | Spec 004 implemented on branch spec/004-text-format-transforms-impl (6 phases, 14 tasks). 3 new pure core modules (markdownBlocks, cleanup, lists) + 6 transforms; FormatSelectionRecipe 5→11 keys; fusedFormatNote 9-stage/11-toggle pipeline; 6 new commands + mason.cleanup/lists API (ADR-19 isolation); settings UI 4 setHeading groups; CON-2 core-purity sweep added. 1547 tests green, prod build OK, 38/38 PRD ACs mapped, manual Obsidian smoke (4 scenarios) passed. PR pending to main. |
 
 ## Context
 

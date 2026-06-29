@@ -42,15 +42,21 @@ const FIXTURE = "# A\n\n### B\n\n[1] note.\n\n[^1]: def\n[url](https://x.com)\n"
 
 /**
  * Byte-identical expected output when all recipe toggles are ON.
- * Captured by running the pre-change fusedFormatNote on FIXTURE and observing
- * the resulting doc (tests ran and output was recorded from the failure diff).
+ * Captured by running the 11-step fusedFormatNote on FIXTURE and observing
+ * the resulting doc.
  *
  * Three newlines before "## Resources": the blank-line separator between the body
  * paragraph and the (deleted) def contributes one \n via slice(0,23), and the
  * wholeNoteMove insert begins with \n, producing \n\n + \n = \n\n\n.
+ *
+ * NOTE: dewrap (step 2) runs before tidyFootnotes (step 9). The two-line def
+ * block "[^1]: def\n[url](https://x.com)" in FIXTURE is a multi-line paragraph
+ * block (segmentBlocks classifies both lines as "paragraph" since there is no
+ * footnote-definition block kind). dewrap joins them into the single line
+ * "[^1]: def [url](https://x.com)" before tidyFootnotes moves it to Resources.
  */
 const EXPECTED_ALL_ON =
-	"# A\n\n## B\n\n[^1] note.\n\n\n## Resources\n\n[^1]: def\n[url](https://x.com)";
+	"# A\n\n## B\n\n[^1] note.\n\n\n## Resources\n\n[^1]: def [url](https://x.com)";
 
 // ---------------------------------------------------------------------------
 // Headless CM6 editor — mirrors the helper in test/main.commands.test.ts
@@ -363,6 +369,8 @@ describe("T2.1(g) — all-off: empty plan → Nothing to format Notice, doc unch
 
 	const ALL_OFF: FormatSelectionRecipe = {
 		cascade: false, normalize: false, fromCitations: false, identity: false, move: false,
+		dewrap: false, dehyphenate: false, decomposeLigatures: false,
+		tidyWhitespace: false, normalizeBullets: false, normalizeOrdered: false,
 	};
 
 	it("doc is unchanged when all recipe flags are false", () => {
@@ -446,4 +454,237 @@ describe("T2.1(i) — live effect: fresh recipe read per invocation", () => {
 		expect(result1).toContain("## Resources");
 		expect(result2).not.toContain("## Resources");
 	});
+});
+
+// ---------------------------------------------------------------------------
+// T4.1(a) — all-11-on byte-identity on a clean structured note
+//
+// A clean fixture has no pasted artifacts: single-line paragraphs, '-' bullets,
+// sequential ordered list, fenced code block, H1 only (no gap), no hyphens at
+// line end, no ligatures, no double spaces. All 11 steps must be no-ops → the
+// resultDoc is byte-identical to the input (diffToEditPlan returns [] → no edit).
+// ---------------------------------------------------------------------------
+
+const CLEAN_FIXTURE =
+	"# Title\n\nA clean paragraph with no artifacts.\n\n- item one\n- item two\n\n1. first\n2. second\n\n```\ncode\n```\n";
+
+describe("T4.1(a) — all-11-on is byte-identical on a clean structured note", () => {
+	beforeEach(() => clearNoticeLog());
+
+	it("all 11 steps are no-ops on a clean note — resultDoc is byte-identical to input", () => {
+		const { resultDoc } = runFormatSelection(CLEAN_FIXTURE, {});
+		expect(resultDoc).toBe(CLEAN_FIXTURE);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// T4.1(b) — per-step omission: each of the 6 new keys controls its step
+//
+// Each pair of tests:
+//   key=true  → asserts the step's effect IS present   (RED before impl, GREEN after)
+//   key=false → asserts the step's effect is ABSENT    (verifies the toggle works)
+//              + asserts a different step (normalize) still ran (proves isolation)
+// ---------------------------------------------------------------------------
+
+describe("T4.1(b) — per-step omission: each new key independently controls its step", () => {
+	beforeEach(() => clearNoticeLog());
+
+	// --- dewrap ---
+
+	it("dewrap:true — two consecutive paragraph lines are joined into one", () => {
+		const fixture = "# Heading\n\nFirst line\nsecond line.\n\nSecond paragraph.\n";
+		const { resultDoc } = runFormatSelection(fixture, { dewrap: true });
+		expect(resultDoc).toContain("First line second line.");
+		expect(resultDoc).not.toContain("First line\nsecond line.");
+	});
+
+	it("dewrap:false — wrapped lines stay separate; normalize still closes heading gap", () => {
+		const fixture = "# Heading\n\n### Sub\n\nFirst line\nsecond line.\n\nSecond paragraph.\n";
+		const { resultDoc } = runFormatSelection(fixture, { dewrap: false });
+		expect(resultDoc).toContain("First line\nsecond line.");
+		expect(resultDoc).toMatch(/^## Sub$/m);
+		expect(resultDoc).not.toMatch(/^### Sub$/m);
+	});
+
+	// --- dehyphenate ---
+
+	it("dehyphenate:true — hyphen-newline between lowercase letters is removed", () => {
+		const fixture = "# Heading\n\nlong-\nword continues here.\n";
+		const { resultDoc } = runFormatSelection(fixture, { dehyphenate: true });
+		expect(resultDoc).toContain("longword continues here.");
+		expect(resultDoc).not.toContain("long-\nword");
+	});
+
+	it("dehyphenate:false — hyphen preserved (not joined away); normalize still closes heading gap", () => {
+		const fixture = "# Heading\n\n### Sub\n\nlong-\nword continues here.\n";
+		const { resultDoc } = runFormatSelection(fixture, { dehyphenate: false });
+		// dehyphenate did NOT run — the hyphen character is preserved in the output.
+		// (dewrap still joins the two-line paragraph, but does NOT remove the hyphen;
+		// result contains "long-" rather than "longword".)
+		expect(resultDoc).not.toContain("longword");
+		expect(resultDoc).toContain("long-");
+		// normalize DID run
+		expect(resultDoc).toMatch(/^## Sub$/m);
+		expect(resultDoc).not.toMatch(/^### Sub$/m);
+	});
+
+	// --- decomposeLigatures ---
+
+	it("decomposeLigatures:true — smart double-quotes are replaced with ASCII quotes", () => {
+		const fixture = "# Heading\n\nUse “quoted text” here.\n";
+		const { resultDoc } = runFormatSelection(fixture, { decomposeLigatures: true });
+		expect(resultDoc).toContain('"quoted text"');
+		expect(resultDoc).not.toContain("“");
+	});
+
+	it("decomposeLigatures:false — smart quotes stay; normalize still closes heading gap", () => {
+		const fixture = "# Heading\n\n### Sub\n\nUse “quoted text” here.\n";
+		const { resultDoc } = runFormatSelection(fixture, { decomposeLigatures: false });
+		expect(resultDoc).toContain("“");
+		expect(resultDoc).toMatch(/^## Sub$/m);
+		expect(resultDoc).not.toMatch(/^### Sub$/m);
+	});
+
+	// --- tidyWhitespace ---
+
+	it("tidyWhitespace:true — double spaces in body text are collapsed to single", () => {
+		const fixture = "# Heading\n\nWord  extra  spaces.\n";
+		const { resultDoc } = runFormatSelection(fixture, { tidyWhitespace: true });
+		expect(resultDoc).toContain("Word extra spaces.");
+		expect(resultDoc).not.toContain("Word  extra");
+	});
+
+	it("tidyWhitespace:false — double spaces stay; normalize still closes heading gap", () => {
+		const fixture = "# Heading\n\n### Sub\n\nWord  extra  spaces.\n";
+		const { resultDoc } = runFormatSelection(fixture, { tidyWhitespace: false });
+		expect(resultDoc).toContain("Word  extra  spaces.");
+		expect(resultDoc).toMatch(/^## Sub$/m);
+		expect(resultDoc).not.toMatch(/^### Sub$/m);
+	});
+
+	// --- normalizeBullets ---
+
+	it("normalizeBullets:true — asterisk bullet markers are replaced with hyphens", () => {
+		const fixture = "# Heading\n\n* item one\n* item two\n";
+		const { resultDoc } = runFormatSelection(fixture, { normalizeBullets: true });
+		expect(resultDoc).toContain("- item one");
+		expect(resultDoc).not.toContain("* item one");
+	});
+
+	it("normalizeBullets:false — asterisk bullets stay; normalize still closes heading gap", () => {
+		const fixture = "# Heading\n\n### Sub\n\n* item one\n* item two\n";
+		const { resultDoc } = runFormatSelection(fixture, { normalizeBullets: false });
+		expect(resultDoc).toContain("* item one");
+		expect(resultDoc).toMatch(/^## Sub$/m);
+		expect(resultDoc).not.toMatch(/^### Sub$/m);
+	});
+
+	// --- normalizeOrdered ---
+
+	it("normalizeOrdered:true — out-of-sequence numbers are renumbered from 1", () => {
+		const fixture = "# Heading\n\n2. first item\n3. second item\n";
+		const { resultDoc } = runFormatSelection(fixture, { normalizeOrdered: true });
+		expect(resultDoc).toContain("1. first item");
+		expect(resultDoc).toContain("2. second item");
+		expect(resultDoc).not.toContain("3. second item");
+	});
+
+	it("normalizeOrdered:false — out-of-sequence numbers stay; normalize still closes heading gap", () => {
+		const fixture = "# Heading\n\n### Sub\n\n2. first item\n3. second item\n";
+		const { resultDoc } = runFormatSelection(fixture, { normalizeOrdered: false });
+		expect(resultDoc).toContain("2. first item");
+		expect(resultDoc).toMatch(/^## Sub$/m);
+		expect(resultDoc).not.toMatch(/^### Sub$/m);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// T4.1(c) — all 6 new steps trigger together → exactly one Edit
+//
+// Combined fixture triggers all 6 new steps simultaneously:
+//   normalizeBullets:  * → -
+//   normalizeOrdered:  2. → 1.
+//   dewrap:            two-line paragraph joined
+//   dehyphenate:       hyphen-newline removed
+//   decomposeLigatures: smart quotes → ASCII
+//   tidyWhitespace:    double space collapsed
+//
+// The result should differ from the input → diffToEditPlan returns one Edit
+// → notice is "Mason: 1 change".
+// ---------------------------------------------------------------------------
+
+describe("T4.1(c) — all 6 new steps trigger together → exactly one Edit", () => {
+	beforeEach(() => clearNoticeLog());
+
+	const COMBINED_FIXTURE =
+		"# Heading\n\n* item one\n* item two\n\n2. first\n3. second\n\nFirst line\nsecond line.\n\nlong-\nword continues.\n\nUse “quoted text” here.\n\nWord  extra  spaces.\n";
+
+	it("all 6 new steps fire together — notice shows 'Mason: 1 change'", () => {
+		const { notices } = runFormatSelection(COMBINED_FIXTURE, {});
+		expect(notices).toContain("Mason: 1 change");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// T4.1(d) — live-read: dewrap toggle on the same settings object
+//
+// Proves fusedFormatNote reads settings fresh each invocation: flipping
+// dewrap:false on the same host.settings object after the first call must
+// change the result of the second call.
+// ---------------------------------------------------------------------------
+
+describe("T4.1(d) — live-read: dewrap toggle on same settings object", () => {
+	beforeEach(() => clearNoticeLog());
+
+	it("flipping dewrap:false after first call leaves lines separate — proves fresh settings read", () => {
+		const settings: MasonSettings = { ...DEFAULT_SETTINGS, formatSelection: {} };
+		const host = makeCommandHost(settings);
+		const cmd = findFormatCmd(host);
+
+		const fixture = "# Heading\n\nFirst line\nsecond line.\n";
+
+		// First call: dewrap=true (default) — two lines joined into one
+		const editor1 = makeCmEditor(fixture);
+		clearNoticeLog();
+		cmd.editorCallback(editor1 as unknown as Editor);
+		const result1 = editor1.getValue();
+
+		// Flip dewrap off on the same settings object (same reference the closure holds)
+		host.settings.formatSelection = { dewrap: false };
+
+		// Second call: dewrap=false — lines should stay separate
+		const editor2 = makeCmEditor(fixture);
+		clearNoticeLog();
+		cmd.editorCallback(editor2 as unknown as Editor);
+		const result2 = editor2.getValue();
+
+		// Results must differ — proves fresh read
+		expect(result1).not.toBe(result2);
+		// Specific: second result keeps the newline between the two lines
+		expect(result2).toContain("First line\nsecond line.");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// T4.1(e) — known limitation: offset-staleness when cleanup modifies text before selection
+//
+// cascade uses ctx.selection.from/to offsets from the original doc. If a cleanup
+// step (e.g. decomposeLigatures expanding "ﬁ" → "fi") changes the length of
+// content BEFORE the selection boundary, those offsets are stale in the
+// post-cleanup scratch string. This is a pre-existing design trade-off: the
+// selection context is captured once from the editor before any transforms run.
+//
+// KNOWN LIMITATION: tracked for future fix. The combination of
+//   (a) a length-changing cleanup step modifying content before the selection AND
+//   (b) cascade enabled with an active selection
+// may produce incorrect output. The most common real-world case (cleanup
+// affecting paragraph text; cascade affecting a heading selection that comes
+// AFTER that text) is the affected scenario.
+// ---------------------------------------------------------------------------
+
+describe("T4.1(e) — known limitation: offset-staleness with cleanup + cascade", () => {
+	it.todo(
+		"cascade + decomposeLigatures: if a ligature before the selection expands, " +
+		"cascade lands at the wrong offset in the post-cleanup doc — tracked for future fix",
+	);
 });

@@ -94,9 +94,9 @@ describe("buildRegistry — structure", () => {
 		}
 	});
 
-	it("has exactly 6 registered operations", () => {
+	it("has exactly 12 registered operations", () => {
 		const { entries } = buildRegistry();
-		expect(entries).toHaveLength(6);
+		expect(entries).toHaveLength(12);
 	});
 });
 
@@ -236,6 +236,49 @@ describe("No duplication — api and registry entry share implementation", () =>
 		const fromApi = api.footnotes.fromCitations(makeCtx(), parseResult);
 		expect(fromApi).toEqual(fromCore);
 	});
+
+	it("cleanup.dewrap: api and entry run produce identical plans", () => {
+		const { entries, api } = buildRegistry();
+		const ctx = makeCtx({ doc: "# H\n\nFirst line\nsecond line.\n" });
+		const entry = entries.find((e) => e.id === "cleanup.dewrap")!;
+		expect(api.cleanup.dewrap(ctx)).toEqual(entry.run(ctx));
+	});
+
+	it("cleanup.dehyphenate: api and entry run produce identical plans", () => {
+		const { entries, api } = buildRegistry();
+		const ctx = makeCtx({ doc: "long-\nword continues.\n" });
+		const entry = entries.find((e) => e.id === "cleanup.dehyphenate")!;
+		expect(api.cleanup.dehyphenate(ctx)).toEqual(entry.run(ctx));
+	});
+
+	it("cleanup.decomposeLigatures: api and entry run produce identical plans", () => {
+		const { entries, api } = buildRegistry();
+		const ctx = makeCtx({ doc: "He said “hello”.\n" });
+		const entry = entries.find((e) => e.id === "cleanup.decomposeLigatures")!;
+		expect(api.cleanup.decomposeLigatures(ctx)).toEqual(entry.run(ctx));
+	});
+
+	it("cleanup.tidyWhitespace: api and entry run produce identical plans", () => {
+		const { entries, api } = buildRegistry();
+		const ctx = makeCtx({ doc: "Word  extra  spaces.\n" });
+		const entry = entries.find((e) => e.id === "cleanup.tidyWhitespace")!;
+		expect(api.cleanup.tidyWhitespace(ctx)).toEqual(entry.run(ctx));
+	});
+
+	it("lists.normalizeBullets: api and entry run produce identical plans", () => {
+		const { entries, api } = buildRegistry();
+		const ctx = makeCtx({ doc: "* item one\n* item two\n" });
+		const entry = entries.find((e) => e.id === "lists.normalizeBullets")!;
+		expect(api.lists.normalizeBullets(ctx)).toEqual(entry.run(ctx));
+	});
+
+	it("lists.normalizeOrdered: api and entry run produce identical plans", () => {
+		const { entries, api } = buildRegistry();
+		const ctx = makeCtx({ doc: "2. first item\n3. second item\n" });
+		const entry = entries.find((e) => e.id === "lists.normalizeOrdered")!;
+		expect(api.lists.normalizeOrdered(ctx)).toEqual(entry.run(ctx));
+	});
+
 });
 
 // ---------------------------------------------------------------------------
@@ -442,6 +485,179 @@ describe("checkRequiredApiVersion", () => {
 
 	it("rejects non-version string 'abc' (fail-closed)", () => {
 		expect(checkRequiredApiVersion("abc").ok).toBe(false);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// T4.2 — new cleanup/lists registry entries
+// ---------------------------------------------------------------------------
+
+describe("T4.2 — new cleanup/lists registry entries", () => {
+	it("buildEntries() includes all 6 new ids", () => {
+		const { entries } = buildRegistry();
+		const ids = entries.map((e) => e.id);
+		expect(ids).toContain("cleanup.dewrap");
+		expect(ids).toContain("cleanup.dehyphenate");
+		expect(ids).toContain("cleanup.decomposeLigatures");
+		expect(ids).toContain("cleanup.tidyWhitespace");
+		expect(ids).toContain("lists.normalizeBullets");
+		expect(ids).toContain("lists.normalizeOrdered");
+	});
+
+
+	it("each new entry has correct apiName", () => {
+		const { entries } = buildRegistry();
+		const map = Object.fromEntries(entries.map((e) => [e.id, e]));
+		expect(map["cleanup.dewrap"]?.apiName).toBe("mason.cleanup.dewrap");
+		expect(map["cleanup.dehyphenate"]?.apiName).toBe("mason.cleanup.dehyphenate");
+		expect(map["cleanup.decomposeLigatures"]?.apiName).toBe("mason.cleanup.decomposeLigatures");
+		expect(map["cleanup.tidyWhitespace"]?.apiName).toBe("mason.cleanup.tidyWhitespace");
+		expect(map["lists.normalizeBullets"]?.apiName).toBe("mason.lists.normalizeBullets");
+		expect(map["lists.normalizeOrdered"]?.apiName).toBe("mason.lists.normalizeOrdered");
+	});
+
+	it("each new entry has the exact sentence-case command name", () => {
+		const { entries } = buildRegistry();
+		const map = Object.fromEntries(entries.map((e) => [e.id, e]));
+		expect(map["cleanup.dewrap"]?.command.name).toBe("Dewrap paragraphs");
+		expect(map["cleanup.dehyphenate"]?.command.name).toBe("Dehyphenate words");
+		expect(map["cleanup.decomposeLigatures"]?.command.name).toBe("Decompose ligatures and punctuation");
+		expect(map["cleanup.tidyWhitespace"]?.command.name).toBe("Tidy whitespace");
+		expect(map["lists.normalizeBullets"]?.command.name).toBe("Normalize bullets");
+		expect(map["lists.normalizeOrdered"]?.command.name).toBe("Normalize ordered list");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// T4.2 — cleanup and lists API namespaces
+// ---------------------------------------------------------------------------
+
+describe("T4.2 (API) — cleanup and lists API namespaces", () => {
+	it("buildApi exposes cleanup.dewrap as a function", () => {
+		const { api } = buildRegistry();
+		expect(typeof api.cleanup.dewrap).toBe("function");
+	});
+
+	it("buildApi exposes cleanup.dehyphenate as a function", () => {
+		const { api } = buildRegistry();
+		expect(typeof api.cleanup.dehyphenate).toBe("function");
+	});
+
+	it("buildApi exposes cleanup.decomposeLigatures as a function", () => {
+		const { api } = buildRegistry();
+		expect(typeof api.cleanup.decomposeLigatures).toBe("function");
+	});
+
+	it("buildApi exposes cleanup.tidyWhitespace as a function", () => {
+		const { api } = buildRegistry();
+		expect(typeof api.cleanup.tidyWhitespace).toBe("function");
+	});
+
+	it("buildApi exposes lists.normalizeBullets as a function", () => {
+		const { api } = buildRegistry();
+		expect(typeof api.lists.normalizeBullets).toBe("function");
+	});
+
+	it("buildApi exposes lists.normalizeOrdered as a function", () => {
+		const { api } = buildRegistry();
+		expect(typeof api.lists.normalizeOrdered).toBe("function");
+	});
+
+	it("api.cleanup.dewrap returns non-empty plan on a multi-line paragraph", () => {
+		const { api } = buildRegistry();
+		const ctx = makeCtx({ doc: "# H\n\nFirst line\nsecond line.\n", input: "" });
+		const plan = api.cleanup.dewrap(ctx);
+		expect(Array.isArray(plan)).toBe(true);
+		expect(plan.length).toBeGreaterThan(0);
+	});
+
+	it("api.lists.normalizeBullets returns non-empty plan on a * bullet list", () => {
+		const { api } = buildRegistry();
+		const ctx = makeCtx({ doc: "* item one\n* item two\n", input: "" });
+		const plan = api.lists.normalizeBullets(ctx);
+		expect(plan.length).toBeGreaterThan(0);
+	});
+
+	it("api.cleanup.dewrap output is identical regardless of formatSelection recipe", () => {
+		const { api } = buildRegistry();
+		const doc = "# H\n\nFirst line\nsecond line.\n";
+		const ctxAllOn = { doc, cursor: 0, input: "", settings: { debugLogging: false, resourcesName: "Resources", formatSelection: { dewrap: true, cascade: true, normalize: true } } };
+		const ctxAllOff = { doc, cursor: 0, input: "", settings: { debugLogging: false, resourcesName: "Resources", formatSelection: { dewrap: false, cascade: false, normalize: false } } };
+		const planOn = api.cleanup.dewrap(ctxAllOn);
+		const planOff = api.cleanup.dewrap(ctxAllOff);
+		expect(planOn).toEqual(planOff);
+	});
+
+	// Execution tests for remaining 4 methods
+
+	it("api.cleanup.dehyphenate returns non-empty plan on a soft-hyphenated word", () => {
+		const { api } = buildRegistry();
+		const ctx = makeCtx({ doc: "# H\n\nlong-\nword continues.\n", input: "" });
+		const plan = api.cleanup.dehyphenate(ctx);
+		expect(plan.length).toBeGreaterThan(0);
+	});
+
+	it("api.cleanup.decomposeLigatures returns non-empty plan on a doc with smart quotes", () => {
+		const { api } = buildRegistry();
+		const ctx = makeCtx({ doc: "He said “hello”.\n", input: "" });
+		const plan = api.cleanup.decomposeLigatures(ctx);
+		expect(plan.length).toBeGreaterThan(0);
+	});
+
+	it("api.cleanup.tidyWhitespace returns non-empty plan on a doc with double spaces", () => {
+		const { api } = buildRegistry();
+		const ctx = makeCtx({ doc: "Word  extra  spaces.\n", input: "" });
+		const plan = api.cleanup.tidyWhitespace(ctx);
+		expect(plan.length).toBeGreaterThan(0);
+	});
+
+	it("api.lists.normalizeOrdered returns non-empty plan on an out-of-sequence ordered list", () => {
+		const { api } = buildRegistry();
+		const ctx = makeCtx({ doc: "2. first item\n3. second item\n", input: "" });
+		const plan = api.lists.normalizeOrdered(ctx);
+		expect(plan.length).toBeGreaterThan(0);
+	});
+
+	// Isolation tests (settings-blind) for 5 uncovered methods
+
+	it("api.cleanup.dehyphenate output is identical regardless of formatSelection", () => {
+		const { api } = buildRegistry();
+		const doc = "long-\nword continues.\n";
+		const ctxOn  = makeCtx({ doc, settings: { ...makeSettings(), formatSelection: { dehyphenate: true,  cascade: true  } } });
+		const ctxOff = makeCtx({ doc, settings: { ...makeSettings(), formatSelection: { dehyphenate: false, cascade: false } } });
+		expect(api.cleanup.dehyphenate(ctxOn)).toEqual(api.cleanup.dehyphenate(ctxOff));
+	});
+
+	it("api.cleanup.decomposeLigatures output is identical regardless of formatSelection", () => {
+		const { api } = buildRegistry();
+		const doc = "He said “hello”.\n";
+		const ctxOn  = makeCtx({ doc, settings: { ...makeSettings(), formatSelection: { decomposeLigatures: true  } } });
+		const ctxOff = makeCtx({ doc, settings: { ...makeSettings(), formatSelection: { decomposeLigatures: false } } });
+		expect(api.cleanup.decomposeLigatures(ctxOn)).toEqual(api.cleanup.decomposeLigatures(ctxOff));
+	});
+
+	it("api.cleanup.tidyWhitespace output is identical regardless of formatSelection", () => {
+		const { api } = buildRegistry();
+		const doc = "Word  extra  spaces.\n";
+		const ctxOn  = makeCtx({ doc, settings: { ...makeSettings(), formatSelection: { tidyWhitespace: true  } } });
+		const ctxOff = makeCtx({ doc, settings: { ...makeSettings(), formatSelection: { tidyWhitespace: false } } });
+		expect(api.cleanup.tidyWhitespace(ctxOn)).toEqual(api.cleanup.tidyWhitespace(ctxOff));
+	});
+
+	it("api.lists.normalizeBullets output is identical regardless of formatSelection", () => {
+		const { api } = buildRegistry();
+		const doc = "* item one\n* item two\n";
+		const ctxOn  = makeCtx({ doc, settings: { ...makeSettings(), formatSelection: { normalizeBullets: true  } } });
+		const ctxOff = makeCtx({ doc, settings: { ...makeSettings(), formatSelection: { normalizeBullets: false } } });
+		expect(api.lists.normalizeBullets(ctxOn)).toEqual(api.lists.normalizeBullets(ctxOff));
+	});
+
+	it("api.lists.normalizeOrdered output is identical regardless of formatSelection", () => {
+		const { api } = buildRegistry();
+		const doc = "2. first\n3. second\n";
+		const ctxOn  = makeCtx({ doc, settings: { ...makeSettings(), formatSelection: { normalizeOrdered: true  } } });
+		const ctxOff = makeCtx({ doc, settings: { ...makeSettings(), formatSelection: { normalizeOrdered: false } } });
+		expect(api.lists.normalizeOrdered(ctxOn)).toEqual(api.lists.normalizeOrdered(ctxOff));
 	});
 });
 

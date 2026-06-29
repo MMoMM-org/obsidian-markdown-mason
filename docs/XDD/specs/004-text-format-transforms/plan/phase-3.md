@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: List transforms"
-status: pending
+status: completed
 version: "1.0"
 phase: 3
 ---
@@ -33,7 +33,7 @@ phase: 3
 
 ## Tasks
 
-- [ ] **T3.1 `normalizeBullets` transform** `[activity: domain-modeling]` `[parallel: true]`
+- [x] **T3.1 `normalizeBullets` transform** `[activity: domain-modeling]` `[parallel: true]`
 
   1. Prime: Read `[ref: SDD/Interface Specifications/Internal API Changes]` — `normalizeBullets` signature and specification. Read `[ref: PRD Feature 5 / AC]` — all five acceptance criteria. Read `[ref: SDD/Building Block View/Components]` — note that `segmentBlocks` classifies list items using `/^\s*([-*+•–·]|\d+[.)]) /`. Understand the constraint: only line-start markers are targeted; the replacement is the leading non-`-` glyph, not any character mid-line.
   2. Test (RED): `test/core/lists.test.ts` — normalizeBullets section:
@@ -53,7 +53,7 @@ phase: 3
   4. Validate: all normalizeBullets tests pass; `tsc -noEmit`; `eslint`; `grep -r "obsidian" src/core/lists.ts` → zero.
   - Success: all non-`-` bullet markers normalized to `-`; nesting and checkbox syntax preserved; ordered lists untouched; mid-sentence characters untouched; idempotent `[ref: SDD/Interface Specifications; PRD Feature 5 / AC]`.
 
-- [ ] **T3.2 `normalizeOrdered` transform** `[activity: domain-modeling]`
+- [x] **T3.2 `normalizeOrdered` transform** `[activity: domain-modeling]`
 
   1. Prime: Read `[ref: SDD/Interface Specifications/Internal API Changes]` — `normalizeOrdered` signature. Read `[ref: SDD/Complex Logic]` — "normalizeOrdered nesting" subsection: indent-stack algorithm, counter reset on level-push, counter increment on same-level item, level pop on indent decrease. Read `[ref: PRD Feature 6 / AC]` — all five acceptance criteria. Read `[ref: SDD/Risks and Technical Debt/Implementation Gotchas]` item — "normalizeOrdered drops or merges nesting levels if indentation parsing is incorrect" (mitigate with per-level fixtures at 2 and 3 levels; preserve loose/tight structure).
   2. Test (RED): add to `test/core/lists.test.ts` — normalizeOrdered section:

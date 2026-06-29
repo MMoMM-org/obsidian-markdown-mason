@@ -2,7 +2,7 @@
 import type { MasonSettings } from "./types";
 
 // ---------------------------------------------------------------------------
-// FormatSelectionRecipe — five per-step toggles for the Format selection command.
+// FormatSelectionRecipe — eleven per-step toggles for the Format selection command.
 // MasonSettings.formatSelection?: Partial<FormatSelectionRecipe> is defined in
 // types.ts; absent field resolves to all-on via resolveFormatSelectionRecipe().
 // ---------------------------------------------------------------------------
@@ -13,6 +13,13 @@ export interface FormatSelectionRecipe {
 	fromCitations: boolean;
 	identity: boolean;
 	move: boolean;
+	// spec-004 additions (flat keys — ADR-22)
+	dewrap:             boolean;
+	dehyphenate:        boolean;
+	decomposeLigatures: boolean;
+	tidyWhitespace:     boolean;
+	normalizeBullets:   boolean;
+	normalizeOrdered:   boolean;
 }
 
 export function resolveFormatSelectionRecipe(s: MasonSettings): FormatSelectionRecipe {
@@ -23,5 +30,12 @@ export function resolveFormatSelectionRecipe(s: MasonSettings): FormatSelectionR
 		fromCitations: r.fromCitations ?? true,
 		identity:      r.identity      ?? true,
 		move:          r.move          ?? true,
+		// spec-004
+		dewrap:             r.dewrap            ?? true,
+		dehyphenate:        r.dehyphenate       ?? true,
+		decomposeLigatures: r.decomposeLigatures ?? true,
+		tidyWhitespace:     r.tidyWhitespace    ?? true,
+		normalizeBullets:   r.normalizeBullets  ?? true,
+		normalizeOrdered:   r.normalizeOrdered  ?? true,
 	};
 }

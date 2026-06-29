@@ -345,3 +345,82 @@ describe("compliance — .github/FUNDING.yml present", () => {
 		).toBe(true);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Suite 7 — CON-2: src/core/ is pure (no obsidian import)
+// ---------------------------------------------------------------------------
+
+describe("compliance — CON-2: src/core is pure (no obsidian import)", () => {
+	/**
+	 * Policy (CON-2): Modules under src/core/ must NOT import from the "obsidian"
+	 * package. They must stay pure so they can be unit-tested without the Obsidian
+	 * runtime environment.
+	 *
+	 * This sweep covers every .ts file under src/core/ (excluding .test.ts files),
+	 * including the three spec-004 modules: markdownBlocks.ts, cleanup.ts, lists.ts.
+	 *
+	 * Matched patterns (actual import/require statements only):
+	 *   from "obsidian" | from 'obsidian' | require("obsidian") | require('obsidian')
+	 * Lines whose trimmed content starts with // are excluded to avoid false-positives
+	 * from comments that reference the word "obsidian".
+	 */
+	const coreDir = path.join(srcDir, "core");
+
+	// Matches real import/require statements; does not match single-line comments.
+	// The third arm `import\s+['"]obsidian['"]` catches the bare side-effect form
+	// `import "obsidian"` (quote immediately after `import `); it does NOT collide
+	// with `import X from "obsidian"` because that form is already caught by the
+	// first arm and the `from` keyword separates `import` from the quote string.
+	const OBSIDIAN_IMPORT =
+		/(from\s+['"]obsidian['"])|(require\(\s*['"]obsidian['"]\s*\))|(import\s+['"]obsidian['"])/;
+
+	/** Scan a single file for CON-2 violations; returns offending line descriptions. */
+	function scanCoreFile(filePath: string): string[] {
+		const offending: string[] = [];
+		const lines = fs.readFileSync(filePath, "utf8").split("\n");
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i]!;
+			if (/^\s*\/\//.test(line)) continue; // skip single-line comments
+			if (/^\s*\/?\*/.test(line)) continue; // skip block-comment lines (/* opener and * body/closer)
+			if (OBSIDIAN_IMPORT.test(line)) {
+				offending.push(`    line ${i + 1}: ${line.trim()}`);
+			}
+		}
+		return offending;
+	}
+
+	it("no src/core/*.ts file imports from 'obsidian' (full sweep)", () => {
+		const coreFiles = collectTsFiles(coreDir).filter((f) => !f.endsWith(".test.ts"));
+		const violations: string[] = [];
+		for (const file of coreFiles) {
+			const offending = scanCoreFile(file);
+			if (offending.length > 0) {
+				violations.push(`  ${path.relative(repoRoot, file)}:\n${offending.join("\n")}`);
+			}
+		}
+		expect(
+			violations,
+			`CON-2 violation — src/core/ file(s) import from "obsidian":\n${violations.join("\n")}`,
+		).toHaveLength(0);
+	});
+
+	// Focused checks for the three spec-004 modules — explicitly named so the
+	// coverage intent is visible in the test report even before the dynamic sweep
+	// would catch them.
+	const SPEC_004_MODULES = ["markdownBlocks.ts", "cleanup.ts", "lists.ts"] as const;
+
+	for (const moduleName of SPEC_004_MODULES) {
+		it(`spec-004 module src/core/${moduleName} has no obsidian import (CON-2)`, () => {
+			const filePath = path.join(coreDir, moduleName);
+			expect(
+				fs.existsSync(filePath),
+				`Expected spec-004 module to exist: ${filePath}`,
+			).toBe(true);
+			const offending = scanCoreFile(filePath);
+			expect(
+				offending,
+				`CON-2 violation in src/core/${moduleName}:\n${offending.join("\n")}`,
+			).toHaveLength(0);
+		});
+	}
+});

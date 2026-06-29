@@ -77,6 +77,8 @@ import {
 	wholeNoteMove,
 } from "./noteFootnotes";
 import { normalizeUrl } from "./url";
+import { dewrap, dehyphenate, decomposeLigatures, tidyWhitespace } from "./cleanup";
+import { normalizeBullets, normalizeOrdered } from "./lists";
 
 // ---------------------------------------------------------------------------
 // API version
@@ -182,6 +184,16 @@ export interface MasonApi {
 	util: {
 		normalizeUrl(raw: string): string;
 	};
+	cleanup: {
+		dewrap(ctx: OperationContext): EditPlan;
+		dehyphenate(ctx: OperationContext): EditPlan;
+		decomposeLigatures(ctx: OperationContext): EditPlan;
+		tidyWhitespace(ctx: OperationContext): EditPlan;
+	};
+	lists: {
+		normalizeBullets(ctx: OperationContext): EditPlan;
+		normalizeOrdered(ctx: OperationContext): EditPlan;
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -218,6 +230,12 @@ function buildEntries(): RegistryEntry[] {
 		buildIdentityEntry(),
 		buildMoveEntry(),
 		buildNormalizeUrlEntry(),
+		buildDewrapEntry(),
+		buildDehyphenateEntry(),
+		buildDecomposeLigaturesEntry(),
+		buildTidyWhitespaceEntry(),
+		buildNormalizeBulletsEntry(),
+		buildNormalizeOrderedEntry(),
 	];
 }
 
@@ -332,6 +350,72 @@ function buildNormalizeUrlEntry(): RegistryEntry {
 	};
 }
 
+function buildDewrapEntry(): RegistryEntry {
+	return {
+		id: "cleanup.dewrap",
+		apiName: "mason.cleanup.dewrap",
+		command: { name: "Dewrap paragraphs" },
+		run(ctx: OperationContext): EditPlan {
+			return dewrap(ctx);
+		},
+	};
+}
+
+function buildDehyphenateEntry(): RegistryEntry {
+	return {
+		id: "cleanup.dehyphenate",
+		apiName: "mason.cleanup.dehyphenate",
+		command: { name: "Dehyphenate words" },
+		run(ctx: OperationContext): EditPlan {
+			return dehyphenate(ctx);
+		},
+	};
+}
+
+function buildDecomposeLigaturesEntry(): RegistryEntry {
+	return {
+		id: "cleanup.decomposeLigatures",
+		apiName: "mason.cleanup.decomposeLigatures",
+		command: { name: "Decompose ligatures and punctuation" },
+		run(ctx: OperationContext): EditPlan {
+			return decomposeLigatures(ctx);
+		},
+	};
+}
+
+function buildTidyWhitespaceEntry(): RegistryEntry {
+	return {
+		id: "cleanup.tidyWhitespace",
+		apiName: "mason.cleanup.tidyWhitespace",
+		command: { name: "Tidy whitespace" },
+		run(ctx: OperationContext): EditPlan {
+			return tidyWhitespace(ctx);
+		},
+	};
+}
+
+function buildNormalizeBulletsEntry(): RegistryEntry {
+	return {
+		id: "lists.normalizeBullets",
+		apiName: "mason.lists.normalizeBullets",
+		command: { name: "Normalize bullets" },
+		run(ctx: OperationContext): EditPlan {
+			return normalizeBullets(ctx);
+		},
+	};
+}
+
+function buildNormalizeOrderedEntry(): RegistryEntry {
+	return {
+		id: "lists.normalizeOrdered",
+		apiName: "mason.lists.normalizeOrdered",
+		command: { name: "Normalize ordered list" },
+		run(ctx: OperationContext): EditPlan {
+			return normalizeOrdered(ctx);
+		},
+	};
+}
+
 // ---------------------------------------------------------------------------
 // API surface — derived from entries, no new logic
 // ---------------------------------------------------------------------------
@@ -366,6 +450,28 @@ function buildApi(entries: RegistryEntry[]): MasonApi {
 		util: {
 			normalizeUrl(raw: string): string {
 				return normalizeUrl(raw);
+			},
+		},
+		cleanup: {
+			dewrap(ctx: OperationContext): EditPlan {
+				return dewrap(ctx);
+			},
+			dehyphenate(ctx: OperationContext): EditPlan {
+				return dehyphenate(ctx);
+			},
+			decomposeLigatures(ctx: OperationContext): EditPlan {
+				return decomposeLigatures(ctx);
+			},
+			tidyWhitespace(ctx: OperationContext): EditPlan {
+				return tidyWhitespace(ctx);
+			},
+		},
+		lists: {
+			normalizeBullets(ctx: OperationContext): EditPlan {
+				return normalizeBullets(ctx);
+			},
+			normalizeOrdered(ctx: OperationContext): EditPlan {
+				return normalizeOrdered(ctx);
 			},
 		},
 	};

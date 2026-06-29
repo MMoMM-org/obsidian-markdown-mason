@@ -1,6 +1,6 @@
 ---
 title: "Phase 5: Settings UI"
-status: pending
+status: completed
 version: "1.0"
 phase: 5
 ---
@@ -33,7 +33,7 @@ phase: 5
 
 ## Tasks
 
-- [ ] **T5.1 Grow `_renderFormatSelectionSection` to 11 toggles with four `setHeading` sub-groups** `[activity: build-feature]`
+- [x] **T5.1 Grow `_renderFormatSelectionSection` to 11 toggles with four `setHeading` sub-groups** `[activity: build-feature]`
 
   1. Prime: Read `src/ui/settingsTab.ts` in full — find `_renderFormatSelectionSection`, the `addToggle` write pattern, `saveSettings`, and the `Segment` plumbing. Read `[ref: SDD/Cross-Cutting Concepts/User Interface & UX]` — the wireframe showing group labels, toggle names (sentence-case), and `setDesc` descriptions. Read `[ref: SDD/ADR-23]` for `setHeading` usage pattern: `new Setting(containerEl).setName("Cleanup").setHeading()`. Read `[ref: SDD/CON-3]` confirming `setHeading` is a supported, standard Obsidian API. Note the `onChange` pattern from the SDD Cross-Cutting section: initialize `formatSelection` if absent, set field, call `saveSettings`.
   2. Test (RED): a settings-tab test (mirroring the existing settings-tab test structure):
