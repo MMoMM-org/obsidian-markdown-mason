@@ -63,6 +63,24 @@ describe("dehyphenate — lowercase-to-lowercase end-of-line hyphenation", () =>
 		const first = applyToString(doc, dehyphenate(makeCtx(doc)));
 		expect(dehyphenate(makeCtx(first))).toHaveLength(0);
 	});
+
+	it("joins only the first pair per pass for adjacent chain a-\\nb-\\nc", () => {
+		// The regex /([a-z])-\n([a-z])/g consumes the second letter, so
+		// a-\nb-\nc: first match consumes 'a-\nb', leaving 'b-\nc' unmatched.
+		// Pass 1: one edit (first pair joined).
+		const doc = "a-\nb-\nc\n";
+		const plan1 = dehyphenate(makeCtx(doc));
+		expect(plan1).toHaveLength(1);
+		const after1 = applyToString(doc, plan1);
+		expect(after1).toBe("ab-\nc\n");
+		// Pass 2: one edit (second pair joined).
+		const plan2 = dehyphenate(makeCtx(after1));
+		expect(plan2).toHaveLength(1);
+		const after2 = applyToString(after1, plan2);
+		expect(after2).toBe("abc\n");
+		// Pass 3: fully converged — no edits.
+		expect(dehyphenate(makeCtx(after2))).toHaveLength(0);
+	});
 });
 
 // ============================================================
@@ -234,6 +252,13 @@ describe("decomposeLigatures — safety constraints", () => {
 		const doc = "ﬁle…done\n";
 		const first = applyToString(doc, decomposeLigatures(makeCtx(doc)));
 		expect(decomposeLigatures(makeCtx(first))).toHaveLength(0);
+	});
+
+	it("does not touch a ligature inside a cross-line inline code span", () => {
+		// ﬂ is on the first line but inside `ﬂow\nacross` which spans two lines.
+		// Per-line masking would miss this span; full-block masking must catch it.
+		const doc = "see `ﬂow\nacross` here\n";
+		expect(decomposeLigatures(makeCtx(doc))).toHaveLength(0);
 	});
 });
 

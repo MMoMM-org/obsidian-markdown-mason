@@ -7,13 +7,9 @@ import type { BlockKind } from "./markdownBlocks";
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-function isSkippedForCode(kind: BlockKind): boolean {
-	return kind === "fencedCode" || kind === "indentedCode";
-}
-
 /** Blocks that must never be modified by any cleanup transform. */
 function isProtectedBlock(kind: BlockKind): boolean {
-	return isSkippedForCode(kind) || kind === "frontmatter";
+	return kind === "fencedCode" || kind === "indentedCode" || kind === "frontmatter";
 }
 
 // ---------------------------------------------------------------------------
@@ -53,6 +49,31 @@ export function dehyphenate(ctx: OperationContext): EditPlan {
 }
 
 // ---------------------------------------------------------------------------
+// T2.2 — dewrap
+// ---------------------------------------------------------------------------
+
+/**
+ * Join soft-wrapped paragraph lines back into a single line per paragraph.
+ * Only "paragraph" blocks are processed; all other block kinds are skipped.
+ */
+export function dewrap(ctx: OperationContext): EditPlan {
+	const blocks = segmentBlocks(ctx.doc);
+	const plan: EditPlan = [];
+	for (const block of blocks) {
+		if (block.kind !== "paragraph") continue;
+		const text = ctx.doc.slice(block.startOffset, block.endOffset);
+		const hasTrailing = text.endsWith("\n");
+		const raw = hasTrailing ? text.slice(0, -1) : text;
+		const lineArr = raw.split("\n");
+		if (lineArr.length <= 1) continue;
+		const joined = lineArr.join(" ");
+		const insert = hasTrailing ? joined + "\n" : joined;
+		plan.push({ from: block.startOffset, to: block.endOffset, insert });
+	}
+	return plan;
+}
+
+// ---------------------------------------------------------------------------
 // T2.3 — decomposeLigatures
 // ---------------------------------------------------------------------------
 
@@ -79,7 +100,8 @@ export const GLYPH_MAP: Readonly<Record<string, string>> = {
 
 /**
  * Replace canonical ligatures and punctuation glyphs with ASCII equivalents.
- * Skips fencedCode, indentedCode, and frontmatter blocks; skips inline code spans via maskInlineCode.
+ * Skips fencedCode, indentedCode, and frontmatter blocks; skips inline code
+ * spans via maskInlineCode applied to the full block text (handles cross-line spans).
  */
 export function decomposeLigatures(ctx: OperationContext): EditPlan {
 	const blocks = segmentBlocks(ctx.doc);
@@ -89,17 +111,23 @@ export function decomposeLigatures(ctx: OperationContext): EditPlan {
 		if (isProtectedBlock(block.kind)) continue;
 
 		const text = ctx.doc.slice(block.startOffset, block.endOffset);
+		// Mask the full block text so cross-line inline code spans are detected.
+		// A span like `ﬂow\nacross` crosses a line boundary; masking per-line
+		// would miss it. maskedBlock[i] === "\0" iff absolute block position i
+		// is inside an inline code span.
+		const maskedBlock = maskInlineCode(text);
 		const lines = text.split("\n");
 		let lineOffset = block.startOffset;
 
 		for (const line of lines) {
 			if (line.length > 0) {
-				const maskedLine = maskInlineCode(line);
 				let newLine = "";
 				let changed = false;
 				for (let i = 0; i < line.length; i++) {
 					const ch = line[i]!;
-					if (maskedLine[i] === "\0") {
+					// Absolute position within maskedBlock for this character.
+					const blockPos = (lineOffset - block.startOffset) + i;
+					if (maskedBlock[blockPos] === "\0") {
 						newLine += ch; // inside inline code span — preserve
 					} else if (GLYPH_MAP[ch] !== undefined) {
 						newLine += GLYPH_MAP[ch];
@@ -189,30 +217,5 @@ export function tidyWhitespace(ctx: OperationContext): EditPlan {
 		}
 	}
 
-	return plan;
-}
-
-// ---------------------------------------------------------------------------
-// T2.2 — dewrap
-// ---------------------------------------------------------------------------
-
-/**
- * Join soft-wrapped paragraph lines back into a single line per paragraph.
- * Only "paragraph" blocks are processed; all other block kinds are skipped.
- */
-export function dewrap(ctx: OperationContext): EditPlan {
-	const blocks = segmentBlocks(ctx.doc);
-	const plan: EditPlan = [];
-	for (const block of blocks) {
-		if (block.kind !== "paragraph") continue;
-		const text = ctx.doc.slice(block.startOffset, block.endOffset);
-		const hasTrailing = text.endsWith("\n");
-		const raw = hasTrailing ? text.slice(0, -1) : text;
-		const lineArr = raw.split("\n");
-		if (lineArr.length <= 1) continue;
-		const joined = lineArr.join(" ");
-		const insert = hasTrailing ? joined + "\n" : joined;
-		plan.push({ from: block.startOffset, to: block.endOffset, insert });
-	}
 	return plan;
 }

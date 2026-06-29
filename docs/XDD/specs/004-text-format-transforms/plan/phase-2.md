@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: Cleanup transforms"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 2
 ---
