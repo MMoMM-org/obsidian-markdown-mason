@@ -307,21 +307,30 @@ describe("T2.2(b) — cleanup pipeline applies all 7 steps", () => {
 		expect(notices).not.toContain("Nothing to format");
 	});
 
-	it("active selection: replaceSelection is called once (same code path as cursor insert)", async () => {
-		// editor.replaceSelection() handles both cursor insert and active-selection replace in
-		// Obsidian. The command always calls it exactly once regardless of selection state.
+	it("production fallback: editor.replaceSelection is called when injection.replaceSelection is absent", async () => {
+		// Exercises the ?? right-hand side of:
+		//   const insert = injection?.replaceSelection ?? ((t) => editor.replaceSelection(t));
+		// All other tests supply injection.replaceSelection; this one omits it so the
+		// closure that calls the real editor stub is the only insert path exercised.
 		const plugin = await makePluginAndFireLayout();
 
-		let callCount = 0;
+		const raw = "Word one\nword two.\n\n* Bullet\n“Quoted”";
 		plugin._commandInjection = {
-			clipboardReader: async () => "Text to format.\n",
-			replaceSelection: () => { callCount++; },
+			clipboardReader: async () => raw,
+			// replaceSelection intentionally omitted — production fallback path
 		};
 
+		const editor = makeEditor();
 		const cmd = findCommand(plugin, "mason.pasteAndFormatText");
-		await cmd!.editorCallback(makeEditor());
+		await cmd!.editorCallback(editor);
 
-		expect(callCount, "exactly one replaceSelection call covers both cursor and selection replace").toBe(1);
+		// The production closure must have delegated to the editor stub exactly once
+		expect(vi.mocked(editor.replaceSelection)).toHaveBeenCalledTimes(1);
+		const inserted = vi.mocked(editor.replaceSelection).mock.calls[0]![0] as string;
+		// Confirm cleanup ran through the full pipeline
+		expect(inserted).toContain("Word one word two."); // dewrapped
+		expect(inserted).toContain("- Bullet");            // normalizeBullets
+		expect(inserted).toContain('"Quoted"');             // decomposeLigatures
 	});
 });
 
