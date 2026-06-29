@@ -1,3 +1,10 @@
+# [0.5.0](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.4.0...0.5.0) (2026-06-29)
+
+
+### Features
+
+* text format transforms — six markdown-aware cleanup/list transforms [spec 004] ([#19](https://github.com/MMoMM-org/obsidian-markdown-mason/issues/19)) ([438e4eb](https://github.com/MMoMM-org/obsidian-markdown-mason/commit/438e4eb66e2e60b163c74fb6b3c545c60b972a70))
+
 # [0.4.0](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.3.0...0.4.0) (2026-06-28)
 
 
