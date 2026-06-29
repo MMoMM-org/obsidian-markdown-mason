@@ -82,7 +82,7 @@ Build:   node esbuild.config.mjs            # prod: append "production"
 
 ## Phases
 
-- [ ] [Phase 1: Pure core foundations](phase-1.md)
+- [x] [Phase 1: Pure core foundations](phase-1.md)
 - [ ] [Phase 2: Cleanup transforms](phase-2.md)
 - [ ] [Phase 3: List transforms](phase-3.md)
 - [ ] [Phase 4: Command wiring, registry & API](phase-4.md)

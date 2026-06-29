@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: Pure core foundations"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 1
 ---
@@ -37,7 +37,7 @@ phase: 1
 
 ## Tasks
 
-- [ ] **T1.1 `src/core/markdownBlocks.ts` — block segmenter + inline-code masking** `[activity: domain-modeling]`
+- [x] **T1.1 `src/core/markdownBlocks.ts` — block segmenter + inline-code masking** `[activity: domain-modeling]`
 
   1. Prime: Read `[ref: SDD/Implementation Examples/Example 1: Block segmenter]` in full (the complete implementation is given). Read `[ref: SDD/Interface Specifications/Internal API Changes]` for the `BlockKind` union, `Block` interface, and `segmentBlocks`/`maskInlineCode` signatures. Read `[ref: SDD/ADR-20]` for detection priority order. Read `[ref: SDD/Risks and Technical Debt/Implementation Gotchas]` items 1-4 (nested fences, lazy continuations, setext/thematic-break ambiguity, frontmatter boundary).
   2. Test (RED): `test/core/markdownBlocks.test.ts` — write tests before the file exists:
@@ -49,7 +49,7 @@ phase: 1
   4. Validate: unit tests pass; `npx tsc -noEmit -skipLibCheck`; `npx eslint src/`; compliance: `grep -r "obsidian" src/core/markdownBlocks.ts` → no output.
   - Success: every block kind is correctly classified including all edge cases; offset arithmetic is correct; inline-code masking produces equal-length null-char replacements `[ref: SDD/Building Block View; SDD/ADR-20; PRD Feature 7 / AC — markdown-structure preservation]`.
 
-- [ ] **T1.2 Extend `FormatSelectionRecipe` to 11 keys + update `resolveFormatSelectionRecipe`** `[activity: data-architecture]`
+- [x] **T1.2 Extend `FormatSelectionRecipe` to 11 keys + update `resolveFormatSelectionRecipe`** `[activity: data-architecture]`
 
   1. Prime: Read `src/core/formatSelection.ts` (existing `FormatSelectionRecipe` — 5 fields; existing `resolveFormatSelectionRecipe`). Read `[ref: SDD/Implementation Examples/Example 3]` for the full 11-field interface and resolver. Read `[ref: SDD/Interface Specifications/Data Storage Changes]` for the exact field names: `dewrap`, `dehyphenate`, `decomposeLigatures`, `tidyWhitespace`, `normalizeBullets`, `normalizeOrdered`.
   2. Test (RED): extend `test/core/formatSelection.test.ts`:
@@ -62,7 +62,7 @@ phase: 1
   4. Validate: tests pass; `tsc -noEmit`; `eslint`. Confirm existing resolver behavior for the 5 spec-003 keys is byte-identical.
   - Success: missing/partial stored data resolves to all-on for all 11 fields; explicit values override defaults; zero regression on spec-003 keys `[ref: SDD/Interface Specifications/Data Storage Changes; SDD/Implementation Examples/Example 3; PRD Feature 7 / AC — default-on]`.
 
-- [ ] **T1.3 `DEFAULT_SETTINGS.formatSelection` — add 6 new true entries** `[activity: data-architecture]`
+- [x] **T1.3 `DEFAULT_SETTINGS.formatSelection` — add 6 new true entries** `[activity: data-architecture]` _(implemented within the T1.2 commit `e101fc3`; verified by spec-compliance + code-quality review)_
 
   1. Prime: Read `src/core/types.ts` — `MasonSettings`, `DEFAULT_SETTINGS`, `DEFAULT_SETTINGS.formatSelection` (5 existing true entries). Import constraint: `FormatSelectionRecipe` is already imported from `src/core/formatSelection.ts`; the type of `formatSelection` is `Partial<FormatSelectionRecipe>` — shape is unchanged, only the concrete defaults object grows.
   2. Test (RED): extend the types/defaults test (or create `test/core/types.test.ts` if none exists):
