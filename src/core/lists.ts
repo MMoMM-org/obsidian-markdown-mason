@@ -23,7 +23,7 @@ import type { EditPlan, OperationContext } from "./types";
 const BULLET_RE = /^(\s*)([-*+•–·])([ \t])/;
 
 /**
- * Normalise bullet-list markers to '-'.
+ * Normalize bullet-list markers to '-'.
  *
  * For each line in "listItem" blocks: if the leading marker glyph is not '-',
  * emit an edit replacing only that glyph with '-'. Ordered items, paragraphs,

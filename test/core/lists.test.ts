@@ -261,6 +261,7 @@ describe("normalizeOrdered — multi-digit numbers", () => {
 	it("correctly replaces to a 2-digit number when items > 9", () => {
 		const items = Array.from({ length: 10 }, (_, i) => `${i + 2}. item${i + 1}`).join("\n") + "\n";
 		const out = applyToString(items, normalizeOrdered(makeCtx(items)));
+		expect(out).toContain("1. item1");
 		expect(out).toContain("10. item10");
 	});
 });
@@ -307,5 +308,17 @@ describe("normalizeOrdered — counter reset between distinct lists (T3.2 bug fi
 		const doc = "3. foo\n\n1. bar\n\n7. baz\n";
 		const out = applyToString(doc, normalizeOrdered(makeCtx(doc)));
 		expect(out).toBe("1. foo\n\n2. bar\n\n3. baz\n");
+	});
+});
+
+describe("normalizeOrdered — irregular indentation that doesn't match any stack level (resolveCounter fallback)", () => {
+	it("renumbers with irregular indentation that doesn't match any stack level (resolveCounter fallback)", () => {
+		// Indent widths: root=0, deep=6, mid=2.
+		// When processing "mid" (indent 2): pop the indent-6 level, remaining top has indent 0.
+		// 2 ≠ 0 → resolveCounter fallback: push new level with counter 1 → mid stays 1 (no edit).
+		// "root2" (indent 0): pop indent-2 level, remaining top has indent 0 → exact match → counter 2 (edit 1→2).
+		const doc = "1. root\n      1. deep\n  1. mid\n1. root2\n";
+		const out = applyToString(doc, normalizeOrdered(makeCtx(doc)));
+		expect(out).toBe("1. root\n      1. deep\n  1. mid\n2. root2\n");
 	});
 });
