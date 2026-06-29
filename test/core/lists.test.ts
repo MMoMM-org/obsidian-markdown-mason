@@ -278,3 +278,34 @@ describe("normalizeOrdered — idempotency", () => {
 		expect(normalizeOrdered(makeCtx(first))).toHaveLength(0);
 	});
 });
+
+describe("normalizeOrdered — counter reset between distinct lists (T3.2 bug fix)", () => {
+	it("sequential second list after paragraph: no edits emitted (both lists already 1,2)", () => {
+		// Two distinct lists separated by a paragraph — each should start from 1.
+		// Both are already sequential so no edits expected.
+		const doc = "1. a\n2. b\n\nSome paragraph.\n\n1. x\n2. y\n";
+		expect(normalizeOrdered(makeCtx(doc))).toHaveLength(0);
+	});
+
+	it("out-of-order second list after paragraph: renumbered from 1 (not continuing prior count)", () => {
+		// First list: 1. a, 2. b — already correct, no edits.
+		// Paragraph separates them.
+		// Second list: 5. x, 9. y — should be renumbered to 1. x, 2. y.
+		const doc = "1. a\n2. b\n\npara\n\n5. x\n9. y\n";
+		const out = applyToString(doc, normalizeOrdered(makeCtx(doc)));
+		expect(out).toBe("1. a\n2. b\n\npara\n\n1. x\n2. y\n");
+	});
+
+	it("loose list (blank-separated items) still continues numbering across blanks", () => {
+		// Items in one logical list separated only by blank lines — numbering continues.
+		const doc = "1. a\n\n2. b\n\n3. c\n";
+		expect(normalizeOrdered(makeCtx(doc))).toHaveLength(0);
+	});
+
+	it("out-of-order loose list still renumbered as one sequence", () => {
+		// Blanks only (no structural separator) → single list, renumber as sequence.
+		const doc = "3. foo\n\n1. bar\n\n7. baz\n";
+		const out = applyToString(doc, normalizeOrdered(makeCtx(doc)));
+		expect(out).toBe("1. foo\n\n2. bar\n\n3. baz\n");
+	});
+});

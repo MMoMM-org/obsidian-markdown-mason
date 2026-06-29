@@ -86,7 +86,8 @@ export function normalizeOrdered(ctx: OperationContext): EditPlan {
 	const stack: StackLevel[] = [];
 
 	for (const block of segmentBlocks(ctx.doc)) {
-		if (block.kind !== "listItem") continue;
+		if (block.kind === "blank") continue; // loose-list continuity: keep counters across blanks
+		if (block.kind !== "listItem") { stack.length = 0; continue; } // distinct list: reset numbering
 
 		let lineOffset = block.startOffset;
 		for (let i = block.startLine; i <= block.endLine; i++) {
