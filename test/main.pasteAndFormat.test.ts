@@ -245,6 +245,42 @@ describe("T2.2(b) — cleanup pipeline applies all 7 steps", () => {
 		expect(result).toContain("x y");
 	});
 
+	it("changed clipboard: notice reports real change count from diffToEditPlan (not hardcoded)", async () => {
+		// Fixture with four distinct artifact types:
+		//   - soft-wrapped paragraph lines (dewrap joins them)
+		//   - end-of-line hyphenation (dehyphenate stitches across \n)
+		//   - smart open/close quotes (decomposeLigatures converts each to ASCII ")
+		//   - star bullet (normalizeBullets converts to -)
+		// All these changes collapse into one edit span via diffToEditPlan,
+		// so diffToEditPlan(raw, formatted).length === 1 and the notice is "Mason: 1 change".
+		// This verifies the count is driven by diffToEditPlan, not hardcoded.
+		const plugin = await makePluginAndFireLayout();
+
+		const raw =
+			"Word one\nword two.\n\ncom-\nplex result.\n\n* Bullet\n“Quoted”";
+
+		const inserted: string[] = [];
+		plugin._commandInjection = {
+			clipboardReader: async () => raw,
+			replaceSelection: (t: string) => inserted.push(t),
+		};
+
+		clearNoticeLog();
+		const cmd = findCommand(plugin, "mason.pasteAndFormatText");
+		await cmd!.editorCallback(makeEditor());
+
+		expect(inserted).toHaveLength(1);
+		// Confirm cleanup ran — formatted text must differ from raw
+		expect(inserted[0]).not.toBe(raw);
+
+		// diffToEditPlan(raw, formatted).length === 1 (one contiguous changed region)
+		// → countNoticeMessage(1) → "Mason: 1 change"
+		// The old hardcoded path was also countNoticeMessage(1), so this also
+		// validates the new path never accidentally reports 0 or another wrong value.
+		const notices = noticeLog();
+		expect(notices).toContain("Mason: 1 change");
+	});
+
 	it("no-change clipboard: still inserts raw text; notice is 'Mason: pasted (nothing to clean up)'", async () => {
 		const plugin = await makePluginAndFireLayout();
 

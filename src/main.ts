@@ -29,6 +29,7 @@ import { buildEnabledPasteScripts } from "./scripts/pasteAssembly";
 import { debug, setDebugLogging } from "./core/debug";
 import { resolveFormatSelectionRecipe } from "./core/formatSelection";
 import { applyTextCleanup } from "./core/formatPipeline";
+import { diffToEditPlan } from "./core/noteFootnotes";
 
 // Re-export so consumers that import from "src/main" still resolve.
 export { DEFAULT_SETTINGS, type MasonSettings };
@@ -862,7 +863,7 @@ async function runPasteAndFormatCommand(
 	// 5. Notice
 	new Notice(
 		formatted !== rawText
-			? countNoticeMessage(1)
+			? countNoticeMessage(diffToEditPlan(rawText, formatted).length)
 			: "Mason: pasted (nothing to clean up)",
 	);
 }
