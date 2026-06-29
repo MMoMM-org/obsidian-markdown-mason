@@ -367,7 +367,12 @@ describe("compliance — CON-2: src/core is pure (no obsidian import)", () => {
 	const coreDir = path.join(srcDir, "core");
 
 	// Matches real import/require statements; does not match single-line comments.
-	const OBSIDIAN_IMPORT = /(from\s+['"]obsidian['"])|(require\(\s*['"]obsidian['"]\s*\))/;
+	// The third arm `import\s+['"]obsidian['"]` catches the bare side-effect form
+	// `import "obsidian"` (quote immediately after `import `); it does NOT collide
+	// with `import X from "obsidian"` because that form is already caught by the
+	// first arm and the `from` keyword separates `import` from the quote string.
+	const OBSIDIAN_IMPORT =
+		/(from\s+['"]obsidian['"])|(require\(\s*['"]obsidian['"]\s*\))|(import\s+['"]obsidian['"])/;
 
 	/** Scan a single file for CON-2 violations; returns offending line descriptions. */
 	function scanCoreFile(filePath: string): string[] {
@@ -376,6 +381,7 @@ describe("compliance — CON-2: src/core is pure (no obsidian import)", () => {
 		for (let i = 0; i < lines.length; i++) {
 			const line = lines[i]!;
 			if (/^\s*\/\//.test(line)) continue; // skip single-line comments
+			if (/^\s*\/?\*/.test(line)) continue; // skip block-comment lines (/* opener and * body/closer)
 			if (OBSIDIAN_IMPORT.test(line)) {
 				offending.push(`    line ${i + 1}: ${line.trim()}`);
 			}
