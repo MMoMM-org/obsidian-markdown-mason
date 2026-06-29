@@ -9,8 +9,8 @@ import type { MasonSettings } from "../../src/core/types";
 // T1.1  FormatSelectionRecipe resolver
 //
 // resolveFormatSelectionRecipe() reads s.formatSelection and applies defaults
-// so every caller receives a fully-populated recipe. The five fine toggles are:
-//   cascade | normalize | fromCitations | identity | move
+// so every caller receives a fully-populated recipe. The eleven fine toggles are:
+//   cascade | normalize | fromCitations | identity | move | dewrap | dehyphenate | decomposeLigatures | tidyWhitespace | normalizeBullets | normalizeOrdered
 // All default to true when absent.
 // ---------------------------------------------------------------------------
 
@@ -90,7 +90,7 @@ describe("resolveFormatSelectionRecipe — no formatSelection field", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Partial override — only move disabled; the other four remain true
+// Partial override — only move disabled; the other ten remain true
 // ---------------------------------------------------------------------------
 
 describe("resolveFormatSelectionRecipe — partial { move: false }", () => {
