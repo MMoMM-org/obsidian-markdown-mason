@@ -251,10 +251,13 @@ NEW src/core/markdownBlocks.ts:
     #   7. Blockquote        — /^\s*>/
     #   8. List item         — /^\s*([-*+•–·]|\d+[.)]) /
     #   9. Table row         — /^\s*\|/
-    #   10. Thematic break   — /^\s*([-*_]\s*){3,}$/
-    #   11. Indented code    — /^    / (four leading spaces)
-    #   12. Setext underline — /^(=+|-+)\s*$/ when previous line kind is "paragraph"
-    #       → retroactively reclassifies the previous paragraph line as "setextHeading"
+    #   10. Setext underline — /^(=+|-+)\s*$/ when previous line kind is "paragraph"
+    #       → retroactively reclassifies the previous paragraph line as "setextHeading".
+    #       MUST precede thematic break: a bare "---" after a paragraph is a setext
+    #       underline, not a thematic break (CommonMark precedence). The paragraph
+    #       guard lets "---" after a blank/non-paragraph line fall through to #11.
+    #   11. Thematic break   — /^\s*([-*_]\s*){3,}$/
+    #   12. Indented code    — /^    / (four leading spaces)
     #   13. Paragraph        — default
 
   maskInlineCode(line: string): string
@@ -399,16 +402,21 @@ export function segmentBlocks(doc: string): Block[] {
     if (/^\s*>/.test(line))                  { kinds[i] = "blockquote";    continue; }
     if (/^\s*([-*+•–·]|\d+[.)]) /.test(line)){ kinds[i] = "listItem";      continue; }
     if (/^\s*\|/.test(line))                 { kinds[i] = "tableRow";      continue; }
-    if (/^\s*([-*_]\s*){3,}$/.test(line))   { kinds[i] = "thematicBreak"; continue; }
-    if (/^    /.test(line))                  { kinds[i] = "indentedCode";  continue; }
 
-    // Setext underline: ={1,} or -{1,} following a paragraph line
+    // Setext underline: ={1,} or -{1,} following a paragraph line.
+    // MUST be checked BEFORE thematicBreak: a bare "---" after a paragraph is a
+    // setext H2 underline, not a thematic break (CommonMark precedence). The
+    // `kinds[i-1] === "paragraph"` guard ensures "---" after a blank/non-paragraph
+    // line still falls through to thematicBreak below.
     if (/^=+\s*$/.test(line) && i > 0 && kinds[i - 1] === "paragraph") {
       kinds[i] = "setextHeading"; kinds[i - 1] = "setextHeading"; continue;
     }
     if (/^-+\s*$/.test(line) && i > 0 && kinds[i - 1] === "paragraph") {
       kinds[i] = "setextHeading"; kinds[i - 1] = "setextHeading"; continue;
     }
+
+    if (/^\s*([-*_]\s*){3,}$/.test(line))   { kinds[i] = "thematicBreak"; continue; }
+    if (/^    /.test(line))                  { kinds[i] = "indentedCode";  continue; }
 
     kinds[i] = "paragraph";
   }
