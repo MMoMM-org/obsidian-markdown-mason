@@ -312,3 +312,53 @@ describe("tidyWhitespace — idempotency", () => {
 		expect(tidyWhitespace(makeCtx(first))).toHaveLength(0);
 	});
 });
+
+// ============================================================
+// Frontmatter safety — all four transforms
+// ============================================================
+
+describe("dehyphenate — frontmatter safety", () => {
+	it("does not join hyphenated line breaks inside YAML frontmatter", () => {
+		const doc = "---\ntitle: some-\nthing\nauthor: low-\nercase\n---\n";
+		expect(dehyphenate(makeCtx(doc))).toHaveLength(0);
+	});
+
+	it("transforms hyphens in body while leaving frontmatter untouched", () => {
+		const doc = "---\ntitle: some-\nthing\n---\nexam-\nple\n";
+		const result = applyToString(doc, dehyphenate(makeCtx(doc)));
+		expect(result).toBe("---\ntitle: some-\nthing\n---\nexample\n");
+	});
+});
+
+describe("dewrap — frontmatter safety", () => {
+	it("does not join multi-line YAML frontmatter (paragraph-only behavior regression guard)", () => {
+		const doc = "---\ntitle: My Note\ntags: [one, two]\ndate: 2026-06-29\n---\n";
+		expect(dewrap(makeCtx(doc))).toHaveLength(0);
+	});
+});
+
+describe("decomposeLigatures — frontmatter safety", () => {
+	it("leaves curly quotes, em dashes, and ellipsis inside YAML frontmatter untouched", () => {
+		const doc = "---\ntitle: “Hello—World…”\n---\n";
+		expect(decomposeLigatures(makeCtx(doc))).toHaveLength(0);
+	});
+
+	it("transforms glyphs in body while leaving frontmatter untouched", () => {
+		const doc = "---\ntitle: “Hello—World”\n---\nword—done\n";
+		const result = applyToString(doc, decomposeLigatures(makeCtx(doc)));
+		expect(result).toBe("---\ntitle: “Hello—World”\n---\nword-done\n");
+	});
+});
+
+describe("tidyWhitespace — frontmatter safety", () => {
+	it("leaves aligned spaces and trailing whitespace inside YAML frontmatter untouched", () => {
+		const doc = "---\ntitle:  value  \ntags:   [one, two]\n---\n";
+		expect(tidyWhitespace(makeCtx(doc))).toHaveLength(0);
+	});
+
+	it("tidies body content while leaving frontmatter alignment untouched", () => {
+		const doc = "---\ntitle:  value  \n---\nhello  world   \n";
+		const result = applyToString(doc, tidyWhitespace(makeCtx(doc)));
+		expect(result).toBe("---\ntitle:  value  \n---\nhello world\n");
+	});
+});

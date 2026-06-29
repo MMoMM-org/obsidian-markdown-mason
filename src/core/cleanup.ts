@@ -11,6 +11,11 @@ function isSkippedForCode(kind: BlockKind): boolean {
 	return kind === "fencedCode" || kind === "indentedCode";
 }
 
+/** Blocks that must never be modified by any cleanup transform. */
+function isProtectedBlock(kind: BlockKind): boolean {
+	return isSkippedForCode(kind) || kind === "frontmatter";
+}
+
 // ---------------------------------------------------------------------------
 // T2.1 — dehyphenate
 // ---------------------------------------------------------------------------
@@ -26,7 +31,7 @@ export function dehyphenate(ctx: OperationContext): EditPlan {
 	const plan: EditPlan = [];
 
 	for (const block of blocks) {
-		if (isSkippedForCode(block.kind) || block.kind === "frontmatter") continue;
+		if (isProtectedBlock(block.kind)) continue;
 
 		const text = ctx.doc.slice(block.startOffset, block.endOffset);
 		// maskInlineCode on the full block text handles cross-line code spans:
@@ -74,14 +79,14 @@ export const GLYPH_MAP: Readonly<Record<string, string>> = {
 
 /**
  * Replace canonical ligatures and punctuation glyphs with ASCII equivalents.
- * Skips fencedCode and indentedCode blocks; skips inline code spans via maskInlineCode.
+ * Skips fencedCode, indentedCode, and frontmatter blocks; skips inline code spans via maskInlineCode.
  */
 export function decomposeLigatures(ctx: OperationContext): EditPlan {
 	const blocks = segmentBlocks(ctx.doc);
 	const plan: EditPlan = [];
 
 	for (const block of blocks) {
-		if (isSkippedForCode(block.kind)) continue;
+		if (isProtectedBlock(block.kind)) continue;
 
 		const text = ctx.doc.slice(block.startOffset, block.endOffset);
 		const lines = text.split("\n");
@@ -119,12 +124,13 @@ export function decomposeLigatures(ctx: OperationContext): EditPlan {
 // ---------------------------------------------------------------------------
 
 /**
- * Three sub-passes over non-fencedCode/non-indentedCode blocks:
+ * Three sub-passes over non-protected, non-blank, non-tableRow blocks:
  *   1. Collapse runs of 2+ spaces in the non-leading portion of each line.
  *      Skips tableRow blocks entirely (alignment spaces are significant).
  *   2. Strip trailing whitespace ([ \t]+$) from each line.
  *   3. Collapse runs of 3+ consecutive blank lines to a single blank line.
  *
+ * Protected blocks (fencedCode, indentedCode, frontmatter) are never modified.
  * Passes 1+2 are merged into one edit per changed line to avoid overlap.
  * Pass 3 emits one contiguous edit per qualifying blank run.
  */
@@ -132,9 +138,9 @@ export function tidyWhitespace(ctx: OperationContext): EditPlan {
 	const blocks = segmentBlocks(ctx.doc);
 	const plan: EditPlan = [];
 
-	// Passes 1+2: per-line edits on non-code, non-blank, non-tableRow blocks
+	// Passes 1+2: per-line edits on non-protected, non-blank, non-tableRow blocks
 	for (const block of blocks) {
-		if (isSkippedForCode(block.kind)) continue;
+		if (isProtectedBlock(block.kind)) continue;
 		if (block.kind === "blank") continue;
 		if (block.kind === "tableRow") continue;
 
