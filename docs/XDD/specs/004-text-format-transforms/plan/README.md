@@ -86,7 +86,7 @@ Build:   node esbuild.config.mjs            # prod: append "production"
 - [x] [Phase 2: Cleanup transforms](phase-2.md)
 - [x] [Phase 3: List transforms](phase-3.md)
 - [x] [Phase 4: Command wiring, registry & API](phase-4.md)
-- [ ] [Phase 5: Settings UI](phase-5.md)
+- [x] [Phase 5: Settings UI](phase-5.md)
 - [ ] [Phase 6: Integration & verification](phase-6.md)
 
 ## Dependency Graph
