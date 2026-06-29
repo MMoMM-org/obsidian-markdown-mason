@@ -1,14 +1,14 @@
 /**
- * T3.1 — Format selection settings section (RED → GREEN).
+ * T5.1 — Format selection settings section (11 toggles, 4 setHeading groups).
  *
- * Verifies the Format selection segment introduced in spec 003, Phase 3:
+ * Verifies the Format selection segment as rewritten in spec 004, Phase 5 (T5.1):
  *   1. "Format selection" appears as a nav button in the segment control.
  *   2. "Format selection" appears between Commands and Advanced in nav order.
- *   3. Selecting the segment renders exactly FIVE toggle controls.
- *   4. Each toggle's initial value reflects resolveFormatSelectionRecipe(settings).
- *   5. Toggling a key mutates settings.formatSelection.<key> and calls saveSettings.
- *   6. Initializing from undefined formatSelection creates the object on first toggle.
- *   7. No setHeading() in the Format selection segment.
+ *   3. Selecting the segment renders exactly 11 toggle controls.
+ *   4. Four setHeading() groups render in order: Cleanup, Lists, Headings, Footnotes.
+ *   5. Each toggle's initial value reflects resolveFormatSelectionRecipe(settings).
+ *   6. Toggling any key mutates settings.formatSelection.<key> and calls saveSettings.
+ *   7. Initializing from undefined formatSelection creates the object on first toggle.
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -52,7 +52,7 @@ const { MasonSettingTab } = await import("../../src/ui/settingsTab");
 
 /**
  * Build a minimal plugin double for Format selection tests.
- * Only includes the settings fields exercised by this section.
+ * Covers all 11 FormatSelectionRecipe keys (5 original + 6 spec-004 additions).
  */
 function makePlugin(formatSelection?: Partial<{
 	cascade: boolean;
@@ -60,6 +60,12 @@ function makePlugin(formatSelection?: Partial<{
 	fromCitations: boolean;
 	identity: boolean;
 	move: boolean;
+	dewrap: boolean;
+	dehyphenate: boolean;
+	decomposeLigatures: boolean;
+	tidyWhitespace: boolean;
+	normalizeBullets: boolean;
+	normalizeOrdered: boolean;
 }>) {
 	const app = new App();
 	const settings: {
@@ -158,44 +164,92 @@ describe("MasonSettingTab — Format selection nav", () => {
 });
 
 // ---------------------------------------------------------------------------
-// SECTION RENDERING — five toggles, no heading, correct initial values
+// SECTION RENDERING — 11 toggles, 4 setHeading groups, correct initial values
 // ---------------------------------------------------------------------------
 
 describe("MasonSettingTab — Format selection section rendering", () => {
-	it("renders exactly five toggle controls", async () => {
+	it("renders exactly 11 toggle controls", async () => {
 		const plugin = makePlugin();
 		const { settings } = await renderFormatSelectionSegment(plugin);
 		const allToggles = settings.flatMap((s) => s.toggleControls);
-		expect(allToggles).toHaveLength(5);
+		expect(allToggles).toHaveLength(11);
 	});
 
-	it("all five toggles are true when formatSelection is undefined (all-on default)", async () => {
+	it("renders four setHeading() groups named Cleanup, Lists, Headings, Footnotes (in order)", async () => {
+		const plugin = makePlugin();
+		const { settings } = await renderFormatSelectionSegment(plugin);
+		const headings = settings.filter((s) => s.isHeading);
+		expect(headings).toHaveLength(4);
+		expect(headings[0].name).toBe("Cleanup");
+		expect(headings[1].name).toBe("Lists");
+		expect(headings[2].name).toBe("Headings");
+		expect(headings[3].name).toBe("Footnotes");
+	});
+
+	it("all 11 toggles are true when formatSelection is undefined (all-on default)", async () => {
 		const plugin = makePlugin(undefined);
 		const { settings } = await renderFormatSelectionSegment(plugin);
 		const allToggles = settings.flatMap((s) => s.toggleControls);
-		expect(allToggles).toHaveLength(5);
+		expect(allToggles).toHaveLength(11);
 		for (const toggle of allToggles) {
 			expect(toggle.getValue()).toBe(true);
 		}
 	});
 
-	it("toggle values reflect custom formatSelection settings", async () => {
-		const plugin = makePlugin({ cascade: false, normalize: true, fromCitations: false, identity: true, move: false });
+	it("toggle value reflects a key explicitly set to false", async () => {
+		const plugin = makePlugin({ dewrap: false });
 		const { settings } = await renderFormatSelectionSegment(plugin);
+		const dewrapSetting = settings.find(
+			(s) => s.toggleControls.length > 0 && s.name.toLowerCase().includes("dewrap"),
+		);
+		expect(dewrapSetting).toBeDefined();
+		expect(dewrapSetting!.toggleControls[0].getValue()).toBe(false);
+
+		// All others should remain true
 		const allToggles = settings.flatMap((s) => s.toggleControls);
-		expect(allToggles).toHaveLength(5);
-		// Order: cascade, normalize, fromCitations, identity, move
-		expect(allToggles[0].getValue()).toBe(false); // cascade
-		expect(allToggles[1].getValue()).toBe(true);  // normalize
-		expect(allToggles[2].getValue()).toBe(false); // fromCitations
-		expect(allToggles[3].getValue()).toBe(true);  // identity
-		expect(allToggles[4].getValue()).toBe(false); // move
+		const others = allToggles.filter(
+			(t) => t !== dewrapSetting!.toggleControls[0],
+		);
+		for (const toggle of others) {
+			expect(toggle.getValue()).toBe(true);
+		}
 	});
 
-	it("renders no setHeading() in the Format selection segment", async () => {
-		const plugin = makePlugin();
+	it("toggle values reflect custom formatSelection settings for all 11 keys", async () => {
+		const plugin = makePlugin({
+			dewrap: false,
+			dehyphenate: true,
+			decomposeLigatures: false,
+			tidyWhitespace: true,
+			normalizeBullets: false,
+			normalizeOrdered: true,
+			cascade: false,
+			normalize: true,
+			fromCitations: false,
+			identity: true,
+			move: false,
+		});
 		const { settings } = await renderFormatSelectionSegment(plugin);
-		expect(settings.filter((s) => s.isHeading)).toHaveLength(0);
+
+		function getToggleByName(fragment: string): boolean {
+			const s = settings.find(
+				(r) => r.toggleControls.length > 0 && r.name.toLowerCase().includes(fragment),
+			);
+			expect(s).toBeDefined();
+			return s!.toggleControls[0].getValue();
+		}
+
+		expect(getToggleByName("dewrap")).toBe(false);
+		expect(getToggleByName("dehyphenate")).toBe(true);
+		expect(getToggleByName("decompose")).toBe(false);
+		expect(getToggleByName("tidy whitespace")).toBe(true);
+		expect(getToggleByName("normalize bullets")).toBe(false);
+		expect(getToggleByName("normalize ordered")).toBe(true);
+		expect(getToggleByName("cascade")).toBe(false);
+		expect(getToggleByName("normalize headings")).toBe(true);
+		expect(getToggleByName("citation")).toBe(false);
+		expect(getToggleByName("identity")).toBe(true);
+		expect(getToggleByName("move footnotes")).toBe(false);
 	});
 
 	it("each toggle row follows sentence case (no multi-word Title Case names)", async () => {
@@ -217,6 +271,102 @@ describe("MasonSettingTab — Format selection section rendering", () => {
 // ---------------------------------------------------------------------------
 
 describe("MasonSettingTab — Format selection toggle write-through", () => {
+	// --- spec-004 new keys ---
+
+	it("toggling 'dewrap' initializes formatSelection (when absent) and calls saveSettings", async () => {
+		const plugin = makePlugin(undefined);
+		expect(plugin.settings.formatSelection).toBeUndefined();
+
+		const { settings } = await renderFormatSelectionSegment(plugin);
+		const setting = settings.find(
+			(s) => s.toggleControls.length > 0 && s.name.toLowerCase().includes("dewrap"),
+		);
+		expect(setting).toBeDefined();
+
+		setting!.toggleControls[0].setValue(false);
+
+		expect(plugin.settings.formatSelection).toBeDefined();
+		expect(plugin.settings.formatSelection?.dewrap).toBe(false);
+		expect(plugin.saveSettings).toHaveBeenCalledTimes(1);
+	});
+
+	it("toggling 'dehyphenate' updates settings.formatSelection.dehyphenate and calls saveSettings", async () => {
+		const plugin = makePlugin({ dehyphenate: true });
+		const { settings } = await renderFormatSelectionSegment(plugin);
+
+		const setting = settings.find(
+			(s) => s.toggleControls.length > 0 && s.name.toLowerCase().includes("dehyphenate"),
+		);
+		expect(setting).toBeDefined();
+
+		setting!.toggleControls[0].setValue(false);
+
+		expect(plugin.settings.formatSelection?.dehyphenate).toBe(false);
+		expect(plugin.saveSettings).toHaveBeenCalledTimes(1);
+	});
+
+	it("toggling 'decomposeLigatures' updates settings.formatSelection.decomposeLigatures and calls saveSettings", async () => {
+		const plugin = makePlugin({ decomposeLigatures: true });
+		const { settings } = await renderFormatSelectionSegment(plugin);
+
+		const setting = settings.find(
+			(s) => s.toggleControls.length > 0 && s.name.toLowerCase().includes("decompose"),
+		);
+		expect(setting).toBeDefined();
+
+		setting!.toggleControls[0].setValue(false);
+
+		expect(plugin.settings.formatSelection?.decomposeLigatures).toBe(false);
+		expect(plugin.saveSettings).toHaveBeenCalledTimes(1);
+	});
+
+	it("toggling 'tidyWhitespace' updates settings.formatSelection.tidyWhitespace and calls saveSettings", async () => {
+		const plugin = makePlugin({ tidyWhitespace: true });
+		const { settings } = await renderFormatSelectionSegment(plugin);
+
+		const setting = settings.find(
+			(s) => s.toggleControls.length > 0 && s.name.toLowerCase().includes("tidy whitespace"),
+		);
+		expect(setting).toBeDefined();
+
+		setting!.toggleControls[0].setValue(false);
+
+		expect(plugin.settings.formatSelection?.tidyWhitespace).toBe(false);
+		expect(plugin.saveSettings).toHaveBeenCalledTimes(1);
+	});
+
+	it("toggling 'normalizeBullets' updates settings.formatSelection.normalizeBullets and calls saveSettings", async () => {
+		const plugin = makePlugin({ normalizeBullets: true });
+		const { settings } = await renderFormatSelectionSegment(plugin);
+
+		const setting = settings.find(
+			(s) => s.toggleControls.length > 0 && s.name.toLowerCase().includes("normalize bullets"),
+		);
+		expect(setting).toBeDefined();
+
+		setting!.toggleControls[0].setValue(false);
+
+		expect(plugin.settings.formatSelection?.normalizeBullets).toBe(false);
+		expect(plugin.saveSettings).toHaveBeenCalledTimes(1);
+	});
+
+	it("toggling 'normalizeOrdered' updates settings.formatSelection.normalizeOrdered and calls saveSettings", async () => {
+		const plugin = makePlugin({ normalizeOrdered: true });
+		const { settings } = await renderFormatSelectionSegment(plugin);
+
+		const setting = settings.find(
+			(s) => s.toggleControls.length > 0 && s.name.toLowerCase().includes("normalize ordered"),
+		);
+		expect(setting).toBeDefined();
+
+		setting!.toggleControls[0].setValue(false);
+
+		expect(plugin.settings.formatSelection?.normalizeOrdered).toBe(false);
+		expect(plugin.saveSettings).toHaveBeenCalledTimes(1);
+	});
+
+	// --- original 5 keys (regression) ---
+
 	it("toggling 'cascade' updates settings.formatSelection.cascade and calls saveSettings", async () => {
 		const plugin = makePlugin({ cascade: true });
 		const { settings } = await renderFormatSelectionSegment(plugin);
@@ -232,12 +382,12 @@ describe("MasonSettingTab — Format selection toggle write-through", () => {
 		expect(plugin.saveSettings).toHaveBeenCalledTimes(1);
 	});
 
-	it("toggling 'normalize' updates settings.formatSelection.normalize and calls saveSettings", async () => {
+	it("toggling 'normalize' (headings) updates settings.formatSelection.normalize and calls saveSettings", async () => {
 		const plugin = makePlugin({ normalize: true });
 		const { settings } = await renderFormatSelectionSegment(plugin);
 
 		const setting = settings.find(
-			(s) => s.toggleControls.length > 0 && s.name.toLowerCase().includes("normalize"),
+			(s) => s.toggleControls.length > 0 && s.name.toLowerCase().includes("normalize headings"),
 		);
 		expect(setting).toBeDefined();
 
@@ -282,7 +432,7 @@ describe("MasonSettingTab — Format selection toggle write-through", () => {
 		const { settings } = await renderFormatSelectionSegment(plugin);
 
 		const setting = settings.find(
-			(s) => s.toggleControls.length > 0 && s.name.toLowerCase().includes("move"),
+			(s) => s.toggleControls.length > 0 && s.name.toLowerCase().includes("move footnotes"),
 		);
 		expect(setting).toBeDefined();
 

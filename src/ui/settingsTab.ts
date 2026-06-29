@@ -494,15 +494,105 @@ export class MasonSettingTab extends PluginSettingTab {
 
 	/**
 	 * Render the Format selection section controls.
-	 * Five toggles — one per step in the Format selection command.
+	 * Eleven toggles arranged under four setHeading() sub-groups:
+	 *   Cleanup (4): dewrap, dehyphenate, decomposeLigatures, tidyWhitespace
+	 *   Lists   (2): normalizeBullets, normalizeOrdered
+	 *   Headings(2): cascade, normalize
+	 *   Footnotes(3): fromCitations, identity, move
 	 * All default to true (resolved via resolveFormatSelectionRecipe).
-	 * The active tab label is the section heading; no setHeading() used here.
 	 */
 	private _renderFormatSelectionSection(containerEl: HTMLElement): void {
 		new Setting(containerEl)
 			.setDesc("Choose which steps \"Format selection\" runs.");
 
 		const recipe = resolveFormatSelectionRecipe(this._plugin.settings);
+
+		// --- Cleanup ---
+		new Setting(containerEl).setName("Cleanup").setHeading();
+
+		new Setting(containerEl)
+			.setName("Dewrap paragraphs")
+			.setDesc("Re-join hard-wrapped lines into full paragraphs, skipping code, headings, lists, blockquotes, and tables.")
+			.addToggle((t) => {
+				t.setValue(recipe.dewrap).onChange(async (v) => {
+					if (!this._plugin.settings.formatSelection) {
+						this._plugin.settings.formatSelection = {};
+					}
+					this._plugin.settings.formatSelection.dewrap = v;
+					await this._plugin.saveSettings();
+				});
+			});
+
+		new Setting(containerEl)
+			.setName("Dehyphenate words")
+			.setDesc("Remove end-of-line hyphens that split words across lines (OCR and PDF artifacts), for lowercase-to-lowercase splits only. Runs before dewrap.")
+			.addToggle((t) => {
+				t.setValue(recipe.dehyphenate).onChange(async (v) => {
+					if (!this._plugin.settings.formatSelection) {
+						this._plugin.settings.formatSelection = {};
+					}
+					this._plugin.settings.formatSelection.dehyphenate = v;
+					await this._plugin.saveSettings();
+				});
+			});
+
+		new Setting(containerEl)
+			.setName("Decompose ligatures and punctuation")
+			.setDesc("Replace Unicode ligature glyphs (ﬁ, æ, œ…) and typographic punctuation (curly quotes, em dash, ellipsis) with plain ASCII equivalents.")
+			.addToggle((t) => {
+				t.setValue(recipe.decomposeLigatures).onChange(async (v) => {
+					if (!this._plugin.settings.formatSelection) {
+						this._plugin.settings.formatSelection = {};
+					}
+					this._plugin.settings.formatSelection.decomposeLigatures = v;
+					await this._plugin.saveSettings();
+				});
+			});
+
+		new Setting(containerEl)
+			.setName("Tidy whitespace")
+			.setDesc("Collapse double spaces, remove trailing whitespace, and squeeze three or more blank lines to one.")
+			.addToggle((t) => {
+				t.setValue(recipe.tidyWhitespace).onChange(async (v) => {
+					if (!this._plugin.settings.formatSelection) {
+						this._plugin.settings.formatSelection = {};
+					}
+					this._plugin.settings.formatSelection.tidyWhitespace = v;
+					await this._plugin.saveSettings();
+				});
+			});
+
+		// --- Lists ---
+		new Setting(containerEl).setName("Lists").setHeading();
+
+		new Setting(containerEl)
+			.setName("Normalize bullets")
+			.setDesc("Replace all unordered bullet markers (*, +, •, –, ·) with a canonical dash (-), preserving nesting and checkbox syntax.")
+			.addToggle((t) => {
+				t.setValue(recipe.normalizeBullets).onChange(async (v) => {
+					if (!this._plugin.settings.formatSelection) {
+						this._plugin.settings.formatSelection = {};
+					}
+					this._plugin.settings.formatSelection.normalizeBullets = v;
+					await this._plugin.saveSettings();
+				});
+			});
+
+		new Setting(containerEl)
+			.setName("Normalize ordered list")
+			.setDesc("Renumber ordered lists sequentially (1. 2. 3.) per nesting level.")
+			.addToggle((t) => {
+				t.setValue(recipe.normalizeOrdered).onChange(async (v) => {
+					if (!this._plugin.settings.formatSelection) {
+						this._plugin.settings.formatSelection = {};
+					}
+					this._plugin.settings.formatSelection.normalizeOrdered = v;
+					await this._plugin.saveSettings();
+				});
+			});
+
+		// --- Headings ---
+		new Setting(containerEl).setName("Headings").setHeading();
 
 		new Setting(containerEl)
 			.setName("Cascade headings")
@@ -529,6 +619,9 @@ export class MasonSettingTab extends PluginSettingTab {
 					await this._plugin.saveSettings();
 				});
 			});
+
+		// --- Footnotes ---
+		new Setting(containerEl).setName("Footnotes").setHeading();
 
 		new Setting(containerEl)
 			.setName("Convert citations to footnotes")
