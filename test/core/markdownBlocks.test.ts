@@ -129,6 +129,7 @@ describe("segmentBlocks — listItem (all markers)", () => {
 		["+ item", "listItem"],
 		["• item", "listItem"], // U+2022 BULLET (•)
 		["– item", "listItem"], // U+2013 EN DASH (–)
+		["· item", "listItem"], // U+00B7 MIDDLE DOT (·)  — S4
 		["1. item", "listItem"],
 		["1) item", "listItem"],
 	])('classifies "%s" as listItem', (line, expected) => {
@@ -200,6 +201,16 @@ describe("segmentBlocks — blank", () => {
 		const doc = "text\n\nother";
 		expect(lineKinds(doc)[1]).toBe("blank");
 	});
+
+	it("segmentBlocks('') returns exactly one blank block with startOffset=0 and endOffset=0 (S3)", () => {
+		// An empty string splits to [""], one empty line → blank.
+		// rawEnd = 0 + 0 + 1 = 1; clamped to doc.length = 0 → endOffset = 0.
+		const blocks = segmentBlocks("");
+		expect(blocks).toHaveLength(1);
+		expect(blocks[0]!.kind).toBe("blank");
+		expect(blocks[0]!.startOffset).toBe(0);
+		expect(blocks[0]!.endOffset).toBe(0);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -254,6 +265,9 @@ describe("segmentBlocks — frontmatter requires i === 0", () => {
 		expect(lk[1]).not.toBe("frontmatter");
 		expect(lk[2]).not.toBe("frontmatter");
 		expect(lk[3]).not.toBe("frontmatter");
+		// W2: positive assertions — lines 0 and 1 are plain paragraphs
+		expect(lk[0]).toBe("paragraph");
+		expect(lk[1]).toBe("paragraph");
 		// Line 3 is the setext underline → line 2 retroactively becomes setextHeading too
 		expect(lk[2]).toBe("setextHeading");
 		expect(lk[3]).toBe("setextHeading");
@@ -294,6 +308,21 @@ describe("segmentBlocks — tilde fence close rules", () => {
 		expect(lk[0]).toBe("fencedCode");
 		expect(lk[1]).toBe("fencedCode");
 		expect(lk[2]).toBe("fencedCode"); // ~~~~ closes the ~~~ fence
+	});
+});
+
+// ---------------------------------------------------------------------------
+// segmentBlocks — edge case: unclosed fenced code block (W3)
+// ---------------------------------------------------------------------------
+
+describe("segmentBlocks — unclosed fenced code block", () => {
+	it("pins the fenceChar !== null EOF fall-through: all lines are fencedCode", () => {
+		// No closing fence — the open ``` is never matched, so the content line
+		// and the implicit EOF line both fall through as fencedCode.
+		const doc = "```\ncode line";
+		const lk = lineKinds(doc);
+		expect(lk[0]).toBe("fencedCode"); // opening fence line
+		expect(lk[1]).toBe("fencedCode"); // content line — inside open fence
 	});
 });
 
@@ -393,16 +422,28 @@ describe("maskInlineCode — line with no code spans returned unchanged", () => 
 	});
 });
 
-describe("maskInlineCode — double-backtick span content is masked", () => {
-	it("content within a double-backtick span is masked (letters become null chars)", () => {
+describe("maskInlineCode — string containing an embedded single-backtick span", () => {
+	it("masks the inner single-backtick span within a `` `code` `` string (W1)", () => {
 		// Input: "`` `code` ``"  (length 12)
-		// The regex processes sub-spans: the inner `code` content gets masked.
+		// maskInlineCode uses /`[^`]*`/g — single-backtick spans only.
+		// The double-backtick delimiters do NOT form a masked span; only the
+		// inner `code` (a true single-backtick span) gets its content replaced.
 		const input = "`` `code` ``";
 		const result = maskInlineCode(input);
-		// The original "code" letters must be gone
+		// The original "code" letters must be gone (masked by the inner single-backtick span)
 		expect(result).not.toContain("code");
 		// Length is preserved (equal-length replacement)
 		expect(result.length).toBe(input.length);
+	});
+
+	it("leaves a true double-backtick span (no inner backtick) unmasked — single-backtick regex by design (W1)", () => {
+		// Input: "`` code ``" — two-backtick delimiters, content "code" has no inner backtick.
+		// /`[^`]*`/g greedily matches pairs of backticks: it matches `` `` `` (0-char content)
+		// at positions 0-1 and 8-9. Each replacement is `` ` ``+"\0".repeat(0)+`` ` `` = `` `` ``,
+		// so the string is returned unchanged. The word "code" is never inside a
+		// single-backtick span and therefore NOT masked.
+		const input = "`` code ``";
+		expect(maskInlineCode(input)).toBe(input);
 	});
 });
 
