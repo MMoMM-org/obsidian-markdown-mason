@@ -14,6 +14,20 @@ import type { StepLogger } from "../../src/core/formatPipeline";
 // Shared fixtures
 // ---------------------------------------------------------------------------
 
+const allOff: FormatSelectionRecipe = {
+	cascade:            false,
+	normalize:          false,
+	fromCitations:      false,
+	identity:           false,
+	move:               false,
+	dewrap:             false,
+	dehyphenate:        false,
+	decomposeLigatures: false,
+	tidyWhitespace:     false,
+	normalizeBullets:   false,
+	normalizeOrdered:   false,
+};
+
 const allOn: FormatSelectionRecipe = {
 	cascade:            true,
 	normalize:          true,
@@ -198,6 +212,16 @@ describe("applyTextCleanup — normalize (headings) toggle", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Suite 2b — all 7 cleanup toggles off: document is returned unchanged
+// ---------------------------------------------------------------------------
+
+describe("applyTextCleanup — all 7 cleanup toggles off", () => {
+	it("returns compound doc unchanged when all 7 cleanup keys are false", () => {
+		expect(applyTextCleanup(COMPOUND_DOC, allOff)).toBe(COMPOUND_DOC);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // Suite 3 — non-cleanup keys have no effect on output
 // ---------------------------------------------------------------------------
 
@@ -274,7 +298,7 @@ describe("applyTextCleanup — StepLogger", () => {
 		expect(lines[3]).toMatch(/decomposeLigatures/);
 		expect(lines[4]).toMatch(/normalizeBullets/);
 		expect(lines[5]).toMatch(/normalizeOrdered/);
-		expect(lines[6]).toMatch(/normalize/);
+		expect(lines[6]).toMatch(/^format: normalize \d/);
 	});
 
 	it("skipped step emits 'skipped (toggle off)' message", () => {
@@ -283,6 +307,24 @@ describe("applyTextCleanup — StepLogger", () => {
 		expect(lines).toHaveLength(7);
 		expect(lines[0]).toContain("skipped (toggle off)");
 		expect(lines[0]).toContain("dehyphenate");
+	});
+
+	it("active step producing 1 edit logs a line ending in '1 edit' (singular)", () => {
+		const lines: string[] = [];
+		// normalize produces exactly 1 edit: H3 → H2 (closes a single level gap)
+		const doc = "# H1\n\n### H3\n";
+		applyTextCleanup(doc, { ...allOff, normalize: true }, (line) => lines.push(line));
+		const normalizeLine = lines.find((l) => l.startsWith("format: normalize "));
+		expect(normalizeLine).toMatch(/\b1 edit$/);
+	});
+
+	it("active step producing 2+ edits logs a line ending in 'edits' (plural)", () => {
+		const lines: string[] = [];
+		// normalizeBullets produces 2 edits: two `*` bullets → `-`
+		const doc = "* item one\n* item two\n";
+		applyTextCleanup(doc, { ...allOff, normalizeBullets: true }, (line) => lines.push(line));
+		const bulletLine = lines.find((l) => l.startsWith("format: normalizeBullets "));
+		expect(bulletLine).toMatch(/\b2 edits$/);
 	});
 
 	it("running without a logger does not throw", () => {

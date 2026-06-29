@@ -17,7 +17,8 @@
 // in the FormatSelectionRecipe type but are not consumed here — they control
 // other pipeline stages handled by the command layer.
 
-import type { EditPlan, MasonSettings, OperationContext } from "./types";
+import { DEFAULT_SETTINGS } from "./types";
+import type { EditPlan, OperationContext } from "./types";
 import type { FormatSelectionRecipe } from "./formatSelection";
 import { applyToString } from "./applyToString";
 import { dehyphenate, dewrap, tidyWhitespace, decomposeLigatures } from "./cleanup";
@@ -40,7 +41,7 @@ export function applyTextCleanup(
 	recipe: FormatSelectionRecipe,
 	log?: StepLogger,
 ): string {
-	const mk = (d: string): OperationContext => ({ doc: d, cursor: 0, settings: {} as MasonSettings });
+	const makeCtx = (doc: string): OperationContext => ({ doc, cursor: 0, settings: DEFAULT_SETTINGS });
 
 	const step = (
 		s: string,
@@ -52,7 +53,7 @@ export function applyTextCleanup(
 			log?.(`format: ${name} skipped (toggle off)`);
 			return s;
 		}
-		const plan = fn(mk(s));
+		const plan = fn(makeCtx(s));
 		log?.(`format: ${name} ${plan.length} edit${plan.length === 1 ? "" : "s"}`);
 		return plan.length ? applyToString(s, plan) : s;
 	};
