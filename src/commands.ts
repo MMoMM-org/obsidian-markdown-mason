@@ -265,7 +265,7 @@ function runOperation(
 // offsets would be stale against the pre-heading doc), we compose ALL steps
 // in-memory on a scratch string and emit a SINGLE diffToEditPlan result.
 //
-// Pipeline (11 steps, all gated by FormatSelectionRecipe toggles):
+// Pipeline (9 gated transforms → 1 fused edit; final diff is unconditional):
 //   1. dehyphenate:       join end-of-line hyphenated words (MUST precede dewrap)
 //   2. dewrap:            join soft-wrapped paragraph lines into one line per para
 //   3. tidyWhitespace:    collapse double spaces, strip trailing whitespace

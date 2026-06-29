@@ -532,7 +532,7 @@ describe("T4.2 — new cleanup/lists registry entries", () => {
 // T4.2 — cleanup and lists API namespaces
 // ---------------------------------------------------------------------------
 
-describe("T4.2 — cleanup and lists API namespaces", () => {
+describe("T4.2 (API) — cleanup and lists API namespaces", () => {
 	it("buildApi exposes cleanup.dewrap as a function", () => {
 		const { api } = buildRegistry();
 		expect(typeof api.cleanup.dewrap).toBe("function");
