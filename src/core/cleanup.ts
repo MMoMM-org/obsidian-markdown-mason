@@ -46,3 +46,28 @@ export function dehyphenate(ctx: OperationContext): EditPlan {
 
 	return plan;
 }
+
+// ---------------------------------------------------------------------------
+// T2.2 — dewrap
+// ---------------------------------------------------------------------------
+
+/**
+ * Join soft-wrapped paragraph lines back into a single line per paragraph.
+ * Only "paragraph" blocks are processed; all other block kinds are skipped.
+ */
+export function dewrap(ctx: OperationContext): EditPlan {
+	const blocks = segmentBlocks(ctx.doc);
+	const plan: EditPlan = [];
+	for (const block of blocks) {
+		if (block.kind !== "paragraph") continue;
+		const text = ctx.doc.slice(block.startOffset, block.endOffset);
+		const hasTrailing = text.endsWith("\n");
+		const raw = hasTrailing ? text.slice(0, -1) : text;
+		const lineArr = raw.split("\n");
+		if (lineArr.length <= 1) continue;
+		const joined = lineArr.join(" ");
+		const insert = hasTrailing ? joined + "\n" : joined;
+		plan.push({ from: block.startOffset, to: block.endOffset, insert });
+	}
+	return plan;
+}
