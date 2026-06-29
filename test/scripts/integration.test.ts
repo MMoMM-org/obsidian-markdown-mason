@@ -18,11 +18,12 @@
 //     this property to substitute clipboardReader, applyPlan, and failScript.
 //   - rawFallback calls editor.replaceSelection(rawText); tests spy on _replaced.
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ScriptStore } from "../../src/scripts/store";
 import { importScript } from "../../src/scripts/runtime";
 import type { VaultAdapterPort } from "../../src/scripts/runtime";
 import { sha256Bytes } from "../../src/scripts/checksum";
+import { setDebugLogging } from "../../src/core/debug";
 
 // ---------------------------------------------------------------------------
 // Part B: importScript — vault import flow (T2.3 binary contract)
@@ -949,4 +950,176 @@ describe("D — compiled-in Perplexity selection commands are retired", () => {
 			expect(cmd, `${id} must NOT be registered (curated scripts are catalog entries, not compiled-in commands)`).toBeUndefined();
 		});
 	}
+});
+
+// ---------------------------------------------------------------------------
+// T2.3 — Paste-script diagnostic logging (spec 005 F4 / ADR-28)
+//
+// runPasteCommand must emit debug-gated log lines during canHandle dispatch:
+//   - For each handler actually checked: "[MarkdownMason] paste: <id> canHandle=<bool>"
+//   - For the first matching handler: "[MarkdownMason] paste: matched <id>"
+//   - Short-circuit preserved: handlers after the first match are never checked
+//   - Gate: only when settings.debugLogging=true (and setDebugLogging(true) for debug() to fire)
+//   - Safety: clipboard content must never appear in any log line
+// ---------------------------------------------------------------------------
+
+describe("T2.3 — paste-script canHandle/match debug logging", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+		setDebugLogging(false);
+	});
+
+	it("T2.3(a) debugLogging=true: logs canHandle=false for non-matching script and canHandle=true for matching script; does NOT log script after the match (short-circuit)", async () => {
+		const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+
+		// makePluginAndFireLayout calls loadSettings which resets _enabled via setDebugLogging(false).
+		// Call setDebugLogging(true) AFTER plugin creation so debug() actually fires.
+		const plugin = await makePluginAndFireLayout();
+		plugin.settings.debugLogging = true;
+		setDebugLogging(true);
+		const editor = makePasteEditorStub("# Note\n\n");
+
+		// Track actual canHandle invocations to confirm short-circuit
+		const canHandleCalls: string[] = [];
+		const scriptA = makeLoadedScript({
+			id: "script-a",
+			run: () => undefined,
+			canHandle: () => { canHandleCalls.push("a"); return false; },
+		});
+		const scriptB = makeLoadedScript({
+			id: "script-b",
+			run: () => [{ from: 0, to: 0, insert: "x" }],
+			canHandle: () => { canHandleCalls.push("b"); return true; },
+		});
+		const scriptC = makeLoadedScript({
+			id: "script-c",
+			run: () => [{ from: 0, to: 0, insert: "y" }],
+			canHandle: () => { canHandleCalls.push("c"); return false; },
+		});
+
+		plugin._commandInjection = {
+			clipboardReader: async () => "some clipboard text",
+			applyPlan: vi.fn(),
+			pasteScripts: [scriptA, scriptB, scriptC],
+		};
+
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
+		await cmd.editorCallback(editor);
+
+		const allLogs = debugSpy.mock.calls.map((args) => String(args[0]));
+
+		// script-a checked → canHandle=false logged
+		expect(
+			allLogs.some((l) => l.includes("paste: script-a canHandle=false")),
+			"script-a canHandle=false must be logged",
+		).toBe(true);
+
+		// script-b checked → canHandle=true logged
+		expect(
+			allLogs.some((l) => l.includes("paste: script-b canHandle=true")),
+			"script-b canHandle=true must be logged",
+		).toBe(true);
+
+		// script-c never checked (short-circuit after script-b matched)
+		expect(
+			allLogs.some((l) => l.includes("paste: script-c")),
+			"script-c must NOT be logged — chain short-circuits at first match",
+		).toBe(false);
+
+		// Confirm canHandle was only called for a and b, not c
+		expect(canHandleCalls, "canHandle short-circuit: only a and b should be called").toEqual(["a", "b"]);
+	});
+
+	it("T2.3(b) debugLogging=true with matching script: logs 'paste: matched <id>'", async () => {
+		const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+
+		const plugin = await makePluginAndFireLayout();
+		plugin.settings.debugLogging = true;
+		setDebugLogging(true);
+		const editor = makePasteEditorStub("# Note\n\n");
+
+		plugin._commandInjection = {
+			clipboardReader: async () => "some clipboard text",
+			applyPlan: vi.fn(),
+			pasteScripts: [
+				makeLoadedScript({
+					id: "match-handler",
+					run: () => [{ from: 0, to: 0, insert: "x" }],
+					canHandle: () => true,
+				}),
+			],
+		};
+
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
+		await cmd.editorCallback(editor);
+
+		const allLogs = debugSpy.mock.calls.map((args) => String(args[0]));
+		expect(
+			allLogs.some((l) => l.includes("paste: matched match-handler")),
+			"'paste: matched match-handler' must be logged when a script matches",
+		).toBe(true);
+	});
+
+	it("T2.3(c) debugLogging=false: no 'paste: <id> canHandle' or 'paste: matched' lines logged", async () => {
+		const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+		// setDebugLogging stays false; settings.debugLogging stays false (DEFAULT_SETTINGS)
+
+		const plugin = await makePluginAndFireLayout();
+		const editor = makePasteEditorStub("# Note\n\n");
+
+		plugin._commandInjection = {
+			clipboardReader: async () => "some clipboard text",
+			applyPlan: vi.fn(),
+			pasteScripts: [
+				makeLoadedScript({
+					id: "any-script",
+					run: () => [{ from: 0, to: 0, insert: "x" }],
+					canHandle: () => true,
+				}),
+			],
+		};
+
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
+		await cmd.editorCallback(editor);
+
+		const allLogs = debugSpy.mock.calls.map((args) => String(args[0]));
+		const pasteDispatchLines = allLogs.filter(
+			(l) => l.includes("paste: any-script") || l.includes("paste: matched"),
+		);
+		expect(
+			pasteDispatchLines,
+			"no canHandle or matched log lines must appear when debugLogging=false",
+		).toHaveLength(0);
+	});
+
+	it("T2.3(d) clipboard content never appears in any debug log output", async () => {
+		const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+
+		const plugin = await makePluginAndFireLayout();
+		plugin.settings.debugLogging = true;
+		setDebugLogging(true);
+		const editor = makePasteEditorStub("# Note\n\n");
+
+		const CLIPBOARD_FIXTURE = "UNIQUE_CLIPBOARD_TEXT_THAT_MUST_NOT_APPEAR_IN_LOGS_XYZ";
+
+		plugin._commandInjection = {
+			clipboardReader: async () => CLIPBOARD_FIXTURE,
+			applyPlan: vi.fn(),
+			pasteScripts: [
+				makeLoadedScript({
+					id: "clip-test-handler",
+					run: () => [{ from: 0, to: 0, insert: "x" }],
+					canHandle: () => true,
+				}),
+			],
+		};
+
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
+		await cmd.editorCallback(editor);
+
+		const allLogs = debugSpy.mock.calls.map((args) => args.join(" "));
+		for (const log of allLogs) {
+			expect(log, "clipboard content must never appear in debug log output").not.toContain(CLIPBOARD_FIXTURE);
+		}
+	});
 });

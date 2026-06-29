@@ -12,7 +12,7 @@ import { buildRegistry } from "./core/registry";
 import { countFootnoteDefs } from "./core/footnotes";
 import { ScriptStore } from "./scripts/store";
 import { buildPasteChain } from "./scripts/paste/buildPasteChain";
-import type { LoadedScript } from "./scripts/paste/buildPasteChain";
+import type { LoadedScript, PasteHandler } from "./scripts/paste/buildPasteChain";
 import { MasonSettingTab } from "./ui/settingsTab";
 import { UpdateSplashModal } from "./ui/updateSplashModal";
 import { CommandManager } from "./scripts/commandManager";
@@ -772,9 +772,27 @@ async function runPasteCommand(
 	//    canHandle(rawText) claims the input. The chain is the single ordering chokepoint
 	//    (curated-before-imported, priority DESC, id ASC). When no handler matches (or the
 	//    chain is empty), fall back to a plain paste.
+	//
+	//    ADR-28 / spec 005 F4: emit debug-gated canHandle/match log lines. The manual
+	//    loop preserves the same short-circuit semantics as Array.find — only scripts
+	//    actually checked get a log entry; handlers after the first match are never called.
+	//    Clipboard content (rawText) is never logged — only script ids and booleans.
 	const enabled = injection?.pasteScripts ?? enabledPasteScripts;
 	const chain = buildPasteChain(enabled);
-	const handler = chain.find((h) => h.canHandle(rawText));
+	let handler: PasteHandler | undefined;
+	for (const h of chain) {
+		const matched = h.canHandle(rawText);
+		if (settings.debugLogging) {
+			debug(`[MarkdownMason] paste: ${h.id} canHandle=${matched}`);
+		}
+		if (matched) {
+			if (settings.debugLogging) {
+				debug(`[MarkdownMason] paste: matched ${h.id}`);
+			}
+			handler = h;
+			break;
+		}
+	}
 
 	if (handler === undefined) {
 		// No recognized format: insert the raw clipboard text at cursor (plain paste semantics)
