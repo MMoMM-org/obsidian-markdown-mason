@@ -297,3 +297,157 @@ describe("T2.2.4 — api.footnotes.* output is unaffected by formatSelection", (
 		expect(planAllOn).toEqual(planPartial);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// T4.3.1 — New cleanup/lists RegistryEntry.run() calls are recipe-blind
+//
+// Even with settings.formatSelection set to all-off, each of the six new
+// commands produces a non-empty EditPlan when invoked on trigger content.
+// The recipe toggles are read ONLY by fusedFormatNote; command paths
+// delegate directly to pure transforms.
+// ---------------------------------------------------------------------------
+
+describe("T4.3.1 — new cleanup/lists commands are recipe-blind (RegistryEntry.run)", () => {
+	const { entries } = buildRegistry();
+
+	it("cleanup.dewrap: run() on multi-line paragraph returns non-empty plan with all-off recipe", () => {
+		const entry = entries.find((e) => e.id === "cleanup.dewrap")!;
+		const ctx = makeCtx("# H\n\nFirst line\nsecond line.\n", RECIPE_ALL_OFF);
+		const plan = entry.run(ctx);
+		expect(plan.length).toBeGreaterThan(0);
+	});
+
+	it("cleanup.dehyphenate: run() on soft-hyphenated word returns non-empty plan with all-off recipe", () => {
+		const entry = entries.find((e) => e.id === "cleanup.dehyphenate")!;
+		const ctx = makeCtx("long-\nword continues.\n", RECIPE_ALL_OFF);
+		const plan = entry.run(ctx);
+		expect(plan.length).toBeGreaterThan(0);
+	});
+
+	it("cleanup.decomposeLigatures: run() on doc with smart quotes returns non-empty plan with all-off recipe", () => {
+		const entry = entries.find((e) => e.id === "cleanup.decomposeLigatures")!;
+		const ctx = makeCtx("He said “hello”.\n", RECIPE_ALL_OFF);
+		const plan = entry.run(ctx);
+		expect(plan.length).toBeGreaterThan(0);
+	});
+
+	it("cleanup.tidyWhitespace: run() on doc with double spaces returns non-empty plan with all-off recipe", () => {
+		const entry = entries.find((e) => e.id === "cleanup.tidyWhitespace")!;
+		const ctx = makeCtx("Word  extra  spaces.\n", RECIPE_ALL_OFF);
+		const plan = entry.run(ctx);
+		expect(plan.length).toBeGreaterThan(0);
+	});
+
+	it("lists.normalizeBullets: run() on * bullet list returns non-empty plan with all-off recipe", () => {
+		const entry = entries.find((e) => e.id === "lists.normalizeBullets")!;
+		const ctx = makeCtx("* item one\n* item two\n", RECIPE_ALL_OFF);
+		const plan = entry.run(ctx);
+		expect(plan.length).toBeGreaterThan(0);
+	});
+
+	it("lists.normalizeOrdered: run() on out-of-sequence list returns non-empty plan with all-off recipe", () => {
+		const entry = entries.find((e) => e.id === "lists.normalizeOrdered")!;
+		const ctx = makeCtx("2. first item\n3. second item\n", RECIPE_ALL_OFF);
+		const plan = entry.run(ctx);
+		expect(plan.length).toBeGreaterThan(0);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// T4.3.2 — mason.cleanup.* and mason.lists.* API methods are recipe-blind
+// ---------------------------------------------------------------------------
+
+describe("T4.3.2 — mason.cleanup and mason.lists API methods are recipe-blind", () => {
+	const { api } = buildRegistry();
+
+	it("api.cleanup.dewrap on multi-line paragraph returns non-empty plan regardless of settings", () => {
+		const ctx = makeCtx("# H\n\nFirst line\nsecond line.\n", RECIPE_ALL_OFF);
+		const plan = api.cleanup.dewrap(ctx);
+		expect(plan.length).toBeGreaterThan(0);
+	});
+
+	it("api.cleanup.dewrap plan is identical for all-on vs all-off recipe", () => {
+		const doc = "# H\n\nFirst line\nsecond line.\n";
+		const planOn  = api.cleanup.dewrap(makeCtx(doc, RECIPE_ALL_ON));
+		const planOff = api.cleanup.dewrap(makeCtx(doc, RECIPE_ALL_OFF));
+		expect(planOn).toEqual(planOff);
+	});
+
+	it("api.lists.normalizeBullets on * list returns non-empty plan regardless of settings", () => {
+		const ctx = makeCtx("* item one\n* item two\n", RECIPE_ALL_OFF);
+		const plan = api.lists.normalizeBullets(ctx);
+		expect(plan.length).toBeGreaterThan(0);
+	});
+
+	it("api.lists.normalizeBullets plan is identical for all-on vs all-off recipe", () => {
+		const doc = "* item one\n* item two\n";
+		const planOn  = api.lists.normalizeBullets(makeCtx(doc, RECIPE_ALL_ON));
+		const planOff = api.lists.normalizeBullets(makeCtx(doc, RECIPE_ALL_OFF));
+		expect(planOn).toEqual(planOff);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// T4.3.3 — spec-003 individual commands produce identical results with/without
+//           the 6 new recipe keys set to false
+// ---------------------------------------------------------------------------
+
+describe("T4.3.3 — spec-003 individual commands are unaffected by new recipe keys", () => {
+	const { entries } = buildRegistry();
+
+	// Recipe WITHOUT the new 6 keys dominant (old behavior: all 5 spec-003 keys on,
+	// 6 new keys off — simulates a caller that sets new keys false)
+	const recipeOld: FormatSelectionRecipe = {
+		cascade: true, normalize: true, fromCitations: true, identity: true, move: true,
+		dewrap: false, dehyphenate: false, decomposeLigatures: false,
+		tidyWhitespace: false, normalizeBullets: false, normalizeOrdered: false,
+	};
+	// Recipe WITH the new 6 keys also enabled
+	const recipeNew: FormatSelectionRecipe = RECIPE_ALL_ON;
+
+	it("headings.normalize produces identical plan with old vs new recipe", () => {
+		const entry = entries.find((e) => e.id === "headings.normalize")!;
+		const planOld = entry.run(makeCtx(FIXTURE_HEADINGS, recipeOld));
+		const planNew = entry.run(makeCtx(FIXTURE_HEADINGS, recipeNew));
+		expect(planOld).toEqual(planNew);
+	});
+
+	it("headings.cascade produces identical plan with old vs new recipe", () => {
+		const entry = entries.find((e) => e.id === "headings.cascade")!;
+		const planOld = entry.run(makeCtx(FIXTURE_HEADINGS, recipeOld));
+		const planNew = entry.run(makeCtx(FIXTURE_HEADINGS, recipeNew));
+		expect(planOld).toEqual(planNew);
+	});
+
+	it("footnotes.fromCitations produces identical plan with old vs new recipe", () => {
+		const entry = entries.find((e) => e.id === "footnotes.fromCitations")!;
+		const planOld = entry.run(makeCtx(FIXTURE_CITATIONS, recipeOld));
+		const planNew = entry.run(makeCtx(FIXTURE_CITATIONS, recipeNew));
+		expect(planOld).toEqual(planNew);
+	});
+
+	it("footnotes.identity produces identical plan with old vs new recipe", () => {
+		const entry = entries.find((e) => e.id === "footnotes.identity")!;
+		const planOld = entry.run(makeCtx(FIXTURE_IDENTITY, recipeOld));
+		const planNew = entry.run(makeCtx(FIXTURE_IDENTITY, recipeNew));
+		expect(planOld).toEqual(planNew);
+	});
+
+	it("footnotes.move produces identical plan with old vs new recipe", () => {
+		const entry = entries.find((e) => e.id === "footnotes.move")!;
+		const planOld = entry.run(makeCtx(FIXTURE_MOVE, recipeOld));
+		const planNew = entry.run(makeCtx(FIXTURE_MOVE, recipeNew));
+		expect(planOld).toEqual(planNew);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// T4.3.4 — "Tidy footnotes" is unaffected by the 6 new recipe keys
+//
+// Already covered by T2.2.1: the RECIPE_ALL_ON and RECIPE_ALL_OFF constants
+// defined at the top of this file include all 11 keys (the 5 spec-003 keys
+// plus the 6 new spec-004 keys: dewrap, dehyphenate, decomposeLigatures,
+// tidyWhitespace, normalizeBullets, normalizeOrdered).  The three tests in
+// T2.2.1 compare all-on vs all-off recipes and assert identical tidyFootnotes
+// output, which already exercises all new toggles.  No additional test needed.
+// ---------------------------------------------------------------------------
