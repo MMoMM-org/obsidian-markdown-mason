@@ -3,7 +3,7 @@
 
 import { describe, it, expect } from "vitest";
 import type { OperationContext } from "../../src/core/types";
-import { dehyphenate, dewrap } from "../../src/core/cleanup";
+import { dehyphenate, dewrap, decomposeLigatures, GLYPH_MAP } from "../../src/core/cleanup";
 import { applyToString } from "../../src/core/applyToString";
 
 const makeSettings = () => ({ debugLogging: false as const, resourcesName: "Resources" });
@@ -141,5 +141,98 @@ describe("dewrap — join soft-wrapped paragraph lines", () => {
 		const doc = "line one\nline two\n\nother line\nanother line\n";
 		const first = applyToString(doc, dewrap(makeCtx(doc)));
 		expect(dewrap(makeCtx(first))).toHaveLength(0);
+	});
+});
+
+// ============================================================
+// T2.3 — decomposeLigatures
+// ============================================================
+
+describe("decomposeLigatures — canonical ligatures", () => {
+	it.each([
+		["ﬁ", "fi"],
+		["ﬂ", "fl"],
+		["ﬀ", "ff"],
+		["ﬃ", "ffi"],
+		["ﬄ", "ffl"],
+		["æ", "ae"],
+		["œ", "oe"],
+	])("replaces %s with %s", (glyph, expected) => {
+		const doc = `word${glyph}end\n`;
+		const result = applyToString(doc, decomposeLigatures(makeCtx(doc)));
+		expect(result).toBe(`word${expected}end\n`);
+	});
+});
+
+describe("decomposeLigatures — punctuation", () => {
+	it("replaces curly open double quote \\u201C with straight double quote", () => {
+		const doc = "“hello”\n";
+		expect(applyToString(doc, decomposeLigatures(makeCtx(doc)))).toBe('"hello"\n');
+	});
+
+	it("replaces curly close double quote \\u201D with straight double quote", () => {
+		const doc = "word”\n";
+		expect(applyToString(doc, decomposeLigatures(makeCtx(doc)))).toBe('word"\n');
+	});
+
+	it("replaces curly open single quote \\u2018 with straight single quote", () => {
+		const doc = "‘word\n";
+		expect(applyToString(doc, decomposeLigatures(makeCtx(doc)))).toBe("'word\n");
+	});
+
+	it("replaces curly close single quote \\u2019 with straight single quote", () => {
+		const doc = "word’s\n";
+		expect(applyToString(doc, decomposeLigatures(makeCtx(doc)))).toBe("word's\n");
+	});
+
+	it("replaces em dash \\u2014 with hyphen", () => {
+		const doc = "word—word\n";
+		expect(applyToString(doc, decomposeLigatures(makeCtx(doc)))).toBe("word-word\n");
+	});
+
+	it("replaces en dash \\u2013 with hyphen", () => {
+		const doc = "pp.–10\n";
+		expect(applyToString(doc, decomposeLigatures(makeCtx(doc)))).toBe("pp.-10\n");
+	});
+
+	it("replaces ellipsis \\u2026 with three dots", () => {
+		const doc = "wait…\n";
+		expect(applyToString(doc, decomposeLigatures(makeCtx(doc)))).toBe("wait...\n");
+	});
+});
+
+describe("decomposeLigatures — safety constraints", () => {
+	it("leaves ASCII W and w untouched (homoglyph guard)", () => {
+		const doc = "Wide and wow\n";
+		expect(decomposeLigatures(makeCtx(doc))).toHaveLength(0);
+	});
+
+	it("leaves ligatures inside a fenced code block untouched", () => {
+		const doc = "```\nﬁle\n```\n";
+		expect(decomposeLigatures(makeCtx(doc))).toHaveLength(0);
+	});
+
+	it("leaves a ligature inside an inline code span untouched", () => {
+		const doc = "see `ﬁle` for details\n";
+		const result = applyToString(doc, decomposeLigatures(makeCtx(doc)));
+		expect(result).toBe("see `ﬁle` for details\n");
+	});
+
+	it("replaces only the non-code ligature in mixed content", () => {
+		const doc = "ﬁrst `ﬂag` here\n";
+		const result = applyToString(doc, decomposeLigatures(makeCtx(doc)));
+		expect(result).toBe("first `ﬂag` here\n");
+	});
+
+	it("GLYPH_MAP values never contain W, w, VV, or vv", () => {
+		for (const value of Object.values(GLYPH_MAP)) {
+			expect(value).not.toMatch(/W|w|VV|vv/);
+		}
+	});
+
+	it("is idempotent: second pass returns []", () => {
+		const doc = "ﬁle…done\n";
+		const first = applyToString(doc, decomposeLigatures(makeCtx(doc)));
+		expect(decomposeLigatures(makeCtx(first))).toHaveLength(0);
 	});
 });

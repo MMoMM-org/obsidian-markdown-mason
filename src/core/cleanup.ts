@@ -48,6 +48,73 @@ export function dehyphenate(ctx: OperationContext): EditPlan {
 }
 
 // ---------------------------------------------------------------------------
+// T2.3 — decomposeLigatures
+// ---------------------------------------------------------------------------
+
+/**
+ * Closed enumeration of glyph-to-ASCII replacements.
+ * INVARIANT: no value contains W, w, VV, or vv.
+ */
+export const GLYPH_MAP: Readonly<Record<string, string>> = {
+	"ﬁ": "fi",   // ﬁ
+	"ﬂ": "fl",   // ﬂ
+	"ﬀ": "ff",   // ﬀ
+	"ﬃ": "ffi",  // ﬃ
+	"ﬄ": "ffl",  // ﬄ
+	"æ": "ae",   // æ
+	"œ": "oe",   // œ
+	"“": '"',    // "
+	"”": '"',    // "
+	"‘": "'",    // '
+	"’": "'",    // '
+	"—": "-",    // — em dash
+	"–": "-",    // – en dash
+	"…": "...",  // …
+} as const;
+
+/**
+ * Replace canonical ligatures and punctuation glyphs with ASCII equivalents.
+ * Skips fencedCode and indentedCode blocks; skips inline code spans via maskInlineCode.
+ */
+export function decomposeLigatures(ctx: OperationContext): EditPlan {
+	const blocks = segmentBlocks(ctx.doc);
+	const plan: EditPlan = [];
+
+	for (const block of blocks) {
+		if (isSkippedForCode(block.kind)) continue;
+
+		const text = ctx.doc.slice(block.startOffset, block.endOffset);
+		const lines = text.split("\n");
+		let lineOffset = block.startOffset;
+
+		for (const line of lines) {
+			if (line.length > 0) {
+				const maskedLine = maskInlineCode(line);
+				let newLine = "";
+				let changed = false;
+				for (let i = 0; i < line.length; i++) {
+					const ch = line[i]!;
+					if (maskedLine[i] === "\0") {
+						newLine += ch; // inside inline code span — preserve
+					} else if (GLYPH_MAP[ch] !== undefined) {
+						newLine += GLYPH_MAP[ch];
+						changed = true;
+					} else {
+						newLine += ch;
+					}
+				}
+				if (changed) {
+					plan.push({ from: lineOffset, to: lineOffset + line.length, insert: newLine });
+				}
+			}
+			lineOffset += line.length + 1;
+		}
+	}
+
+	return plan;
+}
+
+// ---------------------------------------------------------------------------
 // T2.2 — dewrap
 // ---------------------------------------------------------------------------
 
