@@ -94,9 +94,9 @@ describe("buildRegistry — structure", () => {
 		}
 	});
 
-	it("has exactly 6 registered operations", () => {
+	it("has exactly 12 registered operations", () => {
 		const { entries } = buildRegistry();
-		expect(entries).toHaveLength(6);
+		expect(entries).toHaveLength(12);
 	});
 });
 
@@ -442,6 +442,111 @@ describe("checkRequiredApiVersion", () => {
 
 	it("rejects non-version string 'abc' (fail-closed)", () => {
 		expect(checkRequiredApiVersion("abc").ok).toBe(false);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// T4.2 — new cleanup/lists registry entries
+// ---------------------------------------------------------------------------
+
+describe("T4.2 — new cleanup/lists registry entries", () => {
+	it("buildEntries() includes all 6 new ids", () => {
+		const { entries } = buildRegistry();
+		const ids = entries.map((e) => e.id);
+		expect(ids).toContain("cleanup.dewrap");
+		expect(ids).toContain("cleanup.dehyphenate");
+		expect(ids).toContain("cleanup.decomposeLigatures");
+		expect(ids).toContain("cleanup.tidyWhitespace");
+		expect(ids).toContain("lists.normalizeBullets");
+		expect(ids).toContain("lists.normalizeOrdered");
+	});
+
+	it("entries count is now 12 (6 existing + 6 new)", () => {
+		const { entries } = buildRegistry();
+		expect(entries).toHaveLength(12);
+	});
+
+	it("each new entry has correct apiName", () => {
+		const { entries } = buildRegistry();
+		const map = Object.fromEntries(entries.map((e) => [e.id, e]));
+		expect(map["cleanup.dewrap"]?.apiName).toBe("mason.cleanup.dewrap");
+		expect(map["cleanup.dehyphenate"]?.apiName).toBe("mason.cleanup.dehyphenate");
+		expect(map["cleanup.decomposeLigatures"]?.apiName).toBe("mason.cleanup.decomposeLigatures");
+		expect(map["cleanup.tidyWhitespace"]?.apiName).toBe("mason.cleanup.tidyWhitespace");
+		expect(map["lists.normalizeBullets"]?.apiName).toBe("mason.lists.normalizeBullets");
+		expect(map["lists.normalizeOrdered"]?.apiName).toBe("mason.lists.normalizeOrdered");
+	});
+
+	it("each new entry has the exact sentence-case command name", () => {
+		const { entries } = buildRegistry();
+		const map = Object.fromEntries(entries.map((e) => [e.id, e]));
+		expect(map["cleanup.dewrap"]?.command.name).toBe("Dewrap paragraphs");
+		expect(map["cleanup.dehyphenate"]?.command.name).toBe("Dehyphenate words");
+		expect(map["cleanup.decomposeLigatures"]?.command.name).toBe("Decompose ligatures and punctuation");
+		expect(map["cleanup.tidyWhitespace"]?.command.name).toBe("Tidy whitespace");
+		expect(map["lists.normalizeBullets"]?.command.name).toBe("Normalize bullets");
+		expect(map["lists.normalizeOrdered"]?.command.name).toBe("Normalize ordered list");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// T4.2 — cleanup and lists API namespaces
+// ---------------------------------------------------------------------------
+
+describe("T4.2 — cleanup and lists API namespaces", () => {
+	it("buildApi exposes cleanup.dewrap as a function", () => {
+		const { api } = buildRegistry();
+		expect(typeof (api as any).cleanup?.dewrap).toBe("function");
+	});
+
+	it("buildApi exposes cleanup.dehyphenate as a function", () => {
+		const { api } = buildRegistry();
+		expect(typeof (api as any).cleanup?.dehyphenate).toBe("function");
+	});
+
+	it("buildApi exposes cleanup.decomposeLigatures as a function", () => {
+		const { api } = buildRegistry();
+		expect(typeof (api as any).cleanup?.decomposeLigatures).toBe("function");
+	});
+
+	it("buildApi exposes cleanup.tidyWhitespace as a function", () => {
+		const { api } = buildRegistry();
+		expect(typeof (api as any).cleanup?.tidyWhitespace).toBe("function");
+	});
+
+	it("buildApi exposes lists.normalizeBullets as a function", () => {
+		const { api } = buildRegistry();
+		expect(typeof (api as any).lists?.normalizeBullets).toBe("function");
+	});
+
+	it("buildApi exposes lists.normalizeOrdered as a function", () => {
+		const { api } = buildRegistry();
+		expect(typeof (api as any).lists?.normalizeOrdered).toBe("function");
+	});
+
+	it("api.cleanup.dewrap returns non-empty plan on a multi-line paragraph", () => {
+		const { api } = buildRegistry();
+		const ctx = makeCtx({ doc: "# H\n\nFirst line\nsecond line.\n", input: "" });
+		const plan = (api as any).cleanup.dewrap(ctx);
+		expect(Array.isArray(plan)).toBe(true);
+		expect(plan.length).toBeGreaterThan(0);
+	});
+
+	it("api.lists.normalizeBullets returns non-empty plan on a * bullet list", () => {
+		const { api } = buildRegistry();
+		const ctx = makeCtx({ doc: "* item one\n* item two\n", input: "" });
+		const plan = (api as any).lists.normalizeBullets(ctx);
+		expect(plan.length).toBeGreaterThan(0);
+	});
+
+	it("api.cleanup.dewrap output is identical regardless of formatSelection recipe", () => {
+		const { api } = buildRegistry();
+		const doc = "# H\n\nFirst line\nsecond line.\n";
+		const ctxAllOn = { doc, cursor: 0, input: "", settings: { debugLogging: false, resourcesName: "Resources", formatSelection: { dewrap: true, cascade: true, normalize: true } } };
+		const ctxAllOff = { doc, cursor: 0, input: "", settings: { debugLogging: false, resourcesName: "Resources", formatSelection: { dewrap: false, cascade: false, normalize: false } } };
+		const planOn = (api as any).cleanup.dewrap(ctxAllOn);
+		const planOff = (api as any).cleanup.dewrap(ctxAllOff);
+		expect(planOn).toEqual(planOff);
 	});
 });
 
