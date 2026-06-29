@@ -312,6 +312,7 @@ describe("T4.3.1 — new cleanup/lists commands are recipe-blind (RegistryEntry.
 
 	it("cleanup.dewrap: run() on multi-line paragraph returns non-empty plan with all-off recipe", () => {
 		const entry = entries.find((e) => e.id === "cleanup.dewrap")!;
+		expect(entry, "entry cleanup.dewrap must exist").toBeDefined();
 		const ctx = makeCtx("# H\n\nFirst line\nsecond line.\n", RECIPE_ALL_OFF);
 		const plan = entry.run(ctx);
 		expect(plan.length).toBeGreaterThan(0);
@@ -319,6 +320,7 @@ describe("T4.3.1 — new cleanup/lists commands are recipe-blind (RegistryEntry.
 
 	it("cleanup.dehyphenate: run() on soft-hyphenated word returns non-empty plan with all-off recipe", () => {
 		const entry = entries.find((e) => e.id === "cleanup.dehyphenate")!;
+		expect(entry, "entry cleanup.dehyphenate must exist").toBeDefined();
 		const ctx = makeCtx("long-\nword continues.\n", RECIPE_ALL_OFF);
 		const plan = entry.run(ctx);
 		expect(plan.length).toBeGreaterThan(0);
@@ -326,6 +328,7 @@ describe("T4.3.1 — new cleanup/lists commands are recipe-blind (RegistryEntry.
 
 	it("cleanup.decomposeLigatures: run() on doc with smart quotes returns non-empty plan with all-off recipe", () => {
 		const entry = entries.find((e) => e.id === "cleanup.decomposeLigatures")!;
+		expect(entry, "entry cleanup.decomposeLigatures must exist").toBeDefined();
 		const ctx = makeCtx("He said “hello”.\n", RECIPE_ALL_OFF);
 		const plan = entry.run(ctx);
 		expect(plan.length).toBeGreaterThan(0);
@@ -333,6 +336,7 @@ describe("T4.3.1 — new cleanup/lists commands are recipe-blind (RegistryEntry.
 
 	it("cleanup.tidyWhitespace: run() on doc with double spaces returns non-empty plan with all-off recipe", () => {
 		const entry = entries.find((e) => e.id === "cleanup.tidyWhitespace")!;
+		expect(entry, "entry cleanup.tidyWhitespace must exist").toBeDefined();
 		const ctx = makeCtx("Word  extra  spaces.\n", RECIPE_ALL_OFF);
 		const plan = entry.run(ctx);
 		expect(plan.length).toBeGreaterThan(0);
@@ -340,6 +344,7 @@ describe("T4.3.1 — new cleanup/lists commands are recipe-blind (RegistryEntry.
 
 	it("lists.normalizeBullets: run() on * bullet list returns non-empty plan with all-off recipe", () => {
 		const entry = entries.find((e) => e.id === "lists.normalizeBullets")!;
+		expect(entry, "entry lists.normalizeBullets must exist").toBeDefined();
 		const ctx = makeCtx("* item one\n* item two\n", RECIPE_ALL_OFF);
 		const plan = entry.run(ctx);
 		expect(plan.length).toBeGreaterThan(0);
@@ -347,6 +352,7 @@ describe("T4.3.1 — new cleanup/lists commands are recipe-blind (RegistryEntry.
 
 	it("lists.normalizeOrdered: run() on out-of-sequence list returns non-empty plan with all-off recipe", () => {
 		const entry = entries.find((e) => e.id === "lists.normalizeOrdered")!;
+		expect(entry, "entry lists.normalizeOrdered must exist").toBeDefined();
 		const ctx = makeCtx("2. first item\n3. second item\n", RECIPE_ALL_OFF);
 		const plan = entry.run(ctx);
 		expect(plan.length).toBeGreaterThan(0);
@@ -383,6 +389,34 @@ describe("T4.3.2 — mason.cleanup and mason.lists API methods are recipe-blind"
 		const doc = "* item one\n* item two\n";
 		const planOn  = api.lists.normalizeBullets(makeCtx(doc, RECIPE_ALL_ON));
 		const planOff = api.lists.normalizeBullets(makeCtx(doc, RECIPE_ALL_OFF));
+		expect(planOn).toEqual(planOff);
+	});
+
+	it("api.cleanup.dehyphenate plan is identical for all-on vs all-off recipe", () => {
+		const doc = "long-\nword continues.\n";
+		const planOn  = api.cleanup.dehyphenate(makeCtx(doc, RECIPE_ALL_ON));
+		const planOff = api.cleanup.dehyphenate(makeCtx(doc, RECIPE_ALL_OFF));
+		expect(planOn).toEqual(planOff);
+	});
+
+	it("api.cleanup.decomposeLigatures plan is identical for all-on vs all-off recipe", () => {
+		const doc = "He said “hello”.\n";
+		const planOn  = api.cleanup.decomposeLigatures(makeCtx(doc, RECIPE_ALL_ON));
+		const planOff = api.cleanup.decomposeLigatures(makeCtx(doc, RECIPE_ALL_OFF));
+		expect(planOn).toEqual(planOff);
+	});
+
+	it("api.cleanup.tidyWhitespace plan is identical for all-on vs all-off recipe", () => {
+		const doc = "Word  extra  spaces.\n";
+		const planOn  = api.cleanup.tidyWhitespace(makeCtx(doc, RECIPE_ALL_ON));
+		const planOff = api.cleanup.tidyWhitespace(makeCtx(doc, RECIPE_ALL_OFF));
+		expect(planOn).toEqual(planOff);
+	});
+
+	it("api.lists.normalizeOrdered plan is identical for all-on vs all-off recipe", () => {
+		const doc = "2. first item\n3. second item\n";
+		const planOn  = api.lists.normalizeOrdered(makeCtx(doc, RECIPE_ALL_ON));
+		const planOff = api.lists.normalizeOrdered(makeCtx(doc, RECIPE_ALL_OFF));
 		expect(planOn).toEqual(planOff);
 	});
 });
