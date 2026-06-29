@@ -548,6 +548,78 @@ describe("T4.2 — cleanup and lists API namespaces", () => {
 		const planOff = (api as any).cleanup.dewrap(ctxAllOff);
 		expect(planOn).toEqual(planOff);
 	});
+
+	// Execution tests for remaining 4 methods
+
+	it("api.cleanup.dehyphenate returns non-empty plan on a soft-hyphenated word", () => {
+		const { api } = buildRegistry();
+		const ctx = makeCtx({ doc: "# H\n\nlong-\nword continues.\n", input: "" });
+		const plan = (api as any).cleanup.dehyphenate(ctx);
+		expect(plan.length).toBeGreaterThan(0);
+	});
+
+	it("api.cleanup.decomposeLigatures returns non-empty plan on a doc with smart quotes", () => {
+		const { api } = buildRegistry();
+		const ctx = makeCtx({ doc: "He said “hello”.\n", input: "" });
+		const plan = (api as any).cleanup.decomposeLigatures(ctx);
+		expect(plan.length).toBeGreaterThan(0);
+	});
+
+	it("api.cleanup.tidyWhitespace returns non-empty plan on a doc with double spaces", () => {
+		const { api } = buildRegistry();
+		const ctx = makeCtx({ doc: "Word  extra  spaces.\n", input: "" });
+		const plan = (api as any).cleanup.tidyWhitespace(ctx);
+		expect(plan.length).toBeGreaterThan(0);
+	});
+
+	it("api.lists.normalizeOrdered returns non-empty plan on an out-of-sequence ordered list", () => {
+		const { api } = buildRegistry();
+		const ctx = makeCtx({ doc: "2. first item\n3. second item\n", input: "" });
+		const plan = (api as any).lists.normalizeOrdered(ctx);
+		expect(plan.length).toBeGreaterThan(0);
+	});
+
+	// Isolation tests (settings-blind) for 5 uncovered methods
+
+	it("api.cleanup.dehyphenate output is identical regardless of formatSelection", () => {
+		const { api } = buildRegistry();
+		const doc = "long-\nword continues.\n";
+		const ctxOn  = makeCtx({ doc, settings: { ...makeSettings(), formatSelection: { dehyphenate: true,  cascade: true  } } });
+		const ctxOff = makeCtx({ doc, settings: { ...makeSettings(), formatSelection: { dehyphenate: false, cascade: false } } });
+		expect((api as any).cleanup.dehyphenate(ctxOn)).toEqual((api as any).cleanup.dehyphenate(ctxOff));
+	});
+
+	it("api.cleanup.decomposeLigatures output is identical regardless of formatSelection", () => {
+		const { api } = buildRegistry();
+		const doc = "He said “hello”.\n";
+		const ctxOn  = makeCtx({ doc, settings: { ...makeSettings(), formatSelection: { decomposeLigatures: true  } } });
+		const ctxOff = makeCtx({ doc, settings: { ...makeSettings(), formatSelection: { decomposeLigatures: false } } });
+		expect((api as any).cleanup.decomposeLigatures(ctxOn)).toEqual((api as any).cleanup.decomposeLigatures(ctxOff));
+	});
+
+	it("api.cleanup.tidyWhitespace output is identical regardless of formatSelection", () => {
+		const { api } = buildRegistry();
+		const doc = "Word  extra  spaces.\n";
+		const ctxOn  = makeCtx({ doc, settings: { ...makeSettings(), formatSelection: { tidyWhitespace: true  } } });
+		const ctxOff = makeCtx({ doc, settings: { ...makeSettings(), formatSelection: { tidyWhitespace: false } } });
+		expect((api as any).cleanup.tidyWhitespace(ctxOn)).toEqual((api as any).cleanup.tidyWhitespace(ctxOff));
+	});
+
+	it("api.lists.normalizeBullets output is identical regardless of formatSelection", () => {
+		const { api } = buildRegistry();
+		const doc = "* item one\n* item two\n";
+		const ctxOn  = makeCtx({ doc, settings: { ...makeSettings(), formatSelection: { normalizeBullets: true  } } });
+		const ctxOff = makeCtx({ doc, settings: { ...makeSettings(), formatSelection: { normalizeBullets: false } } });
+		expect((api as any).lists.normalizeBullets(ctxOn)).toEqual((api as any).lists.normalizeBullets(ctxOff));
+	});
+
+	it("api.lists.normalizeOrdered output is identical regardless of formatSelection", () => {
+		const { api } = buildRegistry();
+		const doc = "2. first\n3. second\n";
+		const ctxOn  = makeCtx({ doc, settings: { ...makeSettings(), formatSelection: { normalizeOrdered: true  } } });
+		const ctxOff = makeCtx({ doc, settings: { ...makeSettings(), formatSelection: { normalizeOrdered: false } } });
+		expect((api as any).lists.normalizeOrdered(ctxOn)).toEqual((api as any).lists.normalizeOrdered(ctxOff));
+	});
 });
 
 // ---------------------------------------------------------------------------
