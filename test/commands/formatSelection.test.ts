@@ -24,13 +24,14 @@
  *   appended by wholeNoteMove does not end with \n)
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import type { Editor, EditorPosition, EditorSelection } from "obsidian";
 import { clearNoticeLog, noticeLog } from "../__mocks__/obsidian";
 import { registerCommands } from "../../src/commands";
 import { DEFAULT_SETTINGS } from "../../src/core/types";
 import type { MasonSettings } from "../../src/core/types";
 import type { FormatSelectionRecipe } from "../../src/core/formatSelection";
+import { setDebugLogging } from "../../src/core/debug";
 import { EditorState, type TransactionSpec } from "@codemirror/state";
 import { history } from "@codemirror/commands";
 
@@ -687,4 +688,111 @@ describe("T4.1(e) — known limitation: offset-staleness with cleanup + cascade"
 		"cascade + decomposeLigatures: if a ligature before the selection expands, " +
 		"cascade lands at the wrong offset in the post-cleanup doc — tracked for future fix",
 	);
+});
+
+// ---------------------------------------------------------------------------
+// T1.2(a) — byte-identity regression: specific recipe combos (spec 005 T1.2)
+//
+// These constants were captured from the pre-refactor inline pipeline to act as
+// hard byte-identity guards that must survive the applyTextCleanup delegation.
+//
+// EXPECTED_NORMALIZE_OFF: normalize:false — heading gap preserved (### B),
+//   dewrap joins the two-line def block, citations converted, def moved to Resources.
+//
+// EXPECTED_MOVE_OFF: move:false — def stays inline, normalize closes gap (## B),
+//   citations converted, no Resources section created.
+// ---------------------------------------------------------------------------
+
+const EXPECTED_NORMALIZE_OFF =
+	"# A\n\n### B\n\n[^1] note.\n\n\n## Resources\n\n[^1]: def [url](https://x.com)";
+
+const EXPECTED_MOVE_OFF =
+	"# A\n\n## B\n\n[^1] note.\n\n[^1]: def [url](https://x.com)\n";
+
+describe("T1.2(a) — byte-identity regression: specific recipe combos after T1.2 refactor", () => {
+	beforeEach(() => clearNoticeLog());
+
+	it("normalize:false → heading gap preserved, def moved, citations converted (byte-exact)", () => {
+		const { resultDoc } = runFormatSelection(FIXTURE, { normalize: false });
+		expect(resultDoc).toBe(EXPECTED_NORMALIZE_OFF);
+	});
+
+	it("move:false → def stays inline, heading normalized, citations converted (byte-exact)", () => {
+		const { resultDoc } = runFormatSelection(FIXTURE, { move: false });
+		expect(resultDoc).toBe(EXPECTED_MOVE_OFF);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// T1.2(b) — recipe-path logging: debugLogging=true emits step lines + result
+//
+// With settings.debugLogging=true (and setDebugLogging(true) so debug() fires),
+// fusedFormatNote must emit:
+//   • 7 per-step "format: <name> …" lines (one per cleanup step from applyTextCleanup)
+//   • 1 "format: result …" line after the full pipeline
+//
+// With debugLogging=false no "format:" lines appear at all.
+// Log content must never include document text.
+// ---------------------------------------------------------------------------
+
+describe("T1.2(b) — recipe-path logging", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+		setDebugLogging(false);
+	});
+
+	it("debugLogging=true: exactly 7 per-step format lines are emitted (one per cleanup step)", () => {
+		const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+		setDebugLogging(true);
+		const settings: MasonSettings = { ...DEFAULT_SETTINGS, debugLogging: true, formatSelection: {} };
+		const host = makeCommandHost(settings);
+		const cmd = findFormatCmd(host);
+		const editor = makeCmEditor(FIXTURE);
+		clearNoticeLog();
+		cmd.editorCallback(editor as unknown as Editor);
+		const allArgs = debugSpy.mock.calls.map((args) => String(args[0]));
+		const stepLines = allArgs.filter((l) => l.includes("format:") && !l.includes("result"));
+		expect(stepLines).toHaveLength(7);
+	});
+
+	it("debugLogging=true: a final 'format: result' line is emitted", () => {
+		const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+		setDebugLogging(true);
+		const settings: MasonSettings = { ...DEFAULT_SETTINGS, debugLogging: true, formatSelection: {} };
+		const host = makeCommandHost(settings);
+		const cmd = findFormatCmd(host);
+		const editor = makeCmEditor(FIXTURE);
+		clearNoticeLog();
+		cmd.editorCallback(editor as unknown as Editor);
+		const allArgs = debugSpy.mock.calls.map((args) => String(args[0]));
+		const resultLines = allArgs.filter((l) => l.includes("format: result"));
+		expect(resultLines).toHaveLength(1);
+	});
+
+	it("debugLogging=false: no 'format:' lines appear in console.debug output", () => {
+		const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+		// DEFAULT_SETTINGS.debugLogging is false — log closure is never created
+		runFormatSelection(FIXTURE, {});
+		const allArgs = debugSpy.mock.calls.map((args) => String(args[0]));
+		const stepLines = allArgs.filter((l) => l.includes("format:"));
+		expect(stepLines).toHaveLength(0);
+	});
+
+	it("log lines never contain document content (no fixture substrings in log output)", () => {
+		const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+		setDebugLogging(true);
+		const settings: MasonSettings = { ...DEFAULT_SETTINGS, debugLogging: true, formatSelection: {} };
+		const host = makeCommandHost(settings);
+		const cmd = findFormatCmd(host);
+		const editor = makeCmEditor(FIXTURE);
+		clearNoticeLog();
+		cmd.editorCallback(editor as unknown as Editor);
+		const allLogs = debugSpy.mock.calls.map((args) => args.join(" "));
+		const docSubstrings = ["# A", "[1] note.", "[^1]: def", "https://x.com"];
+		for (const substr of docSubstrings) {
+			for (const log of allLogs) {
+				expect(log, `log line must not contain doc content '${substr}'`).not.toContain(substr);
+			}
+		}
+	});
 });

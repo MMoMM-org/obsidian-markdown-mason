@@ -23,7 +23,7 @@ An imported script is a **CommonJS `.cjs` file** that exports an envelope:
 ```js
 module.exports = {
   run,        // required — the transform
-  paste,      // optional — makes it a "Paste and format" handler too
+  paste,      // optional — makes it a "Paste and run scripts" handler too
 };
 ```
 
@@ -89,7 +89,7 @@ type EditPlan = Edit[];
 
 A script can be reached two ways:
 
-**Paste** — via **Mason: Paste and format**. Only scripts with a `paste` block
+**Paste** — via **Mason: Paste and run scripts**. Only scripts with a `paste` block
 participate. `paste.canHandle(input)` decides whether your script claims the
 clipboard text; `paste.priority` orders competing handlers (higher first). On
 paste there is no prior selection, so you insert at `ctx.op.cursor`.
@@ -148,7 +148,7 @@ runs through Node's `require` anchored at your vault's scripts directory and
 5. Optional: a `// description: …` line anywhere in the file is parsed and shown
    in the disclosure and the Scripts card, so you know what you're approving.
 
-To run it: enable **Paste and format**, or create a command for it in the
+To run it: enable **Paste and run scripts**, or create a command for it in the
 **Commands** tab (then bind a hotkey in Obsidian's core Hotkeys), or use
 **Mason: Run script…**.
 

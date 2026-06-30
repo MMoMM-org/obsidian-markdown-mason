@@ -41,9 +41,9 @@ After enabling, confirm Mason loaded:
 - **Markdown Mason** appears under Settings → Community plugins → Installed plugins, toggled
   on.
 - A **Markdown Mason** entry is in the settings sidebar, showing the General / Scripts /
-  Commands / Advanced segments.
-- Opening the command palette and typing "Mason" lists **Markdown Mason: Paste and format** and
-  **Markdown Mason: Run script…**.
+  Commands / Format selection / Advanced segments.
+- Opening the command palette and typing "Mason" lists **Markdown Mason: Paste and run
+  scripts**, **Paste and format**, **Format selection**, and **Run script…**.
 
 If any of these are missing, see [Troubleshooting](troubleshooting.md).
 

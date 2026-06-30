@@ -20,11 +20,12 @@ that's off, blocked, or didn't match your text, not lost data.
 
 - Confirm the plugin is enabled (Settings → Community plugins → Installed plugins, toggled
   on).
-- Only **Markdown Mason: Paste and format** and **Markdown Mason: Run script…** are always present. A script's
-  own command appears only after you toggle *Create command* for it in the **Commands**
-  settings tab.
+- The built-in commands — including **Markdown Mason: Paste and run scripts**, **Paste and
+  format**, **Format selection**, and **Run script…** — are always present. A script's own
+  command appears only after you toggle *Create command* for it in the **Commands** settings
+  tab.
 
-### Paste and format just inserts the raw text, unchanged
+### Paste and run scripts just inserts the raw text, unchanged
 
 This is the safe fallback — it happens when no enabled script transformed the clipboard:
 
@@ -34,6 +35,29 @@ This is the safe fallback — it happens when no enabled script transformed the 
   your copy surface (app / web / web download — see [Usage](usage.md)).
 - If a script errors or times out, Mason deliberately falls back to a plain paste rather than
   a partial edit. Turn on Debug logging (below) to see why.
+- Want cleanup without a script? Use **Paste and format** instead — it tidies the pasted text
+  with no script needed (see the next entry).
+
+### I ran a paste command and nothing was cleaned up / it pasted as-is — why?
+
+There are two different paste commands, and they do different things — make sure you ran the
+one you meant:
+
+- **Paste and run scripts** only *converts* the clipboard when one of your enabled
+  paste-converter scripts matches it (e.g. a Perplexity copy). If nothing matches — or a
+  script errors — it falls back to a plain paste, so the text lands unchanged. It does **not**
+  run the cleanup recipe. To convert, enable the right script (see above); to clean up plain
+  text, use *Paste and format*.
+- **Paste and format** applies the 7-step cleanup recipe to the pasted text, but a step you
+  expected may simply be **toggled off**. Check **Settings → Format selection** — the four
+  Cleanup steps, two Lists steps, and *Normalize headings* are the ones that run on a paste.
+  Note that *Cascade headings* and the three footnote steps never run on a paste (they are
+  *Format selection* only), so their absence is by design — use **Format selection** if you
+  need those.
+- **Still unsure which step ran?** Turn on Debug logging (below). Mason now logs each paste
+  script's `canHandle` result (so you can see why a converter did or didn't match) and the
+  per-step results of the cleanup recipe to the developer console, so you can see exactly
+  what ran and what was skipped.
 
 ### "Mason: clipboard is empty — nothing to paste."
 

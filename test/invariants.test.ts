@@ -19,7 +19,7 @@
 //     no matching [^n] in body) are preserved — not dropped — through a full run.
 //
 // I3. Empty clipboard → Notice no-op
-//     Empty clipboard on "Mason: Paste and format" produces no edit and shows a
+//     Empty clipboard on "Mason: Paste and run scripts" produces no edit and shows a
 //     descriptive Notice.  Empty selection on a selection command → script
 //     receives empty string as input → returns undefined → no-op (applyPlan and
 //     replaceSelection never called).  Unrecognized non-empty selection → script
@@ -560,7 +560,7 @@ describe("I3 — Empty clipboard → Notice no-op (paste command)", () => {
 			applyPlan: applyPlanSpy,
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
 		await cmd.editorCallback(editor);
 
 		expect(noticeLog().length, "a Notice must be shown for empty clipboard").toBeGreaterThan(0);
@@ -683,7 +683,7 @@ describe("I6 — Throwing script → raw fallback (paste command)", () => {
 			failScript: true,
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
 		await cmd.editorCallback(editor);
 
 		expect(
@@ -703,7 +703,7 @@ describe("I6 — Throwing script → raw fallback (paste command)", () => {
 			failScript: true,
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
 		await cmd.editorCallback(editor);
 
 		expect(applyPlanSpy, "applyPlan must NOT be called when script throws").not.toHaveBeenCalled();
@@ -719,7 +719,7 @@ describe("I6 — Throwing script → raw fallback (paste command)", () => {
 			failScript: true,
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
 		await cmd.editorCallback(editor);
 
 		expect(noticeLog().length, "a Notice must be shown on script failure (not silent)").toBeGreaterThan(0);

@@ -18,11 +18,12 @@
 //     this property to substitute clipboardReader, applyPlan, and failScript.
 //   - rawFallback calls editor.replaceSelection(rawText); tests spy on _replaced.
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ScriptStore } from "../../src/scripts/store";
 import { importScript } from "../../src/scripts/runtime";
 import type { VaultAdapterPort } from "../../src/scripts/runtime";
 import { sha256Bytes } from "../../src/scripts/checksum";
+import { setDebugLogging } from "../../src/core/debug";
 
 // ---------------------------------------------------------------------------
 // Part B: importScript — vault import flow (T2.3 binary contract)
@@ -350,7 +351,7 @@ describe("T5.5B importScript — vault import flow", () => {
 // ---------------------------------------------------------------------------
 // Part C: Paste command wiring via main.ts
 //
-// Tests verify the paste command (id: "mason.pasteAndFormat") registered in
+// Tests verify the paste command (id: "mason.pasteAndRunScripts") registered in
 // main.ts:
 //   - On success: applyPlan spy receives the EditPlan (no partial edits)
 //   - On failure (script throws): rawFallback is called, applyPlan is NOT called
@@ -499,19 +500,19 @@ function findCommand(plugin: InstanceType<typeof MarkdownMasonPlugin>, id: strin
 // C1: paste command is registered
 // ---------------------------------------------------------------------------
 
-describe("T5.5C — mason.pasteAndFormat command registration", () => {
+describe("T5.5C — mason.pasteAndRunScripts command registration", () => {
 	beforeEach(() => clearNoticeLog());
 
-	it("registers 'mason.pasteAndFormat' command after onLayoutReady", async () => {
+	it("registers 'mason.pasteAndRunScripts' command after onLayoutReady", async () => {
 		const plugin = await makePluginAndFireLayout();
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
-		expect(cmd, "mason.pasteAndFormat command must be registered").toBeDefined();
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
+		expect(cmd, "mason.pasteAndRunScripts command must be registered").toBeDefined();
 	});
 
-	it("'mason.pasteAndFormat' command name does not start with 'Mason:' (Obsidian prepends plugin name)", async () => {
+	it("'mason.pasteAndRunScripts' command name does not start with 'Mason:' (Obsidian prepends plugin name)", async () => {
 		const plugin = await makePluginAndFireLayout();
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
-		expect(cmd?.name).toBe("Paste and format");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
+		expect(cmd?.name).toBe("Paste and run scripts");
 	});
 });
 
@@ -560,7 +561,7 @@ describe("T5.5C — paste command success path", () => {
 			pasteScripts: [curatedPerplexityAppPasteScript()],
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
 		expect(cmd).toBeDefined();
 
 		// editorCallback is async (fire-and-forget in production); await it in tests
@@ -591,7 +592,7 @@ describe("T5.5C — paste command success path", () => {
 			pasteScripts: [curatedPerplexityAppPasteScript()],
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
 		expect(cmd).toBeDefined();
 
 		clearNoticeLog();
@@ -634,7 +635,7 @@ describe("T5.5C — paste command success path", () => {
 			],
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
 		expect(cmd).toBeDefined();
 
 		clearNoticeLog();
@@ -674,7 +675,7 @@ describe("T5.5C — paste command raw fallback on script failure", () => {
 			failScript: true, // force the runner script to throw
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
 		expect(cmd).toBeDefined();
 
 		await cmd.editorCallback(editor);
@@ -708,7 +709,7 @@ describe("T5.5C — paste command raw fallback on script failure", () => {
 			failScript: true,
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
 		await cmd.editorCallback(editor);
 
 		const notices = noticeLog();
@@ -733,7 +734,7 @@ describe("T5.5C — paste command with empty clipboard", () => {
 			applyPlan: applyPlanSpy,
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
 		expect(cmd).toBeDefined();
 
 		await cmd.editorCallback(editor);
@@ -784,7 +785,7 @@ describe("T5.5C — paste command noop path: raw fallback fires when matched han
 			],
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
 		expect(cmd).toBeDefined();
 
 		clearNoticeLog();
@@ -815,7 +816,7 @@ describe("T5.5C — paste command noop path: raw fallback fires when matched han
 // ---------------------------------------------------------------------------
 // C6: data-driven paste chain — first-canHandle-match dispatch + provenance shadowing
 //
-// These drive the REAL mason.pasteAndFormat command with an injected
+// These drive the REAL mason.pasteAndRunScripts command with an injected
 // _commandInjection.pasteScripts set, proving the command dispatches through
 // buildPasteChain (T3.3, ADR-16) with source:"paste":
 //   - the first handler whose canHandle(clipboardText) returns true runs;
@@ -824,7 +825,7 @@ describe("T5.5C — paste command noop path: raw fallback fires when matched han
 //   - an empty chain → no handler → rawFallback + "no recognized format" notice.
 // ---------------------------------------------------------------------------
 
-describe("T3.3 — data-driven paste chain dispatch via mason.pasteAndFormat", () => {
+describe("T3.3 — data-driven paste chain dispatch via mason.pasteAndRunScripts", () => {
 	beforeEach(() => clearNoticeLog());
 
 	it("runs the first chain handler whose canHandle matches the clipboard text (source:'paste')", async () => {
@@ -848,7 +849,7 @@ describe("T3.3 — data-driven paste chain dispatch via mason.pasteAndFormat", (
 			pasteScripts: [matchingHandler],
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
 		await cmd.editorCallback(editor);
 
 		// The matched handler's run must have been invoked with the clipboard text and source:"paste"
@@ -888,7 +889,7 @@ describe("T3.3 — data-driven paste chain dispatch via mason.pasteAndFormat", (
 			pasteScripts: [importedCatchAll, curatedCatchAll],
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
 		await cmd.editorCallback(editor);
 
 		expect(ran, "exactly one handler runs — the chain stops at the first match").toEqual(["curated"]);
@@ -908,7 +909,7 @@ describe("T3.3 — data-driven paste chain dispatch via mason.pasteAndFormat", (
 			pasteScripts: [], // empty — mirrors the P3 production chain
 		};
 
-		const cmd = findCommand(plugin, "mason.pasteAndFormat");
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
 		await cmd.editorCallback(editor);
 
 		expect(editor._replaced, "empty chain must fall back to a plain paste").toContain(rawText);
@@ -949,4 +950,176 @@ describe("D — compiled-in Perplexity selection commands are retired", () => {
 			expect(cmd, `${id} must NOT be registered (curated scripts are catalog entries, not compiled-in commands)`).toBeUndefined();
 		});
 	}
+});
+
+// ---------------------------------------------------------------------------
+// T2.3 — Paste-script diagnostic logging (spec 005 F4 / ADR-28)
+//
+// runPasteCommand must emit debug-gated log lines during canHandle dispatch:
+//   - For each handler actually checked: "[MarkdownMason] paste: <id> canHandle=<bool>"
+//   - For the first matching handler: "[MarkdownMason] paste: matched <id>"
+//   - Short-circuit preserved: handlers after the first match are never checked
+//   - Gate: only when settings.debugLogging=true (and setDebugLogging(true) for debug() to fire)
+//   - Safety: clipboard content must never appear in any log line
+// ---------------------------------------------------------------------------
+
+describe("T2.3 — paste-script canHandle/match debug logging", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+		setDebugLogging(false);
+	});
+
+	it("T2.3(a) debugLogging=true: logs canHandle=false for non-matching script and canHandle=true for matching script; does NOT log script after the match (short-circuit)", async () => {
+		const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+
+		// makePluginAndFireLayout calls loadSettings which resets _enabled via setDebugLogging(false).
+		// Call setDebugLogging(true) AFTER plugin creation so debug() actually fires.
+		const plugin = await makePluginAndFireLayout();
+		plugin.settings.debugLogging = true;
+		setDebugLogging(true);
+		const editor = makePasteEditorStub("# Note\n\n");
+
+		// Track actual canHandle invocations to confirm short-circuit
+		const canHandleCalls: string[] = [];
+		const scriptA = makeLoadedScript({
+			id: "script-a",
+			run: () => undefined,
+			canHandle: () => { canHandleCalls.push("a"); return false; },
+		});
+		const scriptB = makeLoadedScript({
+			id: "script-b",
+			run: () => [{ from: 0, to: 0, insert: "x" }],
+			canHandle: () => { canHandleCalls.push("b"); return true; },
+		});
+		const scriptC = makeLoadedScript({
+			id: "script-c",
+			run: () => [{ from: 0, to: 0, insert: "y" }],
+			canHandle: () => { canHandleCalls.push("c"); return false; },
+		});
+
+		plugin._commandInjection = {
+			clipboardReader: async () => "some clipboard text",
+			applyPlan: vi.fn(),
+			pasteScripts: [scriptA, scriptB, scriptC],
+		};
+
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
+		await cmd.editorCallback(editor);
+
+		const allLogs = debugSpy.mock.calls.map((args) => String(args[0]));
+
+		// script-a checked → canHandle=false logged
+		expect(
+			allLogs.some((l) => l.includes("paste: script-a canHandle=false")),
+			"script-a canHandle=false must be logged",
+		).toBe(true);
+
+		// script-b checked → canHandle=true logged
+		expect(
+			allLogs.some((l) => l.includes("paste: script-b canHandle=true")),
+			"script-b canHandle=true must be logged",
+		).toBe(true);
+
+		// script-c never checked (short-circuit after script-b matched)
+		expect(
+			allLogs.some((l) => l.includes("paste: script-c")),
+			"script-c must NOT be logged — chain short-circuits at first match",
+		).toBe(false);
+
+		// Confirm canHandle was only called for a and b, not c
+		expect(canHandleCalls, "canHandle short-circuit: only a and b should be called").toEqual(["a", "b"]);
+	});
+
+	it("T2.3(b) debugLogging=true with matching script: logs 'paste: matched <id>'", async () => {
+		const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+
+		const plugin = await makePluginAndFireLayout();
+		plugin.settings.debugLogging = true;
+		setDebugLogging(true);
+		const editor = makePasteEditorStub("# Note\n\n");
+
+		plugin._commandInjection = {
+			clipboardReader: async () => "some clipboard text",
+			applyPlan: vi.fn(),
+			pasteScripts: [
+				makeLoadedScript({
+					id: "match-handler",
+					run: () => [{ from: 0, to: 0, insert: "x" }],
+					canHandle: () => true,
+				}),
+			],
+		};
+
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
+		await cmd.editorCallback(editor);
+
+		const allLogs = debugSpy.mock.calls.map((args) => String(args[0]));
+		expect(
+			allLogs.some((l) => l.includes("paste: matched match-handler")),
+			"'paste: matched match-handler' must be logged when a script matches",
+		).toBe(true);
+	});
+
+	it("T2.3(c) debugLogging=false: no 'paste: <id> canHandle' or 'paste: matched' lines logged", async () => {
+		const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+		// setDebugLogging stays false; settings.debugLogging stays false (DEFAULT_SETTINGS)
+
+		const plugin = await makePluginAndFireLayout();
+		const editor = makePasteEditorStub("# Note\n\n");
+
+		plugin._commandInjection = {
+			clipboardReader: async () => "some clipboard text",
+			applyPlan: vi.fn(),
+			pasteScripts: [
+				makeLoadedScript({
+					id: "any-script",
+					run: () => [{ from: 0, to: 0, insert: "x" }],
+					canHandle: () => true,
+				}),
+			],
+		};
+
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
+		await cmd.editorCallback(editor);
+
+		const allLogs = debugSpy.mock.calls.map((args) => String(args[0]));
+		const pasteDispatchLines = allLogs.filter(
+			(l) => l.includes("paste: any-script") || l.includes("paste: matched"),
+		);
+		expect(
+			pasteDispatchLines,
+			"no canHandle or matched log lines must appear when debugLogging=false",
+		).toHaveLength(0);
+	});
+
+	it("T2.3(d) clipboard content never appears in any debug log output", async () => {
+		const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+
+		const plugin = await makePluginAndFireLayout();
+		plugin.settings.debugLogging = true;
+		setDebugLogging(true);
+		const editor = makePasteEditorStub("# Note\n\n");
+
+		const CLIPBOARD_FIXTURE = "UNIQUE_CLIPBOARD_TEXT_THAT_MUST_NOT_APPEAR_IN_LOGS_XYZ";
+
+		plugin._commandInjection = {
+			clipboardReader: async () => CLIPBOARD_FIXTURE,
+			applyPlan: vi.fn(),
+			pasteScripts: [
+				makeLoadedScript({
+					id: "clip-test-handler",
+					run: () => [{ from: 0, to: 0, insert: "x" }],
+					canHandle: () => true,
+				}),
+			],
+		};
+
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
+		await cmd.editorCallback(editor);
+
+		const allLogs = debugSpy.mock.calls.map((args) => args.join(" "));
+		for (const log of allLogs) {
+			expect(log, "clipboard content must never appear in debug log output").not.toContain(CLIPBOARD_FIXTURE);
+		}
+	});
 });

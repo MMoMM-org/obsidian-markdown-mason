@@ -12,7 +12,7 @@ import { buildRegistry } from "./core/registry";
 import { countFootnoteDefs } from "./core/footnotes";
 import { ScriptStore } from "./scripts/store";
 import { buildPasteChain } from "./scripts/paste/buildPasteChain";
-import type { LoadedScript } from "./scripts/paste/buildPasteChain";
+import type { LoadedScript, PasteHandler } from "./scripts/paste/buildPasteChain";
 import { MasonSettingTab } from "./ui/settingsTab";
 import { UpdateSplashModal } from "./ui/updateSplashModal";
 import { CommandManager } from "./scripts/commandManager";
@@ -27,6 +27,9 @@ import { ImportPickerModal } from "./ui/importPickerModal";
 import { loadScriptModule, buildRequireFn, loadRunFnSafe, resolveScriptsDir } from "./scripts/loader";
 import { buildEnabledPasteScripts } from "./scripts/pasteAssembly";
 import { debug, setDebugLogging } from "./core/debug";
+import { resolveFormatSelectionRecipe } from "./core/formatSelection";
+import { applyTextCleanup } from "./core/formatPipeline";
+import { diffToEditPlan } from "./core/noteFootnotes";
 
 // Re-export so consumers that import from "src/main" still resolve.
 export { DEFAULT_SETTINGS, type MasonSettings };
@@ -100,6 +103,11 @@ export interface CommandInjection {
 	 * (paste command only). Production passes _buildEnabledPasteScripts().
 	 */
 	pasteScripts?: LoadedScript[];
+	/**
+	 * Replaces editor.replaceSelection() in the paste+format command.
+	 * Only consumed by runPasteAndFormatCommand; runPasteCommand ignores this field.
+	 */
+	replaceSelection?: (text: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -342,6 +350,7 @@ export class MarkdownMasonPlugin extends Plugin {
 		debug("[MarkdownMason] layout ready");
 		registerCommands(this);
 		this._registerPasteCommand();
+		this._registerPasteAndFormatCommand();
 		this._registerRunScriptLauncher();
 		// Re-create per-script commands the user had turned on (record.command).
 		// Obsidian drops dynamically-added commands on reload, so without this the
@@ -531,7 +540,7 @@ export class MarkdownMasonPlugin extends Plugin {
 	}
 
 	// -------------------------------------------------------------------------
-	// Mason: Paste and format — Phase 5 real implementation (T5.5C)
+	// Mason: Paste and run scripts — Phase 5 real implementation (T5.5C)
 	//
 	// RunnerEffects wiring:
 	//   applyPlan  → injected spy (tests) OR applyEditPlan(editor, plan) (production)
@@ -548,8 +557,8 @@ export class MarkdownMasonPlugin extends Plugin {
 
 	private _registerPasteCommand(): void {
 		this.addCommand({
-			id: "mason.pasteAndFormat",
-			name: "Paste and format",
+			id: "mason.pasteAndRunScripts",
+			name: "Paste and run scripts",
 			// Obsidian editorCallback return type is `any`, so returning Promise<void>
 			// is valid and lets tests await the async work without fire-and-forget.
 			// Arrow function captures `this` lexically — no alias needed.
@@ -560,6 +569,20 @@ export class MarkdownMasonPlugin extends Plugin {
 					this.settings,
 					this._commandInjection,
 					enabledScripts,
+				);
+			},
+		});
+	}
+
+	private _registerPasteAndFormatCommand(): void {
+		this.addCommand({
+			id: "mason.pasteAndFormatText",
+			name: "Paste and format",
+			editorCallback: async (editor: Editor): Promise<void> => {
+				return runPasteAndFormatCommand(
+					editor,
+					this.settings,
+					this._commandInjection,
 				);
 			},
 		});
@@ -749,13 +772,31 @@ async function runPasteCommand(
 	//    canHandle(rawText) claims the input. The chain is the single ordering chokepoint
 	//    (curated-before-imported, priority DESC, id ASC). When no handler matches (or the
 	//    chain is empty), fall back to a plain paste.
+	//
+	//    ADR-28 / spec 005 F4: emit debug-gated canHandle/match log lines. The manual
+	//    loop preserves the same short-circuit semantics as Array.find — only scripts
+	//    actually checked get a log entry; handlers after the first match are never called.
+	//    Clipboard content (rawText) is never logged — only script ids and booleans.
 	const enabled = injection?.pasteScripts ?? enabledPasteScripts;
 	const chain = buildPasteChain(enabled);
-	const handler = chain.find((h) => h.canHandle(rawText));
+	let handler: PasteHandler | undefined;
+	for (const h of chain) {
+		const matched = h.canHandle(rawText);
+		if (settings.debugLogging) {
+			debug(`[MarkdownMason] paste: ${h.id} canHandle=${matched}`);
+		}
+		if (matched) {
+			if (settings.debugLogging) {
+				debug(`[MarkdownMason] paste: matched ${h.id}`);
+			}
+			handler = h;
+			break;
+		}
+	}
 
 	if (handler === undefined) {
 		// No recognized format: insert the raw clipboard text at cursor (plain paste semantics)
-		// and inform the user. This avoids a silent no-op when the user invokes "Paste and format"
+		// and inform the user. This avoids a silent no-op when the user invokes "Paste and run scripts"
 		// on text that no enabled script recognizes.
 		effects.rawFallback();
 		effects.notify("Mason: no recognized format — pasted as-is.");
@@ -785,6 +826,64 @@ async function runPasteCommand(
 	}
 	// failed/blocked: runner already called rawFallback + notify on failure;
 	// blocked is a policy decision (no user action expected).
+}
+
+// ---------------------------------------------------------------------------
+// runPasteAndFormatCommand — paste + 7-step cleanup (spec 005 T2.2)
+//
+// Reads clipboard, applies the 7 formatPipeline cleanup steps gated by the
+// user's formatSelection recipe, and inserts the result via replaceSelection.
+//
+// Does NOT run the paste-script chain (no ScriptRunner, no buildPasteChain).
+// Clipboard guards match runPasteCommand for consistent UX across both commands.
+//
+// "\n" prepend guard (G4): prepending one newline prevents a clipboard snippet
+// whose first line is "---" from being classified as YAML frontmatter by
+// segmentBlocks(). The leading "\n" is stripped from the result before insert.
+// ---------------------------------------------------------------------------
+
+async function runPasteAndFormatCommand(
+	editor: Editor,
+	settings: MasonSettings,
+	injection: CommandInjection | undefined,
+): Promise<void> {
+	// 1. Read clipboard (reuse same reader + guard idiom as runPasteCommand)
+	const readClipboard = injection?.clipboardReader ?? defaultClipboardReader;
+	let rawText: string;
+	try {
+		rawText = await readClipboard();
+	} catch (err: unknown) {
+		const msg = err instanceof Error ? err.message : String(err);
+		new Notice(`Mason: clipboard unavailable — ${msg}`);
+		return;
+	}
+
+	// 2. Guard: empty clipboard
+	if (rawText.trim() === "") {
+		new Notice("Mason: clipboard is empty — nothing to paste.");
+		return;
+	}
+
+	// 3. Apply 7-step cleanup via applyTextCleanup
+	const recipe = resolveFormatSelectionRecipe(settings);
+	const log = settings.debugLogging
+		? (l: string) => debug(`[MarkdownMason] ${l}`)
+		: undefined;
+	// G4: prepend "\n" so a snippet whose first line is "---" is NOT classified
+	// as frontmatter by segmentBlocks (only line 0 triggers the frontmatter guard).
+	// Strip exactly the one leading "\n" from the result — never trim().
+	const formatted = applyTextCleanup("\n" + rawText, recipe, log).replace(/^\n/, "");
+
+	// 4. Single insert → one undo step
+	const insert = injection?.replaceSelection ?? ((t: string) => editor.replaceSelection(t));
+	insert(formatted);
+
+	// 5. Notice
+	new Notice(
+		formatted !== rawText
+			? countNoticeMessage(diffToEditPlan(rawText, formatted).length)
+			: "Mason: pasted (nothing to clean up)",
+	);
 }
 
 // ---------------------------------------------------------------------------

@@ -24,8 +24,13 @@ notes.
 
 ## Features
 
-- **Paste and format** — transform clipboard text and insert it at the cursor in one step,
-  with a plain-paste fallback if anything goes wrong.
+- **Paste and run scripts** — transform clipboard text with your enabled converter scripts
+  and insert it at the cursor in one step, with a plain-paste fallback if anything goes wrong.
+- **Paste and format** — paste the clipboard, then apply Mason's cleanup recipe to *just the
+  pasted text* (7 steps: dewrap, dehyphenate, decompose ligatures and punctuation, tidy
+  whitespace, normalize bullets and ordered lists, normalize headings) as a single undo step.
+- **Format selection** — run the full 11-step recipe on a selection or the whole note (the 7
+  cleanup steps plus cascade headings and the three footnote steps).
 - **Run a script on a selection** — reformat text already in your note *in place*, or run a
   script across the whole note.
 - **Curated script library** — install reviewed formatters (currently three Perplexity copy
@@ -46,19 +51,27 @@ newer. For manual installation, updating, and verification steps, see
 
 1. Open **Settings → Community plugins → Markdown Mason → Scripts**.
 2. Click **Browse official**, enable a script, and confirm the disclosure prompt.
-3. Copy some text, place your cursor, and run **Markdown Mason: Paste and format** from the
-   command palette.
+3. Copy some text, place your cursor, and run **Markdown Mason: Paste and run scripts** from
+   the command palette. To paste plain text and just clean it up, run **Markdown Mason: Paste
+   and format** instead — no script needed.
 
-The full walkthrough — common workflows, format-in-place, and per-script commands — is in
-**[docs/usage.md](docs/usage.md)**.
+The full walkthrough — common workflows, format-in-place, when to use which paste command,
+and per-script commands — is in **[docs/usage.md](docs/usage.md)**.
 
 ## Commands
 
-| Command | What it does |
-|---|---|
-| **Markdown Mason: Paste and format** | Runs your enabled paste scripts on the clipboard and inserts the result at the cursor. |
-| **Markdown Mason: Run script…** | Pick an active script to run on the current selection (or the whole note). |
-| *Per-script commands* | Optional palette entries you enable per script in the **Commands** settings tab. |
+Three commands cover the paste-and-format workflows. Pick by what you need:
+
+| Command | id | What it runs | Scope |
+|---|---|---|---|
+| **Paste and run scripts** | `mason.pasteAndRunScripts` | Runs your enabled paste-converter **scripts** on the clipboard (e.g. a Perplexity copy → structured Markdown) and inserts the result at the cursor; falls back to a plain paste if no script matches or one errors. | Clipboard → cursor |
+| **Paste and format** | `mason.pasteAndFormatText` | Pastes the clipboard, then applies the **7-step** cleanup recipe scoped to just the pasted text — 4 cleanup steps, 2 list steps, and normalize headings — as one undo. No scripts, no cascade, no footnote steps. | Clipboard → pasted text |
+| **Format selection** | `preset.formatSelection` | Runs the full **11-step** recipe on the selection (or whole note) — the same 7 cleanup steps plus cascade headings and the 3 footnote steps. | Selection + whole note |
+
+The crisp distinction: **Paste and run scripts** is about converter scripts; **Paste and
+format** (7 steps) and **Format selection** (11 steps) are about cleanup. The other built-in
+commands (each footnote and heading step on its own, plus **Run script…**) are listed in the
+[Commands Reference](docs/commands-reference.md).
 
 No default hotkeys are registered — assign your own under **Settings → Hotkeys**.
 
@@ -84,9 +97,10 @@ intrinsic to its features and disclosed here so you know exactly what they do:
   This is why the plugin is **desktop-only**: it can read and write files on the
   device outside the vault. Script execution is consent-gated (see above), and the
   reviewed official library is limited to editing Markdown in the current note.
-- **Clipboard access** — the **Paste and format** command reads the system
-  clipboard to reshape what you paste. Content copied from outside Obsidian passes
-  through the plugin only when you invoke that command; nothing is sent anywhere.
+- **Clipboard access** — the **Paste and run scripts** and **Paste and format**
+  commands read the system clipboard to reshape what you paste. Content copied from
+  outside Obsidian passes through the plugin only when you invoke one of those
+  commands; nothing is sent anywhere.
 
 ## Support
 

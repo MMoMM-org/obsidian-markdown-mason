@@ -50,13 +50,11 @@ import { buildRegistry } from "./core/registry";
 import type { RegistryEntry } from "./core/registry";
 import { debug } from "./core/debug";
 import { tidyFootnotes, diffToEditPlan } from "./core/noteFootnotes";
-import { normalize } from "./core/headings";
 import { resolveFormatSelectionRecipe } from "./core/formatSelection";
-import { dewrap, dehyphenate, decomposeLigatures, tidyWhitespace } from "./core/cleanup";
-import { normalizeBullets, normalizeOrdered } from "./core/lists";
 import { applyEditPlan } from "./sources/apply";
 import { applyToString } from "./core/applyToString";
 import { selectionContext } from "./sources/selection";
+import { applyTextCleanup } from "./core/formatPipeline";
 import type { Edit, EditPlan, MasonSettings, OperationContext } from "./core/types";
 
 // ---------------------------------------------------------------------------
@@ -292,23 +290,18 @@ function fusedFormatNote(editor: Editor, settings: MasonSettings): EditPlan {
 	const ctx = selectionContext(editor, settings);
 	const original = ctx.doc;
 
-	// Step 1: dehyphenate — MUST precede dewrap
-	const s1 = recipe.dehyphenate ? applyToString(original, dehyphenate({ ...ctx, doc: original })) : original;
-	// Step 2: dewrap
-	const s2 = recipe.dewrap ? applyToString(s1, dewrap({ ...ctx, doc: s1 })) : s1;
-	// Step 3: tidyWhitespace
-	const s3 = recipe.tidyWhitespace ? applyToString(s2, tidyWhitespace({ ...ctx, doc: s2 })) : s2;
-	// Step 4: decomposeLigatures
-	const s4 = recipe.decomposeLigatures ? applyToString(s3, decomposeLigatures({ ...ctx, doc: s3 })) : s3;
-	// Step 5: normalizeBullets
-	const s5 = recipe.normalizeBullets ? applyToString(s4, normalizeBullets({ ...ctx, doc: s4 })) : s4;
-	// Step 6: normalizeOrdered
-	const s6 = recipe.normalizeOrdered ? applyToString(s5, normalizeOrdered({ ...ctx, doc: s5 })) : s5;
+	// Build a step-logger gated on the debugLogging setting.
+	// When off, log is undefined → applyTextCleanup emits nothing.
+	const log = settings.debugLogging
+		? (l: string) => debug(`[MarkdownMason] ${l}`)
+		: undefined;
 
-	// Step 7: normalize (EXISTING) — close heading gaps
-	const s7 = recipe.normalize
-		? applyToString(s6, normalize({ ...ctx, doc: s6 }))
-		: s6;
+	// Steps 1-7: cleanup pipeline delegated to applyTextCleanup (spec 005 T1.2).
+	// dehyphenate → dewrap → tidyWhitespace → decomposeLigatures →
+	// normalizeBullets → normalizeOrdered → normalize (heading gap-close).
+	// Each step is gated by the matching boolean key in recipe; log receives
+	// one "format: <name> …" line per step.
+	const s7 = applyTextCleanup(original, recipe, log);
 
 	// Step 8: cascade (EXISTING — preserve the current null-guard EXACTLY)
 	let s8 = s7;
@@ -332,7 +325,9 @@ function fusedFormatNote(editor: Editor, settings: MasonSettings): EditPlan {
 
 	// Step 10: diff original→final — one non-overlapping edit (single undo step).
 	// Empty result when nothing changed → caller shows "Nothing to format".
-	return diffToEditPlan(original, s9);
+	const plan = diffToEditPlan(original, s9);
+	log?.(`format: result ${plan.length} edit${plan.length === 1 ? "" : "s"}`);
+	return plan;
 }
 
 // ---------------------------------------------------------------------------

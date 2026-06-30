@@ -267,6 +267,93 @@ describe("MasonSettingTab — Format selection section rendering", () => {
 });
 
 // ---------------------------------------------------------------------------
+// PASTE-AND-FORMAT MARKERS — spec 005 T3.1
+// ---------------------------------------------------------------------------
+
+describe("MasonSettingTab — Format selection section — Paste-and-format markers", () => {
+	it("'Cascade headings' desc contains the marker phrase", async () => {
+		const plugin = makePlugin();
+		const { settings } = await renderFormatSelectionSegment(plugin);
+		const s = settings.find((r) => r.toggleControls.length > 0 && r.name === "Cascade headings");
+		expect(s, "Cascade headings setting not found").toBeDefined();
+		expect(s!.desc).toContain('not applied by "Paste and format"');
+	});
+
+	it("'Convert citations to footnotes' desc contains the marker phrase", async () => {
+		const plugin = makePlugin();
+		const { settings } = await renderFormatSelectionSegment(plugin);
+		const s = settings.find((r) => r.toggleControls.length > 0 && r.name === "Convert citations to footnotes");
+		expect(s, "Convert citations to footnotes setting not found").toBeDefined();
+		expect(s!.desc).toContain('not applied by "Paste and format"');
+	});
+
+	it("'Resolve footnote identity' desc contains the marker phrase", async () => {
+		const plugin = makePlugin();
+		const { settings } = await renderFormatSelectionSegment(plugin);
+		const s = settings.find((r) => r.toggleControls.length > 0 && r.name === "Resolve footnote identity");
+		expect(s, "Resolve footnote identity setting not found").toBeDefined();
+		expect(s!.desc).toContain('not applied by "Paste and format"');
+	});
+
+	it("'Move footnotes to resources' desc contains the marker phrase", async () => {
+		const plugin = makePlugin();
+		const { settings } = await renderFormatSelectionSegment(plugin);
+		const s = settings.find((r) => r.toggleControls.length > 0 && r.name === "Move footnotes to resources");
+		expect(s, "Move footnotes to resources setting not found").toBeDefined();
+		expect(s!.desc).toContain('not applied by "Paste and format"');
+	});
+
+	it("the 4 marked toggles prefix the marker with the ℹ️ info icon", async () => {
+		const plugin = makePlugin();
+		const { settings } = await renderFormatSelectionSegment(plugin);
+		const markedNames = [
+			"Cascade headings",
+			"Convert citations to footnotes",
+			"Resolve footnote identity",
+			"Move footnotes to resources",
+		];
+		for (const name of markedNames) {
+			const s = settings.find((r) => r.toggleControls.length > 0 && r.name === name);
+			expect(s, `${name} setting not found`).toBeDefined();
+			expect(s!.desc, `${name} marker should carry the ℹ️ icon`).toContain(
+				'ℹ️ "Format selection" only — not applied by "Paste and format".',
+			);
+		}
+	});
+
+	it("the 7 applied toggles do NOT contain the marker phrase", async () => {
+		const plugin = makePlugin();
+		const { settings } = await renderFormatSelectionSegment(plugin);
+		const appliedNames = [
+			"Dewrap paragraphs",
+			"Dehyphenate words",
+			"Decompose ligatures and punctuation",
+			"Tidy whitespace",
+			"Normalize bullets",
+			"Normalize ordered list",
+			"Normalize headings",
+		];
+		for (const name of appliedNames) {
+			const s = settings.find((r) => r.toggleControls.length > 0 && r.name === name);
+			expect(s, `Setting "${name}" not found`).toBeDefined();
+			expect(
+				s!.desc,
+				`"${name}" should NOT contain the marker phrase`,
+			).not.toContain('not applied by "Paste and format"');
+		}
+	});
+
+	it("the section intro desc names both 'Format selection' and 'Paste and format'", async () => {
+		const plugin = makePlugin();
+		const { settings } = await renderFormatSelectionSegment(plugin);
+		const intro = settings.find((s) => !s.isHeading && s.toggleControls.length === 0 && s.desc.length > 0);
+		expect(intro, "Section intro setting not found").toBeDefined();
+		expect(intro!.desc).toContain("Format selection");
+		expect(intro!.desc).toContain("Paste and format");
+	});
+});
+
+// ---------------------------------------------------------------------------
 // TOGGLE WRITE-THROUGH — onChange updates settings.<key> and calls saveSettings
 // ---------------------------------------------------------------------------
 
