@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: Documentation & integration verification"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 4
 ---
@@ -37,7 +37,7 @@ This phase documents the commands and verifies the whole spec against the PRD.
   4. Validate: docs render correctly; the table matches the implemented step subsets; no stale references to the old single "Paste and format" script behavior remain.
   - Success: a reader can pick the right command; the 7-vs-11 distinction is documented `[ref: PRD Feature 5 / AC]`.
 
-- [ ] **T4.2 Integration & verification: gates, AC map, build, smoke** `[activity: test-strategy]`
+- [x] **T4.2 Integration & verification: gates, AC map, build, smoke** `[activity: test-strategy]`
 
   1. Prime: Read `[ref: SDD/Acceptance Criteria (EARS)]` and `[ref: PRD]` (all 22 ACs). Confirm `test/compliance.test.ts` CON-2 sweep covers `src/core/formatPipeline.ts` (it scans all `src/core/*.ts`).
   2. Test (verify GREEN):

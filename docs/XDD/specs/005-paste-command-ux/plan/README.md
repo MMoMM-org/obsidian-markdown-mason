@@ -90,7 +90,7 @@ Tasks follow red-green-refactor: **Prime** → **Test** (red) → **Implement** 
 - [x] [Phase 1: Shared cleanup helper & fusedFormatNote refactor](phase-1.md)
 - [x] [Phase 2: Paste commands (rename + new command + script logging)](phase-2.md)
 - [x] [Phase 3: Settings marker](phase-3.md)
-- [ ] [Phase 4: Documentation & integration verification](phase-4.md)
+- [x] [Phase 4: Documentation & integration verification](phase-4.md)
 
 ## Dependency Graph
 

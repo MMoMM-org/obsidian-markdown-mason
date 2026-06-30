@@ -5,8 +5,8 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-06-29 |
-| **Current Phase** | Ready |
-| **Last Updated** | 2026-06-29 |
+| **Current Phase** | Implemented |
+| **Last Updated** | 2026-06-30 |
 
 ## Documents
 
@@ -28,6 +28,7 @@
 | 2026-06-29 | Shared pure helper | Extract `applyTextCleanup(doc, recipe)` (pure, CON-2) for the 7 steps; `fusedFormatNote` reuses it (byte-identical) then adds cascade + footnotes. |
 | 2026-06-29 | Diagnostic logging (debug-gated) on two paths | 4a paste-script `canHandle` results; 4b recipe pipeline per-step skipped/edit-count (Format selection logs nothing today). Never log doc/clipboard content. |
 | 2026-06-29 | Settings marker | Mark the 4 toggles "Paste and format" does NOT run (cascade + 3 footnote toggles) in the settings UI; notice stays simple, per-step detail goes to debug log. |
+| 2026-06-30 | Implementation complete | All 4 phases shipped on branch `spec/005-paste-command-ux` (13 commits `ec14f74`..`39f07e8`): `applyTextCleanup` pure helper + `fusedFormatNote` refactor (byte-identical, CON-5); commands renamed → "Paste and run scripts" (`mason.pasteAndRunScripts`) + new "Paste and format" (`mason.pasteAndFormatText`, 7-step scoped cleanup, one undo); 4a paste-script + 4b recipe debug logging (content-free); settings marker on 4 contextual toggles; docs distinguish all three commands. 1612 tests pass; production build clean; all 22 PRD ACs mapped to passing tests (F5 docs ACs verified manually). Manual Obsidian smoke checklist pending maintainer run. Not yet merged/released. |
 
 ## Context
 
