@@ -45,7 +45,7 @@ format* command**, which applies a 7-step subset to the pasted text:
 - **Format selection only (4 steps):** *Cascade headings* and the 3 footnote steps (*Convert
   citations to footnotes*, *Resolve footnote identity*, *Move footnotes to resources*). These
   never run during *Paste and format*. Each is marked in the settings UI with
-  *"Format selection only — not applied by Paste and format."*
+  *ℹ️ "Format selection" only — not applied by "Paste and format".*
 
 So if you ran *Paste and format* and a particular cleanup step didn't happen, check whether
 that step is toggled off here. (Steps unique to *Format selection* are expected not to run on

@@ -276,7 +276,7 @@ describe("MasonSettingTab — Format selection section — Paste-and-format mark
 		const { settings } = await renderFormatSelectionSegment(plugin);
 		const s = settings.find((r) => r.toggleControls.length > 0 && r.name === "Cascade headings");
 		expect(s, "Cascade headings setting not found").toBeDefined();
-		expect(s!.desc).toContain("not applied by Paste and format");
+		expect(s!.desc).toContain('not applied by "Paste and format"');
 	});
 
 	it("'Convert citations to footnotes' desc contains the marker phrase", async () => {
@@ -284,7 +284,7 @@ describe("MasonSettingTab — Format selection section — Paste-and-format mark
 		const { settings } = await renderFormatSelectionSegment(plugin);
 		const s = settings.find((r) => r.toggleControls.length > 0 && r.name === "Convert citations to footnotes");
 		expect(s, "Convert citations to footnotes setting not found").toBeDefined();
-		expect(s!.desc).toContain("not applied by Paste and format");
+		expect(s!.desc).toContain('not applied by "Paste and format"');
 	});
 
 	it("'Resolve footnote identity' desc contains the marker phrase", async () => {
@@ -292,7 +292,7 @@ describe("MasonSettingTab — Format selection section — Paste-and-format mark
 		const { settings } = await renderFormatSelectionSegment(plugin);
 		const s = settings.find((r) => r.toggleControls.length > 0 && r.name === "Resolve footnote identity");
 		expect(s, "Resolve footnote identity setting not found").toBeDefined();
-		expect(s!.desc).toContain("not applied by Paste and format");
+		expect(s!.desc).toContain('not applied by "Paste and format"');
 	});
 
 	it("'Move footnotes to resources' desc contains the marker phrase", async () => {
@@ -300,7 +300,7 @@ describe("MasonSettingTab — Format selection section — Paste-and-format mark
 		const { settings } = await renderFormatSelectionSegment(plugin);
 		const s = settings.find((r) => r.toggleControls.length > 0 && r.name === "Move footnotes to resources");
 		expect(s, "Move footnotes to resources setting not found").toBeDefined();
-		expect(s!.desc).toContain("not applied by Paste and format");
+		expect(s!.desc).toContain('not applied by "Paste and format"');
 	});
 
 	it("the 4 marked toggles prefix the marker with the ℹ️ info icon", async () => {
@@ -316,7 +316,7 @@ describe("MasonSettingTab — Format selection section — Paste-and-format mark
 			const s = settings.find((r) => r.toggleControls.length > 0 && r.name === name);
 			expect(s, `${name} setting not found`).toBeDefined();
 			expect(s!.desc, `${name} marker should carry the ℹ️ icon`).toContain(
-				"ℹ️ Format selection only — not applied by Paste and format.",
+				'ℹ️ "Format selection" only — not applied by "Paste and format".',
 			);
 		}
 	});
@@ -339,7 +339,7 @@ describe("MasonSettingTab — Format selection section — Paste-and-format mark
 			expect(
 				s!.desc,
 				`"${name}" should NOT contain the marker phrase`,
-			).not.toContain("not applied by Paste and format");
+			).not.toContain('not applied by "Paste and format"');
 		}
 	});
 
