@@ -1,3 +1,10 @@
+## [0.6.1](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.6.0...0.6.1) (2026-06-30)
+
+
+### Bug Fixes
+
+* **release:** drop spurious issue links from 0.6.0 changelog ([#21](https://github.com/MMoMM-org/obsidian-markdown-mason/issues/21)) ([86431e9](https://github.com/MMoMM-org/obsidian-markdown-mason/commit/86431e9f79d89cad4870814ba7be19fb96b00765))
+
 # [0.6.0](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.5.0...0.6.0) (2026-06-30)
 
 
