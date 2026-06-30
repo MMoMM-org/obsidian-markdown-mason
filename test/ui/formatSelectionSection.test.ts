@@ -303,6 +303,24 @@ describe("MasonSettingTab — Format selection section — Paste-and-format mark
 		expect(s!.desc).toContain("not applied by Paste and format");
 	});
 
+	it("the 4 marked toggles prefix the marker with the ℹ️ info icon", async () => {
+		const plugin = makePlugin();
+		const { settings } = await renderFormatSelectionSegment(plugin);
+		const markedNames = [
+			"Cascade headings",
+			"Convert citations to footnotes",
+			"Resolve footnote identity",
+			"Move footnotes to resources",
+		];
+		for (const name of markedNames) {
+			const s = settings.find((r) => r.toggleControls.length > 0 && r.name === name);
+			expect(s, `${name} setting not found`).toBeDefined();
+			expect(s!.desc, `${name} marker should carry the ℹ️ icon`).toContain(
+				"ℹ️ Format selection only — not applied by Paste and format.",
+			);
+		}
+	});
+
 	it("the 7 applied toggles do NOT contain the marker phrase", async () => {
 		const plugin = makePlugin();
 		const { settings } = await renderFormatSelectionSegment(plugin);

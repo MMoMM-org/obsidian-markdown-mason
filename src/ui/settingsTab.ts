@@ -502,7 +502,7 @@ export class MasonSettingTab extends PluginSettingTab {
 	 * All default to true (resolved via resolveFormatSelectionRecipe).
 	 */
 	private _renderFormatSelectionSection(containerEl: HTMLElement): void {
-		const FORMAT_SELECTION_ONLY = " Format selection only — not applied by Paste and format.";
+		const FORMAT_SELECTION_ONLY = " ℹ️ Format selection only — not applied by Paste and format.";
 
 		new Setting(containerEl)
 			.setDesc("Choose which steps run. Format selection runs all of these; Paste and format runs the cleanup, lists, and the Normalize headings step only.");
