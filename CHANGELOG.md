@@ -3,7 +3,7 @@
 
 ### Features
 
-* paste command UX — Paste and format, Paste and run scripts, settings marker + logging [spec 005] ([#20](https://github.com/MMoMM-org/obsidian-markdown-mason/issues/20)) ([cb5b194](https://github.com/MMoMM-org/obsidian-markdown-mason/commit/cb5b1943fdfc2a44cbcb73e573c0624d2c035a89)), closes [#1](https://github.com/MMoMM-org/obsidian-markdown-mason/issues/1) [#2](https://github.com/MMoMM-org/obsidian-markdown-mason/issues/2) [#3](https://github.com/MMoMM-org/obsidian-markdown-mason/issues/3) [#4](https://github.com/MMoMM-org/obsidian-markdown-mason/issues/4) [#5](https://github.com/MMoMM-org/obsidian-markdown-mason/issues/5)
+* paste command UX — Paste and format, Paste and run scripts, settings marker + logging [spec 005] ([#20](https://github.com/MMoMM-org/obsidian-markdown-mason/issues/20)) ([cb5b194](https://github.com/MMoMM-org/obsidian-markdown-mason/commit/cb5b1943fdfc2a44cbcb73e573c0624d2c035a89))
 
 # [0.5.0](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.4.0...0.5.0) (2026-06-29)
 
