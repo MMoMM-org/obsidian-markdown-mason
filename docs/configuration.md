@@ -7,7 +7,7 @@ and most take effect right away.
 ## Where settings live
 
 Open **Settings → Community plugins → Markdown Mason** (or click the options/gear icon next
-to the plugin). The settings are organised into four segments:
+to the plugin). The settings are organised into five segments:
 
 - **General** — the everyday options: Resources section heading, Show update notes, and
   Numeric-only footnotes.
@@ -15,6 +15,9 @@ to the plugin). The settings are organised into four segments:
   (see [Usage](usage.md) for the script lifecycle).
 - **Commands** — turn individual scripts into command-palette commands and launch a script
   on demand.
+- **Format selection** — the 11 step toggles for the *Format selection* command. The seven
+  cleanup/list/heading-normalize steps among them also govern **Paste and format** (see
+  below); the other four steps are *Format selection* only.
 - **Advanced** — Debug logging.
 
 ![Markdown Mason General settings tab: the Resources section heading field (default ## Resources), Show update notes, and Numeric-only footnotes](../assets/settings-general.png)
@@ -24,6 +27,29 @@ Your choices are stored in the plugin's `data.json` file
 should not normally need to edit this file directly — use the settings tab instead.
 
 ![Markdown Mason Advanced settings tab showing the Debug logging toggle](../assets/settings-advanced.png)
+
+## Format selection steps
+
+The **Format selection** segment has eleven toggles, all on by default, arranged under four
+sub-groups: **Cleanup** (dewrap paragraphs, dehyphenate words, decompose ligatures and
+punctuation, tidy whitespace), **Lists** (normalize bullets, normalize ordered list),
+**Headings** (cascade headings, normalize headings), and **Footnotes** (convert citations to
+footnotes, resolve footnote identity, move footnotes to resources).
+
+These toggles configure the *Format selection* command — and **also govern the *Paste and
+format* command**, which applies a 7-step subset to the pasted text:
+
+- **Shared by both commands (7 steps):** the 4 Cleanup steps, the 2 Lists steps, and
+  *Normalize headings*. Toggling one of these off in *Format selection* also stops it from
+  running during *Paste and format*.
+- **Format selection only (4 steps):** *Cascade headings* and the 3 footnote steps (*Convert
+  citations to footnotes*, *Resolve footnote identity*, *Move footnotes to resources*). These
+  never run during *Paste and format*. Each is marked in the settings UI with
+  *"Format selection only — not applied by Paste and format."*
+
+So if you ran *Paste and format* and a particular cleanup step didn't happen, check whether
+that step is toggled off here. (Steps unique to *Format selection* are expected not to run on
+a paste — that is by design.)
 
 ## Settings reference
 
