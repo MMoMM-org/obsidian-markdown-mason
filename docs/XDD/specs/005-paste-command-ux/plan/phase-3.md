@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Settings marker"
-status: pending
+status: completed
 version: "1.0"
 phase: 3
 ---
@@ -30,7 +30,7 @@ phase: 3
 
 This phase makes the 7-vs-11 step distinction visible in settings.
 
-- [ ] **T3.1 Mark non-applicable toggles + update section copy** `[activity: build-feature]` `[parallel: true]`
+- [x] **T3.1 Mark non-applicable toggles + update section copy** `[activity: build-feature]` `[parallel: true]`
 
   1. Prime: Read `src/ui/settingsTab.ts` `_renderFormatSelectionSection` (the 11 toggles + their `setDesc`). Read `[ref: SDD/Cross-Cutting Concepts/User Interface & UX]` for the exact marker text. Read `test/ui/formatSelectionSection.test.ts` for the capture harness (each `CapturedSetting` exposes `name`, `desc`, `isHeading`).
   2. Test (RED): extend `test/ui/formatSelectionSection.test.ts`:

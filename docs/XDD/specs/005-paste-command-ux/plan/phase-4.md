@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: Documentation & integration verification"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 4
 ---
@@ -29,7 +29,7 @@ phase: 4
 
 This phase documents the commands and verifies the whole spec against the PRD.
 
-- [ ] **T4.1 Documentation: three-command distinction** `[activity: documentation]`
+- [x] **T4.1 Documentation: three-command distinction** `[activity: documentation]`
 
   1. Prime: Read the current `README.md` Commands section + `docs/commands-reference.md`, `docs/usage.md`, `docs/configuration.md`, `docs/troubleshooting.md`. Note every place the old "Paste and format" behavior is described.
   2. Test (verification, not unit): define the doc checklist — a command table distinguishing **"Paste and run scripts"** (converter scripts), **"Paste and format"** (7 cleanup steps, scoped to the paste), **"Format selection"** (full 11-step recipe on note/selection); README Features/Quick-start/clipboard-note updated to the new naming; a troubleshooting entry for "pasted as-is / why didn't it format".

@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: Paste commands (rename + new command + script logging)"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 2
 ---
@@ -32,7 +32,7 @@ phase: 2
 
 This phase delivers honest command naming, the new paste-and-clean command, and paste-script diagnosability.
 
-- [ ] **T2.1 Rename the paste-script command → "Paste and run scripts"** `[activity: build-feature]`
+- [x] **T2.1 Rename the paste-script command → "Paste and run scripts"** `[activity: build-feature]`
 
   1. Prime: Read `src/main.ts` `_registerPasteCommand` and `runPasteCommand`. Read `[ref: SDD/ADR-26]`. Grep the whole `test/` tree for the old id `mason.pasteAndFormat`.
   2. Test (RED): update/extend tests — command registers with id `mason.pasteAndRunScripts` and name "Paste and run scripts"; script-match conversion and no-match raw-fallback behavior are unchanged. Migrate ALL old-id references across `test/` (e.g. `test/main.commands.test.ts`, `test/scripts/integration.test.ts`, `test/invariants.test.ts`, `test/e2e/scriptLifecycle.e2e.test.ts`).
@@ -40,7 +40,7 @@ This phase delivers honest command naming, the new paste-and-clean command, and 
   4. Validate: full `npx vitest run` (no stale-id references remain); `tsc -noEmit`; `eslint`.
   - Success: paste-script command renamed; behavior identical; no test references the old id `[ref: PRD Feature 1 / AC; SDD/ADR-26]`.
 
-- [ ] **T2.2 New "Paste and format" command + `replaceSelection` test seam** `[activity: build-feature]`
+- [x] **T2.2 New "Paste and format" command + `replaceSelection` test seam** `[activity: build-feature]`
 
   1. Prime: Read `[ref: SDD/Implementation Examples/Example 3]`, `[ref: SDD/Runtime View]`, `[ref: SDD/Error Handling]`. Review `runPasteCommand`'s clipboard read + empty/unavailable guards to reuse them. Confirm `applyTextCleanup` (Phase 1) and `resolveFormatSelectionRecipe`/`countNoticeMessage` imports.
   2. Test (RED): a new command test (e.g. `test/main.pasteAndFormat.test.ts`) using a `clipboardReader` + `replaceSelection` injection:
@@ -56,7 +56,7 @@ This phase delivers honest command naming, the new paste-and-clean command, and 
   4. Validate: tests pass; full `npx vitest run`; `tsc -noEmit`; `eslint`.
   - Success: command pastes + applies the 7 cleanup steps scoped to the paste, one undo, respects toggles, never runs scripts, handles all edge cases `[ref: SDD/Example 3; SDD/ADR-25,26,27; PRD Feature 2 / AC]`.
 
-- [ ] **T2.3 Paste-script diagnostic logging (4a)** `[activity: build-feature]`
+- [x] **T2.3 Paste-script diagnostic logging (4a)** `[activity: build-feature]`
 
   1. Prime: Read `runPasteCommand`'s chain-building + `canHandle` dispatch and the existing `buildGatedLogger`/`debug` usage. Read `[ref: SDD/ADR-28]` and `[ref: PRD Feature 4 / AC]`.
   2. Test (RED): with `debugLogging` on, running "Paste and run scripts" logs, for each enabled script, its id + `canHandle` result, and the matched handler id on success; with `debugLogging` off, nothing extra is logged; clipboard text is never logged.

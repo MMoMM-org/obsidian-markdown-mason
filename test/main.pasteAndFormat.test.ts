@@ -11,10 +11,11 @@
  * so they stay pure-unit tests (no applyEditPlan/CM6 machinery needed).
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { App } from "obsidian";
 import { noticeLog, clearNoticeLog } from "./__mocks__/obsidian";
 import type { Editor } from "obsidian";
+import { setDebugLogging } from "../src/core/debug";
 
 // Dynamic import after mock alias is active
 const { MarkdownMasonPlugin } = await import("../src/main");
@@ -331,6 +332,81 @@ describe("T2.2(b) — cleanup pipeline applies all 7 steps", () => {
 		expect(inserted).toContain("Word one word two."); // dewrapped
 		expect(inserted).toContain("- Bullet");            // normalizeBullets
 		expect(inserted).toContain('"Quoted"');             // decomposeLigatures
+	});
+});
+
+// ---------------------------------------------------------------------------
+// (d) Recipe-path logging — PRD F4-AC2 ("via either 'Format selection' OR 'Paste and format'")
+//
+// applyTextCleanup is called with a gated StepLogger inside runPasteAndFormatCommand.
+// These tests confirm the logging wire-up at the command level:
+//   - debugLogging=true → 7 per-step "format:" lines emitted
+//   - debugLogging=false → no "format:" lines
+//   - clipboard content never appears in any log line (PRD F4-AC4)
+// ---------------------------------------------------------------------------
+
+describe("T2.2(d) — recipe-path logging (Paste and format)", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+		setDebugLogging(false);
+	});
+
+	it("debugLogging=true: exactly 7 per-step 'format:' lines emitted (one per cleanup step)", async () => {
+		const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+		const plugin = await makePluginAndFireLayout();
+		plugin.settings.debugLogging = true;
+		setDebugLogging(true);
+
+		plugin._commandInjection = {
+			clipboardReader: async () => "Word  one\nword two.\n* Bullet\n",
+			replaceSelection: () => {},
+		};
+
+		const cmd = findCommand(plugin, "mason.pasteAndFormatText");
+		await cmd!.editorCallback(makeEditor());
+
+		const allArgs = debugSpy.mock.calls.map((args) => String(args[0]));
+		const stepLines = allArgs.filter((l) => l.includes("format:") && !l.includes("result"));
+		expect(stepLines).toHaveLength(7);
+	});
+
+	it("debugLogging=false: no 'format:' lines appear in console output", async () => {
+		const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+		// debugLogging stays false (DEFAULT_SETTINGS) — no call to setDebugLogging(true)
+		const plugin = await makePluginAndFireLayout();
+
+		plugin._commandInjection = {
+			clipboardReader: async () => "Some plain text.",
+			replaceSelection: () => {},
+		};
+
+		const cmd = findCommand(plugin, "mason.pasteAndFormatText");
+		await cmd!.editorCallback(makeEditor());
+
+		const allArgs = debugSpy.mock.calls.map((args) => String(args[0]));
+		const stepLines = allArgs.filter((l) => l.includes("format:"));
+		expect(stepLines).toHaveLength(0);
+	});
+
+	it("log lines never contain clipboard content (PRD F4-AC4, paste-and-format path)", async () => {
+		const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+		const plugin = await makePluginAndFireLayout();
+		plugin.settings.debugLogging = true;
+		setDebugLogging(true);
+
+		const CLIPBOARD = "UNIQUE_PASTE_FORMAT_CLIPBOARD_CONTENT_MUST_NOT_LOG_XYZ";
+		plugin._commandInjection = {
+			clipboardReader: async () => CLIPBOARD,
+			replaceSelection: () => {},
+		};
+
+		const cmd = findCommand(plugin, "mason.pasteAndFormatText");
+		await cmd!.editorCallback(makeEditor());
+
+		const allLogs = debugSpy.mock.calls.map((args) => args.join(" "));
+		for (const log of allLogs) {
+			expect(log, "log line must not contain clipboard content").not.toContain(CLIPBOARD);
+		}
 	});
 });
 
