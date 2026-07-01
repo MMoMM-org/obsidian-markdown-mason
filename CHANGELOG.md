@@ -1,3 +1,9 @@
+## [0.6.2](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.6.1...0.6.2) (2026-07-01)
+
+### Bug Fixes
+
+* **release:** conventionalcommits preset so semantic-release keeps ! commits ([#22](https://github.com/MMoMM-org/obsidian-markdown-mason/issues/22)) ([a21e899](https://github.com/MMoMM-org/obsidian-markdown-mason/commit/a21e8990009f9e08ce51a8a91d470b21734928bf))
+
 ## [0.6.1](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.6.0...0.6.1) (2026-06-30)
 
 

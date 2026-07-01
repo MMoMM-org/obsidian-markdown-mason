@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-markdown-mason",
-	"version": "0.6.1",
+	"version": "0.6.2",
 	"description": "Fit pasted or whole-note Markdown into the target note's structure — heading cascade, footnote renumbering, dedup and a curated transform library.",
 	"main": "main.js",
 	"type": "module",
