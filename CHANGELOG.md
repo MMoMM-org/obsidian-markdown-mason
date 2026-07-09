@@ -1,3 +1,9 @@
+## [0.7.0](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.6.2...0.7.0) (2026-07-09)
+
+### Features
+
+* **cleanup:** add reflow transform for OCR/slide text (spec 006) ([#23](https://github.com/MMoMM-org/obsidian-markdown-mason/issues/23)) ([94cdb72](https://github.com/MMoMM-org/obsidian-markdown-mason/commit/94cdb72d91753b07f3af110361c9287b20daaa4e))
+
 ## [0.6.2](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.6.1...0.6.2) (2026-07-01)
 
 ### Bug Fixes
