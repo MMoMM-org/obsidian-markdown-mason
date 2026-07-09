@@ -38,6 +38,8 @@ and punctuation, tidy whitespace), **Lists** (normalize bullets, normalize order
 **Headings** (cascade headings, normalize headings), and **Footnotes** (convert citations to
 footnotes, resolve footnote identity, move footnotes to resources).
 
+![Markdown Mason Format selection settings, Cleanup group: Reflow wrapped text (off by default), Dewrap paragraphs, Dehyphenate words, Decompose ligatures and punctuation, and Tidy whitespace, each with a toggle and description](../assets/settings-format-selection-cleanup.png)
+
 > **Reflow wrapped text** rebuilds screen-capture OCR text (e.g. TextSniper slide captures)
 > that has hard line breaks and no blank lines between blocks, turning it back into
 > paragraphs and `- ` bullet lists. It is off by default because it reshapes structure more
@@ -55,6 +57,10 @@ format* command**, which applies the cleanup subset to the pasted text:
   citations to footnotes*, *Resolve footnote identity*, *Move footnotes to resources*). These
   never run during *Paste and format*. Each is marked in the settings UI with
   *ℹ️ "Format selection" only — not applied by "Paste and format".*
+
+![Markdown Mason Format selection settings, Lists group (normalize bullets, normalize ordered list) and Headings group (cascade headings — marked "Format selection" only — and normalize headings)](../assets/settings-format-selection-lists-headings.png)
+
+![Markdown Mason Format selection settings, Footnotes group: convert citations to footnotes, resolve footnote identity, and move footnotes to resources — each marked "Format selection" only, not applied by "Paste and format"](../assets/settings-format-selection-footnotes.png)
 
 So if you ran *Paste and format* and a particular cleanup step didn't happen, check whether
 that step is toggled off here. (Steps unique to *Format selection* are expected not to run on
