@@ -513,6 +513,19 @@ export class MasonSettingTab extends PluginSettingTab {
 		new Setting(containerEl).setName("Cleanup").setHeading();
 
 		new Setting(containerEl)
+			.setName("Reflow wrapped text")
+			.setDesc("Rebuild hard-wrapped OCR/slide captures (no blank lines between blocks) into paragraphs and bullet lists. Off by default; enable for screen-capture text. Runs before dehyphenate and dewrap.")
+			.addToggle((t) => {
+				t.setValue(recipe.reflow).onChange(async (v) => {
+					if (!this._plugin.settings.formatSelection) {
+						this._plugin.settings.formatSelection = {};
+					}
+					this._plugin.settings.formatSelection.reflow = v;
+					await this._plugin.saveSettings();
+				});
+			});
+
+		new Setting(containerEl)
 			.setName("Dewrap paragraphs")
 			.setDesc("Re-join hard-wrapped lines into full paragraphs, skipping code, headings, lists, blockquotes, and tables.")
 			.addToggle((t) => {

@@ -340,7 +340,7 @@ describe("T2.2(b) — cleanup pipeline applies all 7 steps", () => {
 //
 // applyTextCleanup is called with a gated StepLogger inside runPasteAndFormatCommand.
 // These tests confirm the logging wire-up at the command level:
-//   - debugLogging=true → 7 per-step "format:" lines emitted
+//   - debugLogging=true → 8 per-step "format:" lines emitted (incl. reflow, spec-006)
 //   - debugLogging=false → no "format:" lines
 //   - clipboard content never appears in any log line (PRD F4-AC4)
 // ---------------------------------------------------------------------------
@@ -351,7 +351,7 @@ describe("T2.2(d) — recipe-path logging (Paste and format)", () => {
 		setDebugLogging(false);
 	});
 
-	it("debugLogging=true: exactly 7 per-step 'format:' lines emitted (one per cleanup step)", async () => {
+	it("debugLogging=true: exactly 8 per-step 'format:' lines emitted (one per cleanup step)", async () => {
 		const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
 		const plugin = await makePluginAndFireLayout();
 		plugin.settings.debugLogging = true;
@@ -367,7 +367,7 @@ describe("T2.2(d) — recipe-path logging (Paste and format)", () => {
 
 		const allArgs = debugSpy.mock.calls.map((args) => String(args[0]));
 		const stepLines = allArgs.filter((l) => l.includes("format:") && !l.includes("result"));
-		expect(stepLines).toHaveLength(7);
+		expect(stepLines).toHaveLength(8);
 	});
 
 	it("debugLogging=false: no 'format:' lines appear in console output", async () => {

@@ -15,9 +15,10 @@ to the plugin). The settings are organised into five segments:
   (see [Usage](usage.md) for the script lifecycle).
 - **Commands** — turn individual scripts into command-palette commands and launch a script
   on demand.
-- **Format selection** — the 11 step toggles for the *Format selection* command. The seven
-  cleanup/list/heading-normalize steps among them also govern **Paste and format** (see
-  below); the other four steps are *Format selection* only.
+- **Format selection** — the 12 step toggles for the *Format selection* command (one, *Reflow
+  wrapped text*, is opt-in/off by default). The cleanup/list/heading-normalize steps among
+  them also govern **Paste and format** (see below); the other four steps are *Format
+  selection* only.
 - **Advanced** — Debug logging.
 
 ![Markdown Mason General settings tab: the Resources section heading field (default ## Resources), Show update notes, and Numeric-only footnotes](../assets/settings-general.png)
@@ -30,22 +31,36 @@ should not normally need to edit this file directly — use the settings tab ins
 
 ## Format selection steps
 
-The **Format selection** segment has eleven toggles, all on by default, arranged under four
-sub-groups: **Cleanup** (dewrap paragraphs, dehyphenate words, decompose ligatures and
-punctuation, tidy whitespace), **Lists** (normalize bullets, normalize ordered list),
+The **Format selection** segment has twelve toggles — eleven on by default, plus *Reflow
+wrapped text* which is **off by default** (opt-in) — arranged under four sub-groups:
+**Cleanup** (reflow wrapped text, dewrap paragraphs, dehyphenate words, decompose ligatures
+and punctuation, tidy whitespace), **Lists** (normalize bullets, normalize ordered list),
 **Headings** (cascade headings, normalize headings), and **Footnotes** (convert citations to
 footnotes, resolve footnote identity, move footnotes to resources).
 
-These toggles configure the *Format selection* command — and **also govern the *Paste and
-format* command**, which applies a 7-step subset to the pasted text:
+![Markdown Mason Format selection settings, Cleanup group: Reflow wrapped text (off by default), Dewrap paragraphs, Dehyphenate words, Decompose ligatures and punctuation, and Tidy whitespace, each with a toggle and description](../assets/settings-format-selection-cleanup.png)
 
-- **Shared by both commands (7 steps):** the 4 Cleanup steps, the 2 Lists steps, and
-  *Normalize headings*. Toggling one of these off in *Format selection* also stops it from
-  running during *Paste and format*.
+> **Reflow wrapped text** rebuilds screen-capture OCR text (e.g. TextSniper slide captures)
+> that has hard line breaks and no blank lines between blocks, turning it back into
+> paragraphs and `- ` bullet lists. It is off by default because it reshapes structure more
+> aggressively than the other steps — enable it when you paste OCR/slide text, or run the
+> standalone **Markdown Mason: Reflow wrapped text** command on a selection. It runs before
+> the other cleanup steps.
+
+These toggles configure the *Format selection* command — and **also govern the *Paste and
+format* command**, which applies the cleanup subset to the pasted text:
+
+- **Shared by both commands:** *Reflow wrapped text* (opt-in), the other 4 Cleanup steps, the
+  2 Lists steps, and *Normalize headings*. Toggling one of these off in *Format selection*
+  also stops it from running during *Paste and format*.
 - **Format selection only (4 steps):** *Cascade headings* and the 3 footnote steps (*Convert
   citations to footnotes*, *Resolve footnote identity*, *Move footnotes to resources*). These
   never run during *Paste and format*. Each is marked in the settings UI with
   *ℹ️ "Format selection" only — not applied by "Paste and format".*
+
+![Markdown Mason Format selection settings, Lists group (normalize bullets, normalize ordered list) and Headings group (cascade headings — marked "Format selection" only — and normalize headings)](../assets/settings-format-selection-lists-headings.png)
+
+![Markdown Mason Format selection settings, Footnotes group: convert citations to footnotes, resolve footnote identity, and move footnotes to resources — each marked "Format selection" only, not applied by "Paste and format"](../assets/settings-format-selection-footnotes.png)
 
 So if you ran *Paste and format* and a particular cleanup step didn't happen, check whether
 that step is toggled off here. (Steps unique to *Format selection* are expected not to run on

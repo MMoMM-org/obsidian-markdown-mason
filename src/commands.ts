@@ -67,6 +67,7 @@ const EMPTY_NOTICES: Record<string, string> = {
 	"footnotes.fromCitations": "No citations found to convert",
 	"footnotes.identity": "No numeric footnotes found",
 	"footnotes.move": "No footnotes to move",
+	"cleanup.reflow":             "No hard-wrapped text to reflow",
 	"cleanup.dewrap":             "No wrapped paragraphs to join",
 	"cleanup.dehyphenate":        "No hyphenated line breaks to join",
 	"cleanup.decomposeLigatures": "No ligatures or smart punctuation to decompose",

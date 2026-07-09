@@ -370,7 +370,7 @@ describe("T2.1(g) — all-off: empty plan → Nothing to format Notice, doc unch
 
 	const ALL_OFF: FormatSelectionRecipe = {
 		cascade: false, normalize: false, fromCitations: false, identity: false, move: false,
-		dewrap: false, dehyphenate: false, decomposeLigatures: false,
+		reflow: false, dewrap: false, dehyphenate: false, decomposeLigatures: false,
 		tidyWhitespace: false, normalizeBullets: false, normalizeOrdered: false,
 	};
 
@@ -728,7 +728,7 @@ describe("T1.2(a) — byte-identity regression: specific recipe combos after T1.
 //
 // With settings.debugLogging=true (and setDebugLogging(true) so debug() fires),
 // fusedFormatNote must emit:
-//   • 7 per-step "format: <name> …" lines (one per cleanup step from applyTextCleanup)
+//   • 8 per-step "format: <name> …" lines (one per cleanup step from applyTextCleanup, incl. reflow — spec-006)
 //   • 1 "format: result …" line after the full pipeline
 //
 // With debugLogging=false no "format:" lines appear at all.
@@ -741,7 +741,7 @@ describe("T1.2(b) — recipe-path logging", () => {
 		setDebugLogging(false);
 	});
 
-	it("debugLogging=true: exactly 7 per-step format lines are emitted (one per cleanup step)", () => {
+	it("debugLogging=true: exactly 8 per-step format lines are emitted (one per cleanup step)", () => {
 		const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
 		setDebugLogging(true);
 		const settings: MasonSettings = { ...DEFAULT_SETTINGS, debugLogging: true, formatSelection: {} };
@@ -752,7 +752,7 @@ describe("T1.2(b) — recipe-path logging", () => {
 		cmd.editorCallback(editor as unknown as Editor);
 		const allArgs = debugSpy.mock.calls.map((args) => String(args[0]));
 		const stepLines = allArgs.filter((l) => l.includes("format:") && !l.includes("result"));
-		expect(stepLines).toHaveLength(7);
+		expect(stepLines).toHaveLength(8);
 	});
 
 	it("debugLogging=true: a final 'format: result' line is emitted", () => {

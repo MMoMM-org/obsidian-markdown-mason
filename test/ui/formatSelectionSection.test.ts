@@ -168,11 +168,11 @@ describe("MasonSettingTab — Format selection nav", () => {
 // ---------------------------------------------------------------------------
 
 describe("MasonSettingTab — Format selection section rendering", () => {
-	it("renders exactly 11 toggle controls", async () => {
+	it("renders exactly 12 toggle controls", async () => {
 		const plugin = makePlugin();
 		const { settings } = await renderFormatSelectionSegment(plugin);
 		const allToggles = settings.flatMap((s) => s.toggleControls);
-		expect(allToggles).toHaveLength(11);
+		expect(allToggles).toHaveLength(12);
 	});
 
 	it("renders four setHeading() groups named Cleanup, Lists, Headings, Footnotes (in order)", async () => {
@@ -186,12 +186,23 @@ describe("MasonSettingTab — Format selection section rendering", () => {
 		expect(headings[3].name).toBe("Footnotes");
 	});
 
-	it("all 11 toggles are true when formatSelection is undefined (all-on default)", async () => {
+	it("defaults: reflow toggle is off, the other 11 are on (formatSelection undefined)", async () => {
 		const plugin = makePlugin(undefined);
 		const { settings } = await renderFormatSelectionSegment(plugin);
 		const allToggles = settings.flatMap((s) => s.toggleControls);
-		expect(allToggles).toHaveLength(11);
-		for (const toggle of allToggles) {
+		expect(allToggles).toHaveLength(12);
+
+		const reflowSetting = settings.find(
+			(s) => s.toggleControls.length > 0 && s.name === "Reflow wrapped text",
+		);
+		expect(reflowSetting, "Reflow wrapped text setting not found").toBeDefined();
+		expect(reflowSetting!.toggleControls[0].getValue()).toBe(false);
+
+		const nonReflow = settings
+			.filter((s) => s.name !== "Reflow wrapped text")
+			.flatMap((s) => s.toggleControls);
+		expect(nonReflow).toHaveLength(11);
+		for (const toggle of nonReflow) {
 			expect(toggle.getValue()).toBe(true);
 		}
 	});
@@ -205,11 +216,14 @@ describe("MasonSettingTab — Format selection section rendering", () => {
 		expect(dewrapSetting).toBeDefined();
 		expect(dewrapSetting!.toggleControls[0].getValue()).toBe(false);
 
-		// All others should remain true
-		const allToggles = settings.flatMap((s) => s.toggleControls);
-		const others = allToggles.filter(
-			(t) => t !== dewrapSetting!.toggleControls[0],
+		// All others should remain true — except reflow, which is opt-in (default off, spec-006).
+		const reflowSetting = settings.find(
+			(s) => s.toggleControls.length > 0 && s.name === "Reflow wrapped text",
 		);
+		const excluded = [dewrapSetting!.toggleControls[0], reflowSetting!.toggleControls[0]];
+		const others = settings
+			.flatMap((s) => s.toggleControls)
+			.filter((t) => !excluded.includes(t));
 		for (const toggle of others) {
 			expect(toggle.getValue()).toBe(true);
 		}
@@ -321,10 +335,11 @@ describe("MasonSettingTab — Format selection section — Paste-and-format mark
 		}
 	});
 
-	it("the 7 applied toggles do NOT contain the marker phrase", async () => {
+	it("the 8 applied toggles do NOT contain the marker phrase", async () => {
 		const plugin = makePlugin();
 		const { settings } = await renderFormatSelectionSegment(plugin);
 		const appliedNames = [
+			"Reflow wrapped text",
 			"Dewrap paragraphs",
 			"Dehyphenate words",
 			"Decompose ligatures and punctuation",

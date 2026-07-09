@@ -71,7 +71,11 @@ describe("resolveFormatSelectionRecipe — no formatSelection field", () => {
 		expect(resolveFormatSelectionRecipe(makeSettings()).normalizeOrdered).toBe(true);
 	});
 
-	it("result has exactly eleven keys", () => {
+	it("reflow defaults to false (opt-in — spec 006)", () => {
+		expect(resolveFormatSelectionRecipe(makeSettings()).reflow).toBe(false);
+	});
+
+	it("result has exactly twelve keys", () => {
 		const keys = Object.keys(resolveFormatSelectionRecipe(makeSettings())).sort();
 		expect(keys).toEqual([
 			"cascade",
@@ -84,6 +88,7 @@ describe("resolveFormatSelectionRecipe — no formatSelection field", () => {
 			"normalize",
 			"normalizeBullets",
 			"normalizeOrdered",
+			"reflow",
 			"tidyWhitespace",
 		]);
 	});
@@ -444,6 +449,7 @@ describe("resolveFormatSelectionRecipe — explicit all-false", () => {
 		fromCitations: false,
 		identity: false,
 		move: false,
+		reflow: false,
 		dewrap: false,
 		dehyphenate: false,
 		decomposeLigatures: false,

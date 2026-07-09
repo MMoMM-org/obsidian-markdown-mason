@@ -5,6 +5,7 @@
 // paste pipeline re-use the same logic without duplicating the gate pattern.
 //
 // Step order matches fusedFormatNote exactly:
+//   0. reflow             (spec-006, opt-in/OFF: re-segment hard-wrapped OCR text)
 //   1. dehyphenate        (MUST precede dewrap so join-on-space is not inserted)
 //   2. dewrap
 //   3. tidyWhitespace
@@ -22,6 +23,7 @@ import type { EditPlan, OperationContext } from "./types";
 import type { FormatSelectionRecipe } from "./formatSelection";
 import { applyToString } from "./applyToString";
 import { dehyphenate, dewrap, tidyWhitespace, decomposeLigatures } from "./cleanup";
+import { reflow } from "./reflow";
 import { normalizeBullets, normalizeOrdered } from "./lists";
 import { normalize } from "./headings";
 
@@ -59,6 +61,9 @@ export function applyTextCleanup(
 	};
 
 	let s = doc;
+	// spec-006: reflow runs FIRST so its hard-wrap re-segmentation and compound-hyphen
+	// handling win before dehyphenate/dewrap see the text. Default OFF (opt-in).
+	s = step(s, recipe.reflow,             "reflow",             reflow);
 	s = step(s, recipe.dehyphenate,        "dehyphenate",        dehyphenate);
 	s = step(s, recipe.dewrap,             "dewrap",             dewrap);
 	s = step(s, recipe.tidyWhitespace,     "tidyWhitespace",     tidyWhitespace);
