@@ -94,9 +94,9 @@ describe("buildRegistry — structure", () => {
 		}
 	});
 
-	it("has exactly 12 registered operations", () => {
+	it("has exactly 13 registered operations", () => {
 		const { entries } = buildRegistry();
-		expect(entries).toHaveLength(12);
+		expect(entries).toHaveLength(13);
 	});
 });
 

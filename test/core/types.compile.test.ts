@@ -91,13 +91,14 @@ describe("src/core/types — compile fixture", () => {
 });
 
 describe("DEFAULT_SETTINGS.formatSelection", () => {
-	it("deep-equals the all-on recipe", () => {
+	it("deep-equals the all-on recipe (reflow opt-in: off)", () => {
 		const expected: FormatSelectionRecipe = {
 			cascade: true,
 			normalize: true,
 			fromCitations: true,
 			identity: true,
 			move: true,
+			reflow: false,
 			dewrap: true,
 			dehyphenate: true,
 			decomposeLigatures: true,

@@ -78,6 +78,7 @@ import {
 } from "./noteFootnotes";
 import { normalizeUrl } from "./url";
 import { dewrap, dehyphenate, decomposeLigatures, tidyWhitespace } from "./cleanup";
+import { reflow } from "./reflow";
 import { normalizeBullets, normalizeOrdered } from "./lists";
 
 // ---------------------------------------------------------------------------
@@ -185,6 +186,7 @@ export interface MasonApi {
 		normalizeUrl(raw: string): string;
 	};
 	cleanup: {
+		reflow(ctx: OperationContext): EditPlan;
 		dewrap(ctx: OperationContext): EditPlan;
 		dehyphenate(ctx: OperationContext): EditPlan;
 		decomposeLigatures(ctx: OperationContext): EditPlan;
@@ -230,6 +232,7 @@ function buildEntries(): RegistryEntry[] {
 		buildIdentityEntry(),
 		buildMoveEntry(),
 		buildNormalizeUrlEntry(),
+		buildReflowEntry(),
 		buildDewrapEntry(),
 		buildDehyphenateEntry(),
 		buildDecomposeLigaturesEntry(),
@@ -350,6 +353,17 @@ function buildNormalizeUrlEntry(): RegistryEntry {
 	};
 }
 
+function buildReflowEntry(): RegistryEntry {
+	return {
+		id: "cleanup.reflow",
+		apiName: "mason.cleanup.reflow",
+		command: { name: "Reflow wrapped text" },
+		run(ctx: OperationContext): EditPlan {
+			return reflow(ctx);
+		},
+	};
+}
+
 function buildDewrapEntry(): RegistryEntry {
 	return {
 		id: "cleanup.dewrap",
@@ -453,6 +467,9 @@ function buildApi(entries: RegistryEntry[]): MasonApi {
 			},
 		},
 		cleanup: {
+			reflow(ctx: OperationContext): EditPlan {
+				return reflow(ctx);
+			},
 			dewrap(ctx: OperationContext): EditPlan {
 				return dewrap(ctx);
 			},
