@@ -124,7 +124,7 @@ export function decomposeLigatures(ctx: OperationContext): EditPlan {
 				let newLine = "";
 				let changed = false;
 				for (let i = 0; i < line.length; i++) {
-					const ch = line[i]!;
+					const ch = line[i];
 					// Absolute position within maskedBlock for this character.
 					const blockPos = (lineOffset - block.startOffset) + i;
 					if (maskedBlock[blockPos] === "\0") {
@@ -210,8 +210,8 @@ export function tidyWhitespace(ctx: OperationContext): EditPlan {
 		if (run.length >= 3) {
 			// One contiguous edit: remove blanks [1..end] in one slice
 			plan.push({
-				from: run[1]!.startOffset,
-				to: run[run.length - 1]!.endOffset,
+				from: run[1].startOffset,
+				to: run[run.length - 1].endOffset,
 				insert: "",
 			});
 		}
