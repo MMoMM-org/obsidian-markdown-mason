@@ -1,3 +1,9 @@
+## [0.7.1](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.7.0...0.7.1) (2026-07-13)
+
+### Bug Fixes
+
+* **lint:** clear scorecard warnings and wire obsidianmd ruleset for local hub parity ([#24](https://github.com/MMoMM-org/obsidian-markdown-mason/issues/24)) ([6e871f6](https://github.com/MMoMM-org/obsidian-markdown-mason/commit/6e871f631c392d99986fa5f12485d871d5fe2a43))
+
 ## [0.7.0](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.6.2...0.7.0) (2026-07-09)
 
 ### Features
