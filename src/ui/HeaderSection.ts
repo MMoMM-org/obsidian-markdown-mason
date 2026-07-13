@@ -61,10 +61,10 @@ export class HeaderSection {
 		line.createEl("strong").setText(this._manifest.name);
 
 		// Version
-		line.createEl("span").setText(` v${this._manifest.version}`);
+		line.createSpan().setText(` v${this._manifest.version}`);
 
 		// Separator
-		line.createEl("span").setText(" · ");
+		line.createSpan().setText(" · ");
 
 		// Author — anchor when authorUrl present, plain span otherwise
 		const authorName = this._parseAuthorName(this._manifest.author);
@@ -73,11 +73,11 @@ export class HeaderSection {
 			authorEl.setText(authorName);
 			authorEl.setAttribute("href", this._manifest.authorUrl);
 		} else {
-			line.createEl("span").setText(authorName);
+			line.createSpan().setText(authorName);
 		}
 
 		// Separator
-		line.createEl("span").setText(" · ");
+		line.createSpan().setText(" · ");
 
 		// Documentation anchor
 		const docsEl = line.createEl("a");

@@ -6,26 +6,23 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 
-// Disable projectService so lintText works without a real tsconfig project.
-// The no-console rule under test does not require type information.
+// Lint with the real flat config, type information included. The config now
+// bundles type-aware rules (via the obsidianmd ruleset) that require a TS
+// project, so projectService cannot be disabled; the snippet is attributed to
+// an existing src/ file so the project's type info covers it. no-console is not
+// type-aware and still fires regardless.
 const makeEslint = (): ESLint =>
 	new ESLint({
 		overrideConfigFile: path.join(repoRoot, "eslint.config.mjs"),
-		overrideConfig: [
-			{
-				files: ["**/*.ts"],
-				languageOptions: { parserOptions: { projectService: false } },
-			},
-		],
 	});
 
 describe("eslint flat config — CON-3 no-console enforcement", () => {
 	// Shared instance — all four tests use the same config; no need to recreate it.
 	const eslint = makeEslint();
 
-	// "src/virtual.ts" is a non-existent path under src/ chosen so the flat
-	// config's `files: ["src/**/*.ts"]` glob applies during lintText calls.
-	const virtualFilePath = path.join(repoRoot, "src/virtual.ts");
+	// An existing file under src/ so both the flat config's `src/**/*.ts` glob
+	// and the project's type information apply during lintText calls.
+	const virtualFilePath = path.join(repoRoot, "src/main.ts");
 
 	it("rejects console.log", async () => {
 		const results = await eslint.lintText('console.log("hello");\n', {

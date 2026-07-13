@@ -133,7 +133,7 @@ export class MasonSettingTab extends PluginSettingTab {
 	 * that switches the active section and re-renders the content area.
 	 */
 	private _renderSegmentNav(containerEl: HTMLElement): void {
-		const nav = containerEl.createEl("div", { cls: "mason-segment-nav" });
+		const nav = containerEl.createDiv({ cls: "mason-segment-nav" });
 
 		for (const segment of SEGMENTS) {
 			const btn = nav.createEl("button");
@@ -149,7 +149,7 @@ export class MasonSettingTab extends PluginSettingTab {
 			// The badge element is always created (text empty at 0) so _refreshScriptsBadge
 			// can update it in place; CSS hides an empty badge via :empty.
 			if (segment === "Scripts") {
-				this._scriptsBadgeEl = btn.createEl("span", { cls: "mason-segment-badge" });
+				this._scriptsBadgeEl = btn.createSpan({ cls: "mason-segment-badge" });
 				this._renderScriptsBadge();
 			}
 			btn.addEventListener("click", () => {
