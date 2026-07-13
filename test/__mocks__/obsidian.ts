@@ -90,6 +90,11 @@ export class MockHTMLElement {
 		return this.createEl("div", opts);
 	}
 
+	/** Obsidian API: shorthand for createEl("span", opts). */
+	createSpan(opts?: { text?: string; cls?: string }): MockHTMLElement {
+		return this.createEl("span", opts);
+	}
+
 	/** Obsidian API: set own text content. */
 	setText(text: string): void {
 		this._text = text;

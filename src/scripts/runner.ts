@@ -167,6 +167,10 @@ export class ScriptRunner {
 		// ------------------------------------------------------------------
 		const timeoutMs = this._options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
+		// globalThis (not window): this timeout guard runs in both the Obsidian
+		// runtime and vitest's node environment, where `window` is undefined.
+		// setTimeout/clearTimeout are not popout-window scoped. The
+		// obsidianmd/no-global-this rule is disabled for this file in eslint.config.mjs.
 		let timerId: ReturnType<typeof globalThis.setTimeout> | undefined;
 
 		const timeoutPromise = new Promise<never>((_, reject) => {

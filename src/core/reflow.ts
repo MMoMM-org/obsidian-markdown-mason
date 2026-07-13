@@ -87,9 +87,9 @@ interface Marker {
 /** Parse a leading bullet/ordered marker; null when the line has none. */
 function parseMarker(line: string): Marker | null {
 	const u = UNORDERED_RE.exec(line);
-	if (u) return { markerOut: "- ", text: u[2]! };
+	if (u) return { markerOut: "- ", text: u[2] };
 	const o = ORDERED_RE.exec(line);
-	if (o) return { markerOut: `${o[1]!} `, text: o[2]! };
+	if (o) return { markerOut: `${o[1]} `, text: o[2] };
 	return null;
 }
 
@@ -141,7 +141,7 @@ function groupLines(lines: string[]): Segment[] {
 	const segments: Segment[] = [];
 
 	for (let k = 0; k < lines.length; k++) {
-		const line = lines[k]!;
+		const line = lines[k];
 		const marker = parseMarker(line);
 
 		let boundary: boolean;
@@ -152,7 +152,7 @@ function groupLines(lines: string[]): Segment[] {
 			boundary = marker !== null;
 		} else {
 			// PARAGRAPH mode.
-			const prev = lines[k - 1]!.replace(/\s+$/, "");
+			const prev = lines[k - 1].replace(/\s+$/, "");
 			if (/[A-Za-z]-$/.test(prev)) {
 				// A trailing hyphen means the word was split across the wrap — always
 				// a continuation, never a boundary (guards short compound-break lines).
@@ -170,7 +170,7 @@ function groupLines(lines: string[]): Segment[] {
 				segments.push({ isBullet: false, markerOut: "", text: line.trim() });
 			}
 		} else {
-			appendContinuation(segments[segments.length - 1]!, line.trim());
+			appendContinuation(segments[segments.length - 1], line.trim());
 		}
 	}
 
@@ -181,9 +181,9 @@ function groupLines(lines: string[]): Segment[] {
 function renderSegments(segments: Segment[]): string {
 	let out = "";
 	for (let i = 0; i < segments.length; i++) {
-		const seg = segments[i]!;
+		const seg = segments[i];
 		if (i > 0) {
-			const prev = segments[i - 1]!;
+			const prev = segments[i - 1];
 			// Consecutive bullets form a tight list; any other adjacency gets a blank line.
 			out += prev.isBullet && seg.isBullet ? "\n" : "\n\n";
 		}
@@ -221,15 +221,15 @@ export function reflow(ctx: OperationContext): EditPlan {
 
 	let i = 0;
 	while (i < blocks.length) {
-		if (!FLOWABLE.has(blocks[i]!.kind)) {
+		if (!FLOWABLE.has(blocks[i].kind)) {
 			i++;
 			continue;
 		}
 		// Extend to the end of this contiguous flowable run.
 		let j = i;
-		while (j + 1 < blocks.length && FLOWABLE.has(blocks[j + 1]!.kind)) j++;
+		while (j + 1 < blocks.length && FLOWABLE.has(blocks[j + 1].kind)) j++;
 
-		const edit = reflowRun(ctx.doc, blocks[i]!.startOffset, blocks[j]!.endOffset);
+		const edit = reflowRun(ctx.doc, blocks[i].startOffset, blocks[j].endOffset);
 		if (edit) plan.push(edit);
 		i = j + 1;
 	}

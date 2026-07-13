@@ -82,7 +82,10 @@ export type ScriptFn = (...args: unknown[]) => unknown;
  * multiple scripts claim the same paste input.
  */
 export interface PasteBlock {
-	canHandle(input: string): boolean;
+	// Function-typed property (not a method signature) so the reference can be
+	// safely extracted unbound in buildPasteChain — scripts define canHandle as
+	// a plain function, never a this-bound method (no-unbound-method).
+	canHandle: (input: string) => boolean;
 	priority: number;
 }
 
@@ -352,7 +355,7 @@ export function resolveScriptsDir(adapter: unknown, manifestDir: string | undefi
  */
 export function buildRequireFn(scriptsDir: string): RequireFn {
 	try {
-		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		// eslint-disable-next-line @typescript-eslint/no-require-imports -- Node's createRequire must be loaded via require() to build a CJS require for user scripts; there is no ESM equivalent at runtime
 		const nodeModule = require("node:module") as { createRequire(from: string): RequireFn };
 		return nodeModule.createRequire(scriptsDir + "/");
 	} catch {

@@ -77,7 +77,7 @@ export class BrowseOfficialModal extends Modal {
 		const card = parent.createDiv({ cls: "mason-browse-card" });
 
 		const header = card.createDiv({ cls: "mason-browse-card-header" });
-		header.createEl("span", { text: entry.name, cls: "mason-browse-name" });
+		header.createSpan({ text: entry.name, cls: "mason-browse-name" });
 
 		const status = this._statusOf(entry.id);
 		if (status === "enabled") {
@@ -98,6 +98,6 @@ export class BrowseOfficialModal extends Modal {
 			});
 		}
 
-		card.createEl("span", { text: entry.description, cls: "mason-browse-desc" });
+		card.createSpan({ text: entry.description, cls: "mason-browse-desc" });
 	}
 }

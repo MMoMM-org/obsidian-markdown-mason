@@ -112,11 +112,11 @@ function renderCard(parent: HTMLElement, item: ScriptItem, ops: LifecycleOps): v
 function renderCardHeader(card: HTMLElement, item: ScriptItem, ops: LifecycleOps): void {
 	const header = card.createDiv({ cls: "mason-script-card-header" });
 
-	header.createEl("span", { text: item.displayName, cls: "mason-script-name" });
-	header.createEl("span", { text: provenanceBadge(item.provenance), cls: "mason-script-badge" });
+	header.createSpan({ text: item.displayName, cls: "mason-script-name" });
+	header.createSpan({ text: provenanceBadge(item.provenance), cls: "mason-script-badge" });
 
 	renderPill(header, item.state);
-	header.createEl("span", { text: `v${item.version}`, cls: "mason-script-version" });
+	header.createSpan({ text: `v${item.version}`, cls: "mason-script-version" });
 
 	// Enable toggle — shown for states where a toggle is meaningful.
 	if (showsToggle(item.state)) {
@@ -129,7 +129,7 @@ function renderCardHeader(card: HTMLElement, item: ScriptItem, ops: LifecycleOps
 /** Second line: description, plus inline reason + recovery when Blocked. */
 function renderCardBody(card: HTMLElement, item: ScriptItem, ops: LifecycleOps): void {
 	const body = card.createDiv({ cls: "mason-script-card-body" });
-	body.createEl("span", { text: item.description, cls: "mason-script-desc" });
+	body.createSpan({ text: item.description, cls: "mason-script-desc" });
 
 	if (item.state.kind === "Blocked") {
 		renderBlockedRecovery(body, item, item.state.reason, ops);
@@ -181,8 +181,8 @@ function pillIcon(state: LifecycleState): string {
 function renderPill(parent: HTMLElement, state: LifecycleState): void {
 	const pill = parent.createDiv({ cls: "mason-script-pill" });
 	// Icon carries status non-colour-wise; label is the authoritative text.
-	pill.createEl("span", { text: pillIcon(state), cls: "mason-script-pill-icon" });
-	pill.createEl("span", { text: pillLabel(state), cls: "mason-script-pill-label" });
+	pill.createSpan({ text: pillIcon(state), cls: "mason-script-pill-icon" });
+	pill.createSpan({ text: pillLabel(state), cls: "mason-script-pill-label" });
 	pill.addClass(`mason-pill-${state.kind.toLowerCase()}`);
 }
 
@@ -232,7 +232,7 @@ function renderBlockedRecovery(
 	ops: LifecycleOps,
 ): void {
 	const row = body.createDiv({ cls: "mason-script-blocked" });
-	row.createEl("span", { text: blockedReasonText(item, reason), cls: "mason-script-blocked-reason" });
+	row.createSpan({ text: blockedReasonText(item, reason), cls: "mason-script-blocked-reason" });
 
 	const { label, action } = blockedRecovery(reason);
 	const btn = row.createEl("button", { text: label, cls: "mason-script-recovery" });

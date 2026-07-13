@@ -65,9 +65,9 @@ export class RunScriptModal extends FuzzySuggestModal<RunScriptEntry> {
 	renderSuggestion(match: FuzzyMatch<RunScriptEntry>, el: HTMLElement): void {
 		const entry = match.item;
 		el.addClass("mason-run-suggestion");
-		el.createEl("div", { text: entry.name, cls: "mason-run-suggestion-name" });
+		el.createDiv({ text: entry.name, cls: "mason-run-suggestion-name" });
 		if (entry.description.length > 0) {
-			el.createEl("div", { text: entry.description, cls: "mason-run-suggestion-desc" });
+			el.createDiv({ text: entry.description, cls: "mason-run-suggestion-desc" });
 		}
 	}
 

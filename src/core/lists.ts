@@ -39,11 +39,11 @@ export function normalizeBullets(ctx: OperationContext): EditPlan {
 
 		let lineOffset = block.startOffset;
 		for (let i = block.startLine; i <= block.endLine; i++) {
-			const line = docLines[i]!;
+			const line = docLines[i];
 			const m = BULLET_RE.exec(line);
 			if (m !== null && m[2] !== "-") {
-				const markerOffset = lineOffset + m[1]!.length;
-				edits.push({ from: markerOffset, to: markerOffset + m[2]!.length, insert: "-" });
+				const markerOffset = lineOffset + m[1].length;
+				edits.push({ from: markerOffset, to: markerOffset + m[2].length, insert: "-" });
 			}
 			lineOffset += line.length + 1; // +1 for the \n character
 		}
@@ -91,11 +91,11 @@ export function normalizeOrdered(ctx: OperationContext): EditPlan {
 
 		let lineOffset = block.startOffset;
 		for (let i = block.startLine; i <= block.endLine; i++) {
-			const line = docLines[i]!;
+			const line = docLines[i];
 			const m = ORDERED_RE.exec(line);
 			if (m !== null) {
-				const indent = m[1]!.length;
-				const digits = m[2]!;
+				const indent = m[1].length;
+				const digits = m[2];
 				const counter = resolveCounter(stack, indent);
 				if (counter !== parseInt(digits, 10)) {
 					const digitOffset = lineOffset + indent;
@@ -122,25 +122,25 @@ export function normalizeOrdered(ctx: OperationContext): EditPlan {
  *       if exact match, increment; otherwise push a new level (counter = 1).
  */
 function resolveCounter(stack: StackLevel[], indent: number): number {
-	if (stack.length === 0 || indent > stack[stack.length - 1]!.indent) {
+	if (stack.length === 0 || indent > stack[stack.length - 1].indent) {
 		stack.push({ indent, counter: 1 });
 		return 1;
 	}
 
-	const top = stack[stack.length - 1]!;
+	const top = stack[stack.length - 1];
 	if (indent === top.indent) {
 		top.counter += 1;
 		return top.counter;
 	}
 
 	// indent < top.indent — pop until we find a level with indent <= current
-	while (stack.length > 0 && stack[stack.length - 1]!.indent > indent) {
+	while (stack.length > 0 && stack[stack.length - 1].indent > indent) {
 		stack.pop();
 	}
 
-	if (stack.length > 0 && stack[stack.length - 1]!.indent === indent) {
-		stack[stack.length - 1]!.counter += 1;
-		return stack[stack.length - 1]!.counter;
+	if (stack.length > 0 && stack[stack.length - 1].indent === indent) {
+		stack[stack.length - 1].counter += 1;
+		return stack[stack.length - 1].counter;
 	}
 
 	// No exact match found after popping — treat as new level

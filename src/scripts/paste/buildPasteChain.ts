@@ -55,7 +55,9 @@ export interface LoadedScript {
  */
 export interface PasteHandler {
 	id: string;
-	canHandle(input: string): boolean;
+	// Function-typed property (mirrors PasteBlock.canHandle) so it stays
+	// safely extractable unbound (no-unbound-method).
+	canHandle: (input: string) => boolean;
 	run: ScriptFunction;
 }
 

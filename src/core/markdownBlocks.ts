@@ -33,13 +33,13 @@ export function segmentBlocks(doc: string): Block[] {
 	}
 
 	// Phase 1: classify each line
-	const kinds: BlockKind[] = new Array(lines.length);
+	const kinds: BlockKind[] = new Array<BlockKind>(lines.length);
 	let fenceChar: string | null = null;
 	let fenceLen = 0;
 	let inFrontmatter = false;
 
 	for (let i = 0; i < lines.length; i++) {
-		const line = lines[i]!;
+		const line = lines[i];
 
 		// Frontmatter — only at document start
 		if (i === 0 && line === "---") {
@@ -56,8 +56,8 @@ export function segmentBlocks(doc: string): Block[] {
 		// Fenced code — track open/close; overrides all other classification inside
 		const fenceM = /^(\s{0,3})(`{3,}|~{3,})/.exec(line);
 		if (fenceM) {
-			const ch = fenceM[2]![0]!;
-			const len = fenceM[2]!.length;
+			const ch = fenceM[2][0];
+			const len = fenceM[2].length;
 			if (fenceChar === null) {
 				fenceChar = ch;
 				fenceLen = len;
@@ -116,7 +116,7 @@ export function segmentBlocks(doc: string): Block[] {
 			kinds[i] = "thematicBreak";
 			continue;
 		}
-		if (/^    /.test(line)) {
+		if (/^ {4}/.test(line)) {
 			kinds[i] = "indentedCode";
 			continue;
 		}
@@ -129,15 +129,15 @@ export function segmentBlocks(doc: string): Block[] {
 	const blocks: Block[] = [];
 	let i = 0;
 	while (i < lines.length) {
-		const kind = kinds[i]!;
+		const kind = kinds[i];
 		let j = i;
 		if (kind !== "blank") {
 			while (j + 1 < lines.length && kinds[j + 1] === kind) j++;
 		}
-		const startOffset = lineStart[i]!;
+		const startOffset = lineStart[i];
 		const endLine = j;
 		// endOffset: past trailing \n of last line (clamped to doc length)
-		const rawEnd = lineStart[endLine]! + lines[endLine]!.length + 1;
+		const rawEnd = lineStart[endLine] + lines[endLine].length + 1;
 		const endOffset = Math.min(rawEnd, doc.length);
 		blocks.push({ kind, startLine: i, endLine, startOffset, endOffset });
 		i = j + 1;
