@@ -13,6 +13,8 @@ export interface FormatSelectionRecipe {
 	fromCitations: boolean;
 	identity: boolean;
 	move: boolean;
+	// spec-007 addition (box-drawing → Markdown table — default ON)
+	boxTable:           boolean;
 	// spec-006 addition (OCR / slide reflow — opt-in, default OFF)
 	reflow:             boolean;
 	// spec-004 additions (flat keys — ADR-22)
@@ -32,6 +34,8 @@ export function resolveFormatSelectionRecipe(s: MasonSettings): FormatSelectionR
 		fromCitations: r.fromCitations ?? true,
 		identity:      r.identity      ?? true,
 		move:          r.move          ?? true,
+		// spec-007 — box-drawing table conversion, ON by default (detection is unambiguous)
+		boxTable:           r.boxTable          ?? true,
 		// spec-006 — opt-in OCR reflow, OFF by default (the only key that is not all-on)
 		reflow:             r.reflow            ?? false,
 		// spec-004

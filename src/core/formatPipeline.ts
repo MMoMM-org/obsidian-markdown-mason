@@ -5,6 +5,7 @@
 // paste pipeline re-use the same logic without duplicating the gate pattern.
 //
 // Step order matches fusedFormatNote exactly:
+//   -1. boxTable          (spec-007, default ON: box-drawing tables → Markdown tables)
 //   0. reflow             (spec-006, opt-in/OFF: re-segment hard-wrapped OCR text)
 //   1. dehyphenate        (MUST precede dewrap so join-on-space is not inserted)
 //   2. dewrap
@@ -24,6 +25,7 @@ import type { FormatSelectionRecipe } from "./formatSelection";
 import { applyToString } from "./applyToString";
 import { dehyphenate, dewrap, tidyWhitespace, decomposeLigatures } from "./cleanup";
 import { reflow } from "./reflow";
+import { boxTable } from "./boxTable";
 import { normalizeBullets, normalizeOrdered } from "./lists";
 import { normalize } from "./headings";
 
@@ -61,7 +63,10 @@ export function applyTextCleanup(
 	};
 
 	let s = doc;
-	// spec-006: reflow runs FIRST so its hard-wrap re-segmentation and compound-hyphen
+	// spec-007: boxTable runs FIRST so a drawn table becomes a real `table` block
+	// before reflow/dewrap (which would otherwise mangle its border rows). Default ON.
+	s = step(s, recipe.boxTable,           "boxTable",           boxTable);
+	// spec-006: reflow runs next so its hard-wrap re-segmentation and compound-hyphen
 	// handling win before dehyphenate/dewrap see the text. Default OFF (opt-in).
 	s = step(s, recipe.reflow,             "reflow",             reflow);
 	s = step(s, recipe.dehyphenate,        "dehyphenate",        dehyphenate);

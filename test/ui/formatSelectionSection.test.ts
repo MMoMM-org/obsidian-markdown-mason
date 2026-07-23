@@ -60,6 +60,7 @@ function makePlugin(formatSelection?: Partial<{
 	fromCitations: boolean;
 	identity: boolean;
 	move: boolean;
+	boxTable: boolean;
 	dewrap: boolean;
 	dehyphenate: boolean;
 	decomposeLigatures: boolean;
@@ -168,11 +169,11 @@ describe("MasonSettingTab — Format selection nav", () => {
 // ---------------------------------------------------------------------------
 
 describe("MasonSettingTab — Format selection section rendering", () => {
-	it("renders exactly 12 toggle controls", async () => {
+	it("renders exactly 13 toggle controls", async () => {
 		const plugin = makePlugin();
 		const { settings } = await renderFormatSelectionSegment(plugin);
 		const allToggles = settings.flatMap((s) => s.toggleControls);
-		expect(allToggles).toHaveLength(12);
+		expect(allToggles).toHaveLength(13);
 	});
 
 	it("renders four setHeading() groups named Cleanup, Lists, Headings, Footnotes (in order)", async () => {
@@ -186,11 +187,11 @@ describe("MasonSettingTab — Format selection section rendering", () => {
 		expect(headings[3].name).toBe("Footnotes");
 	});
 
-	it("defaults: reflow toggle is off, the other 11 are on (formatSelection undefined)", async () => {
+	it("defaults: reflow toggle is off, the other 12 are on (formatSelection undefined)", async () => {
 		const plugin = makePlugin(undefined);
 		const { settings } = await renderFormatSelectionSegment(plugin);
 		const allToggles = settings.flatMap((s) => s.toggleControls);
-		expect(allToggles).toHaveLength(12);
+		expect(allToggles).toHaveLength(13);
 
 		const reflowSetting = settings.find(
 			(s) => s.toggleControls.length > 0 && s.name === "Reflow wrapped text",
@@ -201,7 +202,7 @@ describe("MasonSettingTab — Format selection section rendering", () => {
 		const nonReflow = settings
 			.filter((s) => s.name !== "Reflow wrapped text")
 			.flatMap((s) => s.toggleControls);
-		expect(nonReflow).toHaveLength(11);
+		expect(nonReflow).toHaveLength(12);
 		for (const toggle of nonReflow) {
 			expect(toggle.getValue()).toBe(true);
 		}
@@ -242,6 +243,7 @@ describe("MasonSettingTab — Format selection section rendering", () => {
 			fromCitations: false,
 			identity: true,
 			move: false,
+			boxTable: false,
 		});
 		const { settings } = await renderFormatSelectionSegment(plugin);
 
@@ -264,6 +266,7 @@ describe("MasonSettingTab — Format selection section rendering", () => {
 		expect(getToggleByName("citation")).toBe(false);
 		expect(getToggleByName("identity")).toBe(true);
 		expect(getToggleByName("move footnotes")).toBe(false);
+		expect(getToggleByName("box-drawing")).toBe(false);
 	});
 
 	it("each toggle row follows sentence case (no multi-word Title Case names)", async () => {

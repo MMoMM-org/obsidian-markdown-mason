@@ -1,7 +1,7 @@
 ---
 title: "Box-drawing table — convert Unicode/ASCII drawn tables into Markdown tables"
-status: draft
-version: "0.1"
+status: implemented
+version: "1.0"
 ---
 
 # Product Requirements Document

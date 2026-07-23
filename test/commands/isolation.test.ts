@@ -30,14 +30,14 @@ import type { FormatSelectionRecipe } from "../../src/core/formatSelection";
 /** Create a minimal all-stages-included recipe (all toggles ON). */
 const RECIPE_ALL_ON: FormatSelectionRecipe = {
 	cascade: true, normalize: true, fromCitations: true, identity: true, move: true,
-	reflow: true, dewrap: true, dehyphenate: true, decomposeLigatures: true,
+	boxTable: true, reflow: true, dewrap: true, dehyphenate: true, decomposeLigatures: true,
 	tidyWhitespace: true, normalizeBullets: true, normalizeOrdered: true,
 };
 
 /** Create a recipe with every toggle OFF. */
 const RECIPE_ALL_OFF: FormatSelectionRecipe = {
 	cascade: false, normalize: false, fromCitations: false, identity: false, move: false,
-	reflow: false, dewrap: false, dehyphenate: false, decomposeLigatures: false,
+	boxTable: false, reflow: false, dewrap: false, dehyphenate: false, decomposeLigatures: false,
 	tidyWhitespace: false, normalizeBullets: false, normalizeOrdered: false,
 };
 
@@ -242,7 +242,7 @@ const makeParseResult = (overrides: Partial<ParseResult> = {}): ParseResult => (
 /** Partial recipe: only the heading toggles differ; footnote toggles stay default. */
 const RECIPE_PARTIAL: FormatSelectionRecipe = {
 	cascade: false, normalize: false, fromCitations: true, identity: true, move: true,
-	reflow: false, dewrap: true, dehyphenate: true, decomposeLigatures: true,
+	boxTable: true, reflow: false, dewrap: true, dehyphenate: true, decomposeLigatures: true,
 	tidyWhitespace: true, normalizeBullets: true, normalizeOrdered: true,
 };
 
@@ -433,7 +433,7 @@ describe("T4.3.3 — spec-003 individual commands are unaffected by new recipe k
 	// 6 new keys off — simulates a caller that sets new keys false)
 	const recipeOld: FormatSelectionRecipe = {
 		cascade: true, normalize: true, fromCitations: true, identity: true, move: true,
-		reflow: false, dewrap: false, dehyphenate: false, decomposeLigatures: false,
+		boxTable: false, reflow: false, dewrap: false, dehyphenate: false, decomposeLigatures: false,
 		tidyWhitespace: false, normalizeBullets: false, normalizeOrdered: false,
 	};
 	// Recipe WITH the new 6 keys also enabled

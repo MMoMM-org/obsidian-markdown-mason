@@ -84,6 +84,7 @@ describe("buildRegistry — structure", () => {
 			{ id: "footnotes.identity",        apiName: "mason.footnotes.identity",       commandName: "Resolve footnote identity" },
 			{ id: "footnotes.move",            apiName: "mason.footnotes.move",           commandName: "Move footnotes to resources" },
 			{ id: "util.normalizeUrl",         apiName: "mason.util.normalizeUrl",        commandName: "Normalize url" },
+			{ id: "cleanup.boxTable",          apiName: "mason.cleanup.boxTable",         commandName: "Convert box-drawing table to Markdown" },
 		];
 
 		for (const expected of expectedOps) {
@@ -94,9 +95,9 @@ describe("buildRegistry — structure", () => {
 		}
 	});
 
-	it("has exactly 13 registered operations", () => {
+	it("has exactly 14 registered operations", () => {
 		const { entries } = buildRegistry();
-		expect(entries).toHaveLength(13);
+		expect(entries).toHaveLength(14);
 	});
 });
 

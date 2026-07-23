@@ -351,7 +351,7 @@ describe("T2.2(d) — recipe-path logging (Paste and format)", () => {
 		setDebugLogging(false);
 	});
 
-	it("debugLogging=true: exactly 8 per-step 'format:' lines emitted (one per cleanup step)", async () => {
+	it("debugLogging=true: exactly 9 per-step 'format:' lines emitted (one per cleanup step)", async () => {
 		const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
 		const plugin = await makePluginAndFireLayout();
 		plugin.settings.debugLogging = true;
@@ -367,7 +367,7 @@ describe("T2.2(d) — recipe-path logging (Paste and format)", () => {
 
 		const allArgs = debugSpy.mock.calls.map((args) => String(args[0]));
 		const stepLines = allArgs.filter((l) => l.includes("format:") && !l.includes("result"));
-		expect(stepLines).toHaveLength(8);
+		expect(stepLines).toHaveLength(9);
 	});
 
 	it("debugLogging=false: no 'format:' lines appear in console output", async () => {

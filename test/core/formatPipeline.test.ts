@@ -20,6 +20,7 @@ const allOff: FormatSelectionRecipe = {
 	fromCitations:      false,
 	identity:           false,
 	move:               false,
+	boxTable:           false,
 	reflow:             false,
 	dewrap:             false,
 	dehyphenate:        false,
@@ -35,6 +36,7 @@ const allOn: FormatSelectionRecipe = {
 	fromCitations:      true,
 	identity:           true,
 	move:               true,
+	boxTable:           true,
 	reflow:             false,
 	dewrap:             true,
 	dehyphenate:        true,
@@ -278,11 +280,11 @@ describe("applyTextCleanup — idempotency", () => {
 // ---------------------------------------------------------------------------
 
 describe("applyTextCleanup — StepLogger", () => {
-	it("emits exactly 8 log lines (one per step incl. reflow) when all toggles are on", () => {
+	it("emits exactly 9 log lines (one per step incl. boxTable + reflow) when all toggles are on", () => {
 		const lines: string[] = [];
 		const logger: StepLogger = (line) => lines.push(line);
 		applyTextCleanup(COMPOUND_DOC, allOn, logger);
-		expect(lines).toHaveLength(8);
+		expect(lines).toHaveLength(9);
 	});
 
 	it("each log line starts with 'format: '", () => {
@@ -291,23 +293,24 @@ describe("applyTextCleanup — StepLogger", () => {
 		expect(lines.every((l) => l.startsWith("format: "))).toBe(true);
 	});
 
-	it("log lines are emitted in step order: reflow first, dehyphenate second, normalize last", () => {
+	it("log lines are emitted in step order: boxTable first, reflow second, normalize last", () => {
 		const lines: string[] = [];
 		applyTextCleanup(COMPOUND_DOC, allOn, (line) => lines.push(line));
-		expect(lines[0]).toMatch(/reflow/); // spec-006: reflow runs first (skipped here — allOn.reflow is false)
-		expect(lines[1]).toMatch(/dehyphenate/);
-		expect(lines[2]).toMatch(/dewrap/);
-		expect(lines[3]).toMatch(/tidyWhitespace/);
-		expect(lines[4]).toMatch(/decomposeLigatures/);
-		expect(lines[5]).toMatch(/normalizeBullets/);
-		expect(lines[6]).toMatch(/normalizeOrdered/);
-		expect(lines[7]).toMatch(/^format: normalize \d/);
+		expect(lines[0]).toMatch(/boxTable/); // spec-007: boxTable runs first
+		expect(lines[1]).toMatch(/reflow/); // spec-006: reflow next (skipped here — allOn.reflow is false)
+		expect(lines[2]).toMatch(/dehyphenate/);
+		expect(lines[3]).toMatch(/dewrap/);
+		expect(lines[4]).toMatch(/tidyWhitespace/);
+		expect(lines[5]).toMatch(/decomposeLigatures/);
+		expect(lines[6]).toMatch(/normalizeBullets/);
+		expect(lines[7]).toMatch(/normalizeOrdered/);
+		expect(lines[8]).toMatch(/^format: normalize \d/);
 	});
 
 	it("skipped step emits 'skipped (toggle off)' message", () => {
 		const lines: string[] = [];
 		applyTextCleanup(COMPOUND_DOC, { ...allOn, dehyphenate: false }, (line) => lines.push(line));
-		expect(lines).toHaveLength(8);
+		expect(lines).toHaveLength(9);
 		const dehyphenateLine = lines.find((l) => l.includes("dehyphenate"))!;
 		expect(dehyphenateLine).toContain("skipped (toggle off)");
 	});

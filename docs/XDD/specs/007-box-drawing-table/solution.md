@@ -1,7 +1,7 @@
 ---
 title: "Box-drawing table — solution design"
-status: draft
-version: "0.1"
+status: implemented
+version: "1.0"
 ---
 
 # Solution Design Document

@@ -98,6 +98,7 @@ describe("DEFAULT_SETTINGS.formatSelection", () => {
 			fromCitations: true,
 			identity: true,
 			move: true,
+			boxTable: true,
 			reflow: false,
 			dewrap: true,
 			dehyphenate: true,
