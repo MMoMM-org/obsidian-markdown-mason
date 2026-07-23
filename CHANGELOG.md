@@ -1,3 +1,9 @@
+## [0.8.0](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.7.1...0.8.0) (2026-07-23)
+
+### Features
+
+* **cleanup:** box-drawing table → Markdown table transform (spec 007) ([#26](https://github.com/MMoMM-org/obsidian-markdown-mason/issues/26)) ([de33b9c](https://github.com/MMoMM-org/obsidian-markdown-mason/commit/de33b9cb807ab396b1a4aa63e4f8416b7e238751))
+
 ## [0.7.1](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.7.0...0.7.1) (2026-07-13)
 
 ### Bug Fixes
