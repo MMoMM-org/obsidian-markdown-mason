@@ -67,6 +67,59 @@ describe("boxTable — variants", () => {
 	});
 });
 
+describe("boxTable — indented (terminal scrollback)", () => {
+	it("converts a 4-space-indented table (would be indentedCode) flush-left", () => {
+		const doc =
+			"    ┌───┬───┐\n" +
+			"    │ A │ B │\n" +
+			"    ├───┼───┤\n" +
+			"    │ 1 │ 2 │\n" +
+			"    └───┴───┘\n";
+		expect(run(doc)).toBe("| A | B |\n| --- | --- |\n| 1 | 2 |\n");
+	});
+
+	it("converts only the indented table, leaving surrounding indented prose untouched", () => {
+		const doc =
+			"  das ist eine copy:\n" +
+			"    ┌───┬───┐\n" +
+			"    │ A │ B │\n" +
+			"    ├───┼───┤\n" +
+			"    │ 1 │ 2 │\n" +
+			"    └───┴───┘\n" +
+			"\n" +
+			"    Entscheidend:\n";
+		expect(run(doc)).toBe(
+			"  das ist eine copy:\n" +
+			"\n" + // blank line inserted so the table renders
+			"| A | B |\n| --- | --- |\n| 1 | 2 |\n" +
+			"\n" +
+			"    Entscheidend:\n",
+		);
+	});
+});
+
+describe("boxTable — blank-line separation (Markdown rendering)", () => {
+	it("inserts a blank line before and after when a caption/prose hugs the frame", () => {
+		const doc =
+			"Caption:\n" +
+			"┌───┬───┐\n│ A │ B │\n├───┼───┤\n│ 1 │ 2 │\n└───┴───┘\n" +
+			"Next para.\n";
+		expect(run(doc)).toBe(
+			"Caption:\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\nNext para.\n",
+		);
+	});
+
+	it("does not add blank lines when they already exist", () => {
+		const doc =
+			"Caption:\n\n" +
+			"┌───┬───┐\n│ A │ B │\n├───┼───┤\n│ 1 │ 2 │\n└───┴───┘\n" +
+			"\nNext para.\n";
+		expect(run(doc)).toBe(
+			"Caption:\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\nNext para.\n",
+		);
+	});
+});
+
 describe("boxTable — safety", () => {
 	it("bails on a ragged grid (row column count differs from header)", () => {
 		const doc =

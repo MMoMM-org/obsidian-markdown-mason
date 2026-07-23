@@ -17,7 +17,11 @@
 //   and starts with a content row) is never matched → left untouched.
 //
 // SAFETY
-//   - Fenced/indented code and frontmatter are barriers (never scanned).
+//   - Fenced code (``` fences) and frontmatter are barriers (never scanned).
+//     Indented (4-space) blocks are NOT treated as a barrier: terminal
+//     scrollback pastes arrive indented and segmentBlocks would mis-read the
+//     whole table as `indentedCode`. The top-rule border is a strong enough
+//     signal to convert anyway; the flush-left output drops the stray indent.
 //   - A ragged grid (a content row whose column count differs from the header)
 //     is BAILED on rather than mis-aligned (spec 007 F5 / ADR-34).
 //   - Idempotent: the output has no border glyphs, so a second pass finds no
@@ -174,10 +178,13 @@ export function boxTable(ctx: OperationContext): EditPlan {
 		off += lines[i].length + 1;
 	}
 
-	// Mark lines inside code / frontmatter as protected (never part of a table).
+	// Mark lines inside fenced code / frontmatter as protected (never part of a
+	// table). `indentedCode` is deliberately NOT protected — a terminal-scrollback
+	// table pastes 4-space-indented and segmentBlocks would classify the whole
+	// grid as indentedCode, so protecting it would skip exactly the tables we want.
 	const isProtected = new Array<boolean>(lines.length).fill(false);
 	for (const b of segmentBlocks(doc)) {
-		if (b.kind === "fencedCode" || b.kind === "indentedCode" || b.kind === "frontmatter") {
+		if (b.kind === "fencedCode" || b.kind === "frontmatter") {
 			for (let l = b.startLine; l <= b.endLine && l < lines.length; l++) isProtected[l] = true;
 		}
 	}
@@ -205,7 +212,17 @@ export function boxTable(ctx: OperationContext): EditPlan {
 				const start = lineStarts[i];
 				const end = j + 1 < lines.length ? lineStarts[j + 1] : doc.length;
 				const hasTrailingNL = end > start && doc[end - 1] === "\n";
-				const insert = rendered + (hasTrailingNL ? "\n" : "");
+				// A Markdown table only renders when a blank line separates it from the
+				// surrounding text. Terminal pastes often put a caption line directly
+				// above the frame (no blank), so insert one before/after whenever the
+				// adjacent line is non-blank.
+				const needLeadingBlank = i > 0 && lines[i - 1].trim() !== "";
+				const needTrailingBlank = hasTrailingNL && j + 1 < lines.length && lines[j + 1].trim() !== "";
+				const insert =
+					(needLeadingBlank ? "\n" : "") +
+					rendered +
+					(hasTrailingNL ? "\n" : "") +
+					(needTrailingBlank ? "\n" : "");
 				if (insert !== doc.slice(start, end)) {
 					const edit: Edit = { from: start, to: end, insert };
 					plan.push(edit);
