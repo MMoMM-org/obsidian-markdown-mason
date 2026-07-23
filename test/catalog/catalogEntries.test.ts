@@ -51,10 +51,10 @@ describe("catalog/dist/index.json — CatalogIndex shape", () => {
 		expect(index.ref.length).toBeGreaterThan(0);
 	});
 
-	it("contains exactly the three curated perplexity entries", () => {
+	it("contains the three curated perplexity entries plus the command-only backtick script", () => {
 		const index = loadIndex();
 		expect(Object.keys(index.scripts).sort()).toEqual(
-			["perplexity-app", "perplexity-web", "perplexity-web-download"],
+			["backtick-code-tokens", "perplexity-app", "perplexity-web", "perplexity-web-download"],
 		);
 	});
 
@@ -96,16 +96,22 @@ describe("catalog/dist — byte-exact checksums", () => {
 // ---------------------------------------------------------------------------
 
 describe("catalog/dist — each .cjs loads as an ADR-16 envelope", () => {
-	it("loadScriptModule returns a callable run and a paste block with the correct priority", () => {
+	it("loadScriptModule returns a callable run; paste entries carry the correct priority, command-only entries carry none", () => {
 		const index = loadIndex();
 		const requireFn = makeRequireFn();
 		for (const [id, entry] of Object.entries(index.scripts)) {
 			const abs = path.join(distDir, entry.path);
 			const mod = loadScriptModule(abs, requireFn);
 			expect(typeof mod.run, `"${id}" run must be callable`).toBe("function");
-			expect(mod.paste, `"${id}" must expose a paste block`).toBeDefined();
-			expect(typeof mod.paste!.canHandle).toBe("function");
-			expect(mod.paste!.priority, `"${id}" priority must follow PRD F10`).toBe(EXPECTED_PRIORITY[id]);
+			if (id in EXPECTED_PRIORITY) {
+				expect(mod.paste, `"${id}" must expose a paste block`).toBeDefined();
+				expect(typeof mod.paste!.canHandle).toBe("function");
+				expect(mod.paste!.priority, `"${id}" priority must follow PRD F10`).toBe(EXPECTED_PRIORITY[id]);
+			} else {
+				// Command-only catalog entry (e.g. backtick-code-tokens): no paste handler,
+				// so it never participates in "Paste and format" / never auto-runs.
+				expect(mod.paste, `"${id}" is command-only and must NOT expose a paste block`).toBeUndefined();
+			}
 		}
 	});
 });

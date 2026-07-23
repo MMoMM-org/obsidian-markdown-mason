@@ -25,6 +25,14 @@
 			"path": "perplexity-web.cjs",
 			"name": "Perplexity web",
 			"description": "Convert a Perplexity web copy-paste into a structured note with cascaded headings and filed footnotes."
+		},
+		"backtick-code-tokens": {
+			"id": "backtick-code-tokens",
+			"version": 1,
+			"checksum": "sha256:db19fe552b47fe3aeed0a6e1e7a06256b66156b417f41a4f6a9ea7b52b24cc78",
+			"path": "backtick-code-tokens.cjs",
+			"name": "Backtick code tokens",
+			"description": "Backtick code-ish tokens (file:line refs, dotted identifiers, wikilinks, dataview fields) so Obsidian renders them literally. Command-only; run on a selection."
 		}
 	}
 }

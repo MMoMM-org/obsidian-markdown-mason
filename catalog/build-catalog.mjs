@@ -55,6 +55,13 @@ const ENTRIES = [
 		name: "Perplexity web",
 		description: "Convert a Perplexity web copy-paste into a structured note with cascaded headings and filed footnotes.",
 	},
+	{
+		id: "backtick-code-tokens",
+		entry: "entries/backtick-code-tokens.ts",
+		name: "Backtick code tokens",
+		description: "Backtick code-ish tokens (file:line refs, dotted identifiers, wikilinks, dataview fields) so Obsidian renders them literally. Command-only; run on a selection.",
+		version: 1, // fresh script — its own version, independent of the shared perplexity SCRIPT_VERSION
+	},
 ];
 
 // schemaVersion of the CatalogIndex document shape (CatalogIndex.schemaVersion).
@@ -104,7 +111,7 @@ async function buildEntry(entry) {
 	const bytes = readFileSync(outfile);
 	return {
 		id: entry.id,
-		version: SCRIPT_VERSION,
+		version: entry.version ?? SCRIPT_VERSION,
 		checksum: sha256Bytes(bytes),
 		path: `${entry.id}.cjs`,
 		name: entry.name,
