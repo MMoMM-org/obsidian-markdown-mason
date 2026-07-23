@@ -31,10 +31,10 @@ export default [
 			// names; teach the rule about them rather than lowercasing them (which
 			// would corrupt meaning). Keeps the rule live for genuine violations.
 			"obsidianmd/ui/sentence-case": ["warn", {
-				acronyms: ["OCR", "PDF", "ASCII"],
+				acronyms: ["OCR", "PDF", "ASCII", "CLI"],
 				// Product name plus this plugin's own command/step labels, referenced
 				// verbatim in prose and kept at their canonical casing.
-				brands: ["Mason", "Unicode", "Tidy footnotes", "Format selection", "Paste and format", "Normalize headings"],
+				brands: ["Mason", "Markdown", "Unicode", "Tidy footnotes", "Format selection", "Paste and format", "Normalize headings"],
 				// "Scripts" is both a settings-tab label (capitalised) and a common
 				// noun ("run scripts"); skip it rather than force either casing.
 				ignoreWords: ["Scripts"],

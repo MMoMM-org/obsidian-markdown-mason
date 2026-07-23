@@ -75,9 +75,10 @@ describe("resolveFormatSelectionRecipe — no formatSelection field", () => {
 		expect(resolveFormatSelectionRecipe(makeSettings()).reflow).toBe(false);
 	});
 
-	it("result has exactly twelve keys", () => {
+	it("result has exactly thirteen keys", () => {
 		const keys = Object.keys(resolveFormatSelectionRecipe(makeSettings())).sort();
 		expect(keys).toEqual([
+			"boxTable",
 			"cascade",
 			"decomposeLigatures",
 			"dehyphenate",
@@ -449,6 +450,7 @@ describe("resolveFormatSelectionRecipe — explicit all-false", () => {
 		fromCitations: false,
 		identity: false,
 		move: false,
+		boxTable: false,
 		reflow: false,
 		dewrap: false,
 		dehyphenate: false,

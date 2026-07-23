@@ -79,6 +79,7 @@ import {
 import { normalizeUrl } from "./url";
 import { dewrap, dehyphenate, decomposeLigatures, tidyWhitespace } from "./cleanup";
 import { reflow } from "./reflow";
+import { boxTable } from "./boxTable";
 import { normalizeBullets, normalizeOrdered } from "./lists";
 
 // ---------------------------------------------------------------------------
@@ -186,6 +187,7 @@ export interface MasonApi {
 		normalizeUrl(raw: string): string;
 	};
 	cleanup: {
+		boxTable(ctx: OperationContext): EditPlan;
 		reflow(ctx: OperationContext): EditPlan;
 		dewrap(ctx: OperationContext): EditPlan;
 		dehyphenate(ctx: OperationContext): EditPlan;
@@ -232,6 +234,7 @@ function buildEntries(): RegistryEntry[] {
 		buildIdentityEntry(),
 		buildMoveEntry(),
 		buildNormalizeUrlEntry(),
+		buildBoxTableEntry(),
 		buildReflowEntry(),
 		buildDewrapEntry(),
 		buildDehyphenateEntry(),
@@ -353,6 +356,17 @@ function buildNormalizeUrlEntry(): RegistryEntry {
 	};
 }
 
+function buildBoxTableEntry(): RegistryEntry {
+	return {
+		id: "cleanup.boxTable",
+		apiName: "mason.cleanup.boxTable",
+		command: { name: "Convert box-drawing table to Markdown" },
+		run(ctx: OperationContext): EditPlan {
+			return boxTable(ctx);
+		},
+	};
+}
+
 function buildReflowEntry(): RegistryEntry {
 	return {
 		id: "cleanup.reflow",
@@ -467,6 +481,9 @@ function buildApi(entries: RegistryEntry[]): MasonApi {
 			},
 		},
 		cleanup: {
+			boxTable(ctx: OperationContext): EditPlan {
+				return boxTable(ctx);
+			},
 			reflow(ctx: OperationContext): EditPlan {
 				return reflow(ctx);
 			},

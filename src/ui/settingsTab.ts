@@ -513,6 +513,19 @@ export class MasonSettingTab extends PluginSettingTab {
 		new Setting(containerEl).setName("Cleanup").setHeading();
 
 		new Setting(containerEl)
+			.setName("Convert box-drawing table")
+			.setDesc("Turn terminal/CLI tables drawn with box characters (┌─┬─┐ … │ … or ASCII +--+) into proper Markdown tables. On by default; detection is unambiguous and runs before reflow and dewrap.")
+			.addToggle((t) => {
+				t.setValue(recipe.boxTable).onChange(async (v) => {
+					if (!this._plugin.settings.formatSelection) {
+						this._plugin.settings.formatSelection = {};
+					}
+					this._plugin.settings.formatSelection.boxTable = v;
+					await this._plugin.saveSettings();
+				});
+			});
+
+		new Setting(containerEl)
 			.setName("Reflow wrapped text")
 			.setDesc("Rebuild hard-wrapped OCR/slide captures (no blank lines between blocks) into paragraphs and bullet lists. Off by default; enable for screen-capture text. Runs before dehyphenate and dewrap.")
 			.addToggle((t) => {

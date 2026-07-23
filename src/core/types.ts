@@ -65,6 +65,7 @@ export const DEFAULT_SETTINGS: MasonSettings = {
 	lastSeenVersion: "",
 	formatSelection: {
 		cascade: true, normalize: true, fromCitations: true, identity: true, move: true,
+		boxTable: true, // spec-007 — box-drawing → Markdown table, default on
 		reflow: false, // spec-006 — opt-in OCR/slide reflow, default off
 		dewrap: true, dehyphenate: true, decomposeLigatures: true,
 		tidyWhitespace: true, normalizeBullets: true, normalizeOrdered: true,
