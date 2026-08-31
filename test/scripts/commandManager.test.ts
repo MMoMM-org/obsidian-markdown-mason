@@ -6,7 +6,8 @@
 // Behaviour under test:
 //   REGISTRATION
 //   (a) toggling command ON registers a command with no default hotkeys
-//   (b) toggling command OFF unregisters it (removeCommand called with full prefixed id)
+//   (b) toggling command OFF unregisters it (removeCommand called with the LOCAL id)
+//   (b2) unregister never passes an already-prefixed id (regression: issue #25)
 //   (c) re-registering (already registered) removes first, then adds (idempotent)
 //   (d) unregister on unknown id is a no-op (no crash)
 //
@@ -42,10 +43,10 @@ import type { CommandManagerInjection } from "../../src/scripts/commandManager";
 
 interface MockPluginSurface {
 	addCommand(spec: CommandSpec): CommandSpec;
-	removeCommand(fullId: string): void;
-	pluginId: string;
+	removeCommand(id: string): void;
 	// test helpers
 	_commands: CommandSpec[];
+	/** Ids exactly as passed to removeCommand (local ids — see (b)). */
 	_removedIds: string[];
 }
 
@@ -53,13 +54,16 @@ function makePluginSurface(pluginId = "markdown-mason"): MockPluginSurface {
 	const commands: CommandSpec[] = [];
 	const removed: string[] = [];
 	return {
-		pluginId,
 		addCommand(spec: CommandSpec): CommandSpec {
 			commands.push(spec);
 			return spec;
 		},
-		removeCommand(fullId: string): void {
-			removed.push(fullId);
+		// Models the real Plugin.removeCommand, which auto-prefixes the id it is
+		// given (just like addCommand). Deleting by the argument verbatim would
+		// accept a pre-prefixed id and hide the double-prefix bug (issue #25).
+		removeCommand(id: string): void {
+			removed.push(id);
+			const fullId = `${pluginId}:${id}`;
 			const idx = commands.findIndex(c => `${pluginId}:${c.id}` === fullId);
 			if (idx !== -1) {
 				commands.splice(idx, 1);
@@ -160,7 +164,7 @@ describe("CommandManager — registration", () => {
 		expect(commands[0].hotkeys).toBeUndefined();
 	});
 
-	it("(b) unregister calls removeCommand with the full prefixed id", () => {
+	it("(b) unregister calls removeCommand with the local id and drops it from the registry", () => {
 		const surface = makePluginSurface("markdown-mason");
 		const store = makeStore({ "my-script": makeRecord({ command: true }) });
 		const manager = new CommandManager(surface, store, DEFAULT_SETTINGS);
@@ -169,8 +173,23 @@ describe("CommandManager — registration", () => {
 		manager.register("my-script", "My Script", script, makeStateResolver({ kind: "Active" }));
 		manager.unregister("my-script");
 
-		expect(surface._removedIds).toContain("markdown-mason:my-script");
+		expect(surface._removedIds).toContain("my-script");
 		expect(surface._commands).toHaveLength(0);
+	});
+
+	it("(b2) unregister never passes an already-prefixed id (regression: issue #25)", () => {
+		const surface = makePluginSurface("markdown-mason");
+		const store = makeStore({ "my-script": makeRecord({ command: true }) });
+		const manager = new CommandManager(surface, store, DEFAULT_SETTINGS);
+		const script = makeScript();
+
+		manager.register("my-script", "My Script", script, makeStateResolver({ kind: "Active" }));
+		manager.unregister("my-script");
+
+		// Obsidian prefixes the id itself; handing it a prefixed one double-prefixes
+		// to "markdown-mason:markdown-mason:my-script", matches nothing, and fails
+		// silently — the command would linger in the palette until a reload.
+		expect(surface._removedIds).not.toContain("markdown-mason:my-script");
 	});
 
 	it("(c) re-registering an already-registered id removes then re-adds (idempotent)", () => {
@@ -183,7 +202,7 @@ describe("CommandManager — registration", () => {
 		manager.register("my-script", "My Script (updated)", script, makeStateResolver({ kind: "Active" }));
 
 		// Should have removed before re-adding
-		expect(surface._removedIds).toContain("markdown-mason:my-script");
+		expect(surface._removedIds).toContain("my-script");
 		// Only 1 command should be active
 		expect(surface._commands).toHaveLength(1);
 		expect(surface._commands[0].name).toBe("My Script (updated)");
@@ -215,7 +234,7 @@ describe("CommandManager — cleanup on disable/remove", () => {
 		await manager.disableScript("my-script");
 
 		// Command should be removed
-		expect(surface._removedIds).toContain("markdown-mason:my-script");
+		expect(surface._removedIds).toContain("my-script");
 
 		// store.setRecord should have been called with command=false, preserving other fields
 		expect(store.setRecord).toHaveBeenCalledWith(
@@ -240,7 +259,7 @@ describe("CommandManager — cleanup on disable/remove", () => {
 		await manager.removeScript("my-script");
 
 		// Command should be removed
-		expect(surface._removedIds).toContain("markdown-mason:my-script");
+		expect(surface._removedIds).toContain("my-script");
 
 		// store.setRecord should have been called with command=false
 		expect(store.setRecord).toHaveBeenCalledWith(
@@ -258,7 +277,7 @@ describe("CommandManager — cleanup on disable/remove", () => {
 		// Never called register — command was never registered
 		await expect(manager.disableScript("my-script")).resolves.not.toThrow();
 		// No removeCommand called for this id
-		expect(surface._removedIds).not.toContain("markdown-mason:my-script");
+		expect(surface._removedIds).not.toContain("my-script");
 	});
 });
 

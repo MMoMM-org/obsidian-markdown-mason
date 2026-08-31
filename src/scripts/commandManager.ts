@@ -10,7 +10,7 @@
 //
 // The class is fully dependency-injected (no Plugin import) so it is unit-testable
 // without a live Obsidian runtime. The minimal surface needed from the plugin is:
-//   { addCommand(spec), removeCommand(fullId), pluginId }
+//   { addCommand(spec), removeCommand(id) }
 //
 // FAIL-SAFE (ADR-17)
 // ──────────────────
@@ -24,7 +24,10 @@
 // COMMAND ID CONVENTION
 // ─────────────────────
 // Obsidian auto-prefixes command ids with `${manifest.id}:` when stored internally.
-// The full id used by removeCommand is therefore `${pluginId}:${localId}`.
+// BOTH Plugin.addCommand and Plugin.removeCommand do that prefixing themselves, so
+// both take the LOCAL id. Passing an already-prefixed id to removeCommand yields
+// `${pluginId}:${pluginId}:${localId}`, which matches nothing and fails SILENTLY —
+// the command survives in the palette until Obsidian reloads (issue #25).
 //
 // ADR-17: command state rides data.json (ScriptRecord.command). On disable/remove
 // the manager persists record.command=false through store.setRecord, preserving all
@@ -66,10 +69,11 @@ export interface PluginCommandSurface {
 		name: string;
 		editorCallback: (editor: unknown) => void | Promise<void>;
 	}): unknown;
-	/** Unregister a command using the FULL prefixed id (e.g. "markdown-mason:my-id"). */
-	removeCommand(fullId: string): void;
-	/** The plugin's manifest id (used to construct full command ids). */
-	pluginId: string;
+	/**
+	 * Unregister a command using its LOCAL id (e.g. "my-id") — Obsidian prefixes it
+	 * with the manifest id internally, exactly as addCommand does.
+	 */
+	removeCommand(id: string): void;
 }
 
 /** A function that derives the current lifecycle state of a script by id. */
@@ -202,8 +206,8 @@ export class CommandManager {
 
 	/** Remove the command from Obsidian and our tracking set. */
 	private _doRemoveCommand(id: string): void {
-		const fullId = `${this._surface.pluginId}:${id}`;
-		this._surface.removeCommand(fullId);
+		// Local id — Obsidian auto-prefixes (see COMMAND ID CONVENTION above).
+		this._surface.removeCommand(id);
 		this._registered.delete(id);
 	}
 

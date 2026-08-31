@@ -193,8 +193,7 @@ export class MarkdownMasonPlugin extends Plugin {
 		this.commandManager = new CommandManager(
 			{
 				addCommand: (spec) => this.addCommand(spec),
-				removeCommand: (fullId: string) => this.removeCommand(fullId),
-				pluginId: this.manifest.id,
+				removeCommand: (id: string) => this.removeCommand(id),
 			},
 			this.store,
 			this.settings,

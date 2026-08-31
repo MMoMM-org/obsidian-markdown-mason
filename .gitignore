@@ -61,3 +61,6 @@ test/mason/
 
 # Session checkpoint (context-bridge)
 .claude/.session-checkpoint.md
+/claude-docker/
+/claude-docker-home/
+/begin-code.sh
