@@ -1,3 +1,9 @@
+## [0.8.1](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.8.0...0.8.1) (2026-08-31)
+
+### Bug Fixes
+
+* **scripts:** pass local id to removeCommand so script commands actually unregister ([#35](https://github.com/MMoMM-org/obsidian-markdown-mason/issues/35)) ([3bfde5a](https://github.com/MMoMM-org/obsidian-markdown-mason/commit/3bfde5ab862b1b07256647b494b232a324395346)), closes [#25](https://github.com/MMoMM-org/obsidian-markdown-mason/issues/25)
+
 ## [0.8.0](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.7.1...0.8.0) (2026-07-23)
 
 ### Features
