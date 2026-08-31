@@ -587,13 +587,17 @@ export class Plugin {
 	}
 
 	/**
-	 * Removes a previously-registered command by its FULL prefixed id
-	 * (e.g. "markdown-mason:my-command"). Matches on either the prefixed id OR
-	 * the raw id to stay forward-compatible with both calling conventions.
+	 * Removes a previously-registered command by its LOCAL id (e.g. "my-command").
+	 *
+	 * Mirrors the real Plugin.removeCommand, which auto-prefixes the given id with
+	 * the manifest id exactly as addCommand does. Modelling the prefixing (rather
+	 * than deleting by the argument verbatim) is deliberate: a lenient mock that
+	 * accepts BOTH conventions hides double-prefix bugs like issue #25.
 	 */
-	removeCommand(fullId: string): void {
+	removeCommand(id: string): void {
+		const fullId = `${this.manifest.id}:${id}`;
 		const idx = this._capturedCommands.findIndex(
-			c => `${this.manifest.id}:${c.id}` === fullId || c.id === fullId,
+			c => `${this.manifest.id}:${c.id}` === fullId,
 		);
 		if (idx !== -1) {
 			this._capturedCommands.splice(idx, 1);
