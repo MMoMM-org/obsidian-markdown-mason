@@ -22,6 +22,7 @@ export default [
 				__MASON_DEV__: "readonly",
 				__MASON_RAW_BASE__: "readonly",
 				__MASON_PINNED_REF__: "readonly",
+				__MASON_RELEASE_NOTES__: "readonly",
 			},
 		},
 		rules: {

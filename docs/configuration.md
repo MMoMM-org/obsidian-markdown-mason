@@ -96,7 +96,7 @@ value, and what it controls.
 | `debugLogging` | `boolean` | `false` | Enable verbose console.debug traces. Off by default. |
 | `resourcesName` | `string` | `"## Resources"` | Heading where *Tidy / Move footnotes* collects footnote definitions. Carries an optional ATX level prefix (e.g. `## Resources`, `### Resources`) so you choose the heading level. An existing section with this name is reused at whatever level it already has. |
 | `numericOnly` | `boolean` | `true` | When true (default), only numeric footnote references are processed; alpha markers such as [^A] are excluded. Optional to preserve backward compatibility with persisted data and existing test fixtures that do not include this field. Treated as `true` when absent. KNOWN LIMITATION (v0.1): this setting persists and threads into OperationContext.settings, but numericOnly=false is not yet honoured by the core footnote logic. The core already behaves as if numericOnly is always true (ExistingRef is defined as numeric-only; see types.ts). Wiring numericOnly=false to allow alpha markers is a planned follow-up. |
-| `showUpdateSplash` | `boolean` | `true` | When true (default), a one-shot "what's new" splash is shown the first time the plugin runs after its version changes. Surfaces how many curated scripts have a newer catalog version waiting (scripts ride pinned plugin releases, so a plugin update is the only moment a script version can change). User-gated via General settings and the in-splash toggle. Optional for backward-compat with persisted data predating this field; treated as `true` when absent. |
+| `showUpdateSplash` | `boolean` | `true` | When true (default), a one-shot "what's new" splash is shown the first time the plugin runs after its version changes. It lists the features that release brought (taken from the release's changelog entry at build time — features only, so a bug-fix-only release shows none) and how many curated scripts have a newer catalog version waiting (scripts ride pinned plugin releases, so a plugin update is the only moment a script version can change). User-gated via General settings and the in-splash toggle. Optional for backward-compat with persisted data predating this field; treated as `true` when absent. |
 | `pasteListContext` | `boolean` | `true` | When true (default), pasted content is fitted to the list item the cursor is in: each paragraph becomes its own item, the blank lines that separated them are dropped, and a pasted sub-list nests under the item that introduces it. Applies to *Paste and format* and to *Paste and run scripts* when no script recognises the clipboard. Provably a no-op when the cursor is not inside a list, hence on by default. Optional for backward-compat with persisted data predating this field; treated as `true` when absent. |
 | `lastSeenVersion` | `string` | `""` | The plugin version (manifest.version) last shown to the user. Compared against the current manifest.version on load to detect an update (mirrors Excalidraw's `previousRelease`). Empty string means "never recorded" → fresh install, which is recorded silently without a splash. Optional for backward-compat; treated as `""` when absent. |
 
@@ -131,8 +131,9 @@ The defaults are chosen to work out of the box; a fresh install needs no configu
 - **`numericOnly`** (`true`) — leave enabled. Disabling it is a planned feature: the setting
   persists, but alpha footnote markers such as `[^A]` are not yet honoured by the core, so
   turning it off currently has no effect.
-- **`showUpdateSplash`** (`true`) — leave enabled to get a summary of waiting script updates
-  after a plugin upgrade; turn it off if you prefer no post-update splash.
+- **`showUpdateSplash`** (`true`) — leave enabled to see what a new version brought and a
+  summary of waiting script updates after a plugin upgrade; turn it off if you prefer no
+  post-update splash.
 - **`pasteListContext`** (`true`) — leave enabled. It only ever acts when the cursor is
   inside a list item; turn it off if you want a paste to land exactly as copied even
   mid-list.

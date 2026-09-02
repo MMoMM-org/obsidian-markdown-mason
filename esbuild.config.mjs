@@ -1,8 +1,29 @@
 import esbuild from "esbuild";
 import { builtinModules } from "node:module";
 import { copyFileSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { extractFeatureNotes } from "./scripts/releaseNotes.mjs";
 
 const isProd = process.argv[2] === "production";
+
+/**
+ * spec-009: the "What's new" bullets baked into the bundle.
+ *
+ * @semantic-release/changelog writes CHANGELOG.md BEFORE the exec step that runs
+ * `node version-bump.mjs && npm run build`, so a release build already sees the
+ * finished entry for the version it is stamping — hence reading manifest.version
+ * rather than trusting whatever happens to sit at the top of the file.
+ *
+ * Every failure path returns []: the splash falls back to its pre-009 content
+ * and the build never fails over release notes.
+ */
+function readReleaseNotes() {
+	try {
+		const version = JSON.parse(readFileSync("manifest.json", "utf-8")).version;
+		return extractFeatureNotes(readFileSync("CHANGELOG.md", "utf-8"), version);
+	} catch {
+		return [];
+	}
+}
 
 /**
  * Dev test-vault plugin directory — build files are COPIED here on every build.
@@ -68,6 +89,8 @@ const context = await esbuild.context({
 		__MASON_DEV__: isProd ? "false" : "true",
 		__MASON_RAW_BASE__: JSON.stringify(process.env.MASON_RAW_BASE ?? ""),
 		__MASON_PINNED_REF__: JSON.stringify(process.env.MASON_PINNED_REF ?? ""),
+		// A JSON string array is also valid JS source, so esbuild can substitute it directly.
+		__MASON_RELEASE_NOTES__: JSON.stringify(readReleaseNotes()),
 	},
 	external: [
 		"obsidian",

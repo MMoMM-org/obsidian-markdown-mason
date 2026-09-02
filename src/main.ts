@@ -16,6 +16,7 @@ import { buildPasteChain } from "./scripts/paste/buildPasteChain";
 import type { LoadedScript, PasteHandler } from "./scripts/paste/buildPasteChain";
 import { MasonSettingTab } from "./ui/settingsTab";
 import { UpdateSplashModal } from "./ui/updateSplashModal";
+import { RELEASE_NOTES } from "./core/releaseNotes";
 import { CommandManager } from "./scripts/commandManager";
 import { RunScriptModal } from "./ui/runScriptModal";
 import type { CatalogSource } from "./scripts/catalog/catalogSource";
@@ -411,6 +412,7 @@ export class MarkdownMasonPlugin extends Plugin {
 			new UpdateSplashModal(this.app, {
 				version: current,
 				updatableCount: count,
+				notes: RELEASE_NOTES,
 				showSplash: this.settings.showUpdateSplash ?? true,
 				onToggleSplash: async (value) => {
 					this.settings.showUpdateSplash = value;
