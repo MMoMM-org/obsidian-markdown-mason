@@ -9,9 +9,11 @@
 // it fires once per version bump and tells the user, up front, how many scripts
 // now have updates waiting — with a one-click route to review and re-consent.
 //
-// Content is a DYNAMIC SUMMARY only (no maintained changelog): the updatable
-// count plus a route into the Scripts tab. Detection + version persistence live
-// in main.ts (_maybeShowUpdateSplash); this modal is presentation only.
+// Content is DERIVED, never hand-maintained (spec 009): the "### Features"
+// bullets of this version's CHANGELOG.md section, baked in at build time, plus
+// the updatable-script count and a route into the Scripts tab. Detection +
+// version persistence live in main.ts (_maybeShowUpdateSplash); this modal is
+// presentation only.
 //
 // COMMUNITY COMPLIANCE
 // ────────────────────
@@ -32,6 +34,12 @@ export interface UpdateSplashOptions {
 	version: string;
 	/** Number of curated scripts whose catalog version now exceeds the consented one. */
 	updatableCount: number;
+	/**
+	 * Feature bullets for this version (spec 009), already cleaned of link syntax
+	 * and SHAs. Empty for a release with no features — the "What's new" section is
+	 * then omitted entirely and the dialog matches its pre-009 form.
+	 */
+	notes: readonly string[];
 	/** Current value of settings.showUpdateSplash — reflected by the in-splash toggle. */
 	showSplash: boolean;
 	/** Persist a change to the "show update notes" preference. */
@@ -48,6 +56,7 @@ export interface UpdateSplashOptions {
  * One-shot post-update splash.
  *
  * Title:   "Markdown Mason — updated to v{version}"
+ * Notes:   "What's new" + one list item per feature bullet (omitted when empty).
  * Summary: "{N} script(s) have updates available…" (or an all-clear line at 0).
  * Toggle:  "Show update notes on new versions" (mirrors settings.showUpdateSplash).
  * Actions: "Open scripts settings" (only when there are updates) + "Close".
@@ -68,6 +77,20 @@ export class UpdateSplashModal extends Modal {
 		contentEl.createEl("h2", {
 			text: `Markdown Mason — updated to v${this._opts.version}`,
 		});
+
+		// spec-009: what the update actually brought, above the script summary —
+		// it is the reason the user is reading this dialog. Omitted when there are
+		// no features in this release, leaving the pre-009 content untouched.
+		if (this._opts.notes.length > 0) {
+			contentEl.createEl("h3", {
+				text: "What's new",
+				cls: "mason-update-splash-notes-heading",
+			});
+			const list = contentEl.createEl("ul", { cls: "mason-update-splash-notes" });
+			for (const note of this._opts.notes) {
+				list.createEl("li", { text: note });
+			}
+		}
 
 		const count = this._opts.updatableCount;
 		contentEl.createEl("p", {

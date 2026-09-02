@@ -461,3 +461,76 @@ describe("T2.2(c) — clipboard guards", () => {
 		).toBe(true);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// (e) spec-008 — fit the formatted paste to the cursor's list context
+// ---------------------------------------------------------------------------
+
+/**
+ * Editor stub whose document and caret are real: the caret sits at the END of
+ * `doc`, which is where these fixtures put the open list item.
+ */
+function makeListEditor(doc: string): Editor {
+	const lines = doc.split("\n");
+	const editor = makeEditor() as unknown as Record<string, unknown>;
+	editor.getValue = () => doc;
+	editor.getCursor = () => ({ line: lines.length - 1, ch: lines[lines.length - 1].length });
+	editor.posToOffset = (pos: { line: number; ch: number }) => {
+		let offset = 0;
+		for (let i = 0; i < pos.line; i++) offset += lines[i].length + 1;
+		return offset + pos.ch;
+	};
+	return editor as unknown as Editor;
+}
+
+describe("T2.2(e) — spec-008 list-context fit", () => {
+	beforeEach(() => clearNoticeLog());
+
+	async function pasteInto(doc: string, raw: string, listContext?: boolean): Promise<string> {
+		const plugin = await makePluginAndFireLayout();
+		if (listContext !== undefined) plugin.settings.pasteListContext = listContext;
+
+		const inserted: string[] = [];
+		plugin._commandInjection = {
+			clipboardReader: async () => raw,
+			replaceSelection: (t: string) => inserted.push(t),
+		};
+
+		const cmd = findCommand(plugin, "mason.pasteAndFormatText");
+		await cmd!.editorCallback(makeListEditor(doc));
+
+		expect(inserted).toHaveLength(1);
+		return inserted[0]!;
+	}
+
+	it("dewraps AND turns each paragraph into its own item", async () => {
+		const raw = "One part\nof a paragraph.\n\nA second\nparagraph here.";
+		expect(await pasteInto("# Note\n\n- ", raw)).toBe(
+			"One part of a paragraph.\n- A second paragraph here.",
+		);
+	});
+
+	it("nests a pasted list under the lead-in paragraph", async () => {
+		const raw = "Key features:\n\n* alpha\n* beta";
+		// normalizeBullets turns "*" into "-" before the fit runs.
+		expect(await pasteInto("# Note\n\n- ", raw)).toBe("Key features:\n\t- alpha\n\t- beta");
+	});
+
+	it("continues an ordered list the caret is in", async () => {
+		expect(await pasteInto("# Note\n\n2. ", "One.\n\nTwo.")).toBe("One.\n3. Two.");
+	});
+
+	it("leaves a non-list paste byte-for-byte unchanged", async () => {
+		const raw = "One part\nof a paragraph.\n\nA second\nparagraph here.";
+		expect(await pasteInto("# Note\n\n", raw)).toBe(
+			"One part of a paragraph.\n\nA second paragraph here.",
+		);
+	});
+
+	it("is skipped when pasteListContext is off", async () => {
+		const raw = "One part\nof a paragraph.\n\nA second\nparagraph here.";
+		expect(await pasteInto("# Note\n\n- ", raw, false)).toBe(
+			"One part of a paragraph.\n\nA second paragraph here.",
+		);
+	});
+});

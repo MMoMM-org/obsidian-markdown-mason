@@ -4,6 +4,7 @@ import { DEFAULT_SETTINGS, type MasonSettings } from "./core/types";
 import type { EditPlan } from "./core/types";
 import { registerCommands, countNoticeMessage } from "./commands";
 import { pasteContext } from "./sources/paste";
+import { fitPasteToList } from "./core/fitToList";
 import { applyEditPlan } from "./sources/apply";
 import { buildScriptContext, buildGatedLogger } from "./scripts/context";
 import { ScriptRunner } from "./scripts/runner";
@@ -15,6 +16,7 @@ import { buildPasteChain } from "./scripts/paste/buildPasteChain";
 import type { LoadedScript, PasteHandler } from "./scripts/paste/buildPasteChain";
 import { MasonSettingTab } from "./ui/settingsTab";
 import { UpdateSplashModal } from "./ui/updateSplashModal";
+import { RELEASE_NOTES } from "./core/releaseNotes";
 import { CommandManager } from "./scripts/commandManager";
 import { RunScriptModal } from "./ui/runScriptModal";
 import type { CatalogSource } from "./scripts/catalog/catalogSource";
@@ -410,6 +412,7 @@ export class MarkdownMasonPlugin extends Plugin {
 			new UpdateSplashModal(this.app, {
 				version: current,
 				updatableCount: count,
+				notes: RELEASE_NOTES,
 				showSplash: this.settings.showUpdateSplash ?? true,
 				onToggleSplash: async (value) => {
 					this.settings.showUpdateSplash = value;
@@ -752,6 +755,17 @@ async function runPasteCommand(
 		notify: (msg: string): void => { new Notice(msg); },
 	};
 
+	// spec-008 ADR-38: "no recognized format" is a NORMAL outcome, so it gets the
+	// list-context fit. effects.rawFallback (used by ScriptRunner after a script
+	// THROWS) deliberately stays a verbatim paste — safe degradation must stay dumb.
+	const pasteAsIs = (): void => {
+		editor.replaceSelection(
+			(settings.pasteListContext ?? true)
+				? fitPasteToList(rawText, op.doc, op.cursor)
+				: rawText,
+		);
+	};
+
 	// 6. Build runner — policy "enabled" bypasses the per-checksum consent gate because the
 	//    paste chain contains ONLY scripts that are already enabled AND verified: consent
 	//    and the canHandle match-gate are enforced upstream (store/lifecycle + buildPasteChain)
@@ -797,7 +811,7 @@ async function runPasteCommand(
 		// No recognized format: insert the raw clipboard text at cursor (plain paste semantics)
 		// and inform the user. This avoids a silent no-op when the user invokes "Paste and run scripts"
 		// on text that no enabled script recognizes.
-		effects.rawFallback();
+		pasteAsIs();
 		effects.notify("Mason: no recognized format — pasted as-is.");
 		return;
 	}
@@ -820,7 +834,7 @@ async function runPasteCommand(
 	} else if (outcome.kind === "noop") {
 		// A matched handler that nonetheless produced no plan (e.g. canHandle was broad
 		// but parse found nothing) → plain paste + inform the user.
-		effects.rawFallback();
+		pasteAsIs();
 		effects.notify("Mason: no recognized format — pasted as-is.");
 	}
 	// failed/blocked: runner already called rawFallback + notify on failure;
@@ -871,7 +885,17 @@ async function runPasteAndFormatCommand(
 	// G4: prepend "\n" so a snippet whose first line is "---" is NOT classified
 	// as frontmatter by segmentBlocks (only line 0 triggers the frontmatter guard).
 	// Strip exactly the one leading "\n" from the result — never trim().
-	const formatted = applyTextCleanup("\n" + rawText, recipe, log).replace(/^\n/, "");
+	const cleaned = applyTextCleanup("\n" + rawText, recipe, log).replace(/^\n/, "");
+
+	// 3b. spec-008: fit the cleaned text to the list item the cursor is in.
+	// A no-op (identity) whenever the cursor is not inside a list.
+	const op = pasteContext(editor, settings, rawText);
+	const formatted = (settings.pasteListContext ?? true)
+		? fitPasteToList(cleaned, op.doc, op.cursor)
+		: cleaned;
+	// Prefix "paste:" not "format:" — fitToList is a paste-time context adaptation,
+	// not one of the cleanup steps the "format:" lines enumerate.
+	log?.(`paste: fitToList ${formatted === cleaned ? "no list context" : "applied"}`);
 
 	// 4. Single insert → one undo step
 	const insert = injection?.replaceSelection ?? ((t: string) => editor.replaceSelection(t));

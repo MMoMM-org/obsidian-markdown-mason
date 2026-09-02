@@ -276,6 +276,22 @@ export class MasonSettingTab extends PluginSettingTab {
 						await this._plugin.saveSettings();
 					});
 			});
+
+		new Setting(containerEl)
+			.setName("Fit paste to list context")
+			.setDesc(
+				"When pasting inside a list item, turn each pasted paragraph into its own " +
+				"item, drop the blank lines between them, and nest a pasted sub-list under " +
+				"the item that introduces it. Has no effect outside a list.",
+			)
+			.addToggle((toggle) => {
+				toggle
+					.setValue(this._plugin.settings.pasteListContext ?? true)
+					.onChange(async (value) => {
+						this._plugin.settings.pasteListContext = value;
+						await this._plugin.saveSettings();
+					});
+			});
 	}
 
 	// -------------------------------------------------------------------------

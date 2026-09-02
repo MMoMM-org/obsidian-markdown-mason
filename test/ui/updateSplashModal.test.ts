@@ -35,6 +35,7 @@ const { UpdateSplashModal } = await import("../../src/ui/updateSplashModal");
 interface SplashOverrides {
 	version?: string;
 	updatableCount?: number;
+	notes?: readonly string[];
 	showSplash?: boolean;
 	onToggleSplash?: (v: boolean) => void;
 	onOpenScripts?: () => void;
@@ -51,6 +52,7 @@ function openModal(overrides: SplashOverrides = {}): {
 	const modal = new UpdateSplashModal(new App() as never, {
 		version: overrides.version ?? "0.3.0",
 		updatableCount: overrides.updatableCount ?? 2,
+		notes: overrides.notes ?? [],
 		showSplash: overrides.showSplash ?? true,
 		onToggleSplash,
 		onOpenScripts,
@@ -117,6 +119,32 @@ describe("UpdateSplashModal", () => {
 		// Flipping the toggle off persists the new preference.
 		toggleRow!.toggleControls[0].setValue(false);
 		expect(onToggleSplash).toHaveBeenCalledWith(false);
+	});
+
+	// spec-009 — release notes
+	it("renders a 'What's new' list, one item per note, above the summary", () => {
+		const { content } = openModal({
+			notes: ["cleanup: box-drawing table → Markdown table transform", "paste: fit paste to list context"],
+		});
+		const text = content._collectText();
+		expect(text).toContain("What's new");
+		expect(text).toContain("cleanup: box-drawing table → Markdown table transform");
+		expect(text).toContain("paste: fit paste to list context");
+		// The notes must precede the script summary — they are why the user is here.
+		expect(text.indexOf("What's new")).toBeLessThan(text.indexOf("updates available"));
+	});
+
+	it("renders no notes section when there are none (pre-009 dialog)", () => {
+		const withoutNotes = openModal({ notes: [] }).content._collectText();
+		expect(withoutNotes).not.toContain("What's new");
+	});
+
+	it("shows notes even when no script updates are waiting", () => {
+		const text = openModal({ updatableCount: 0, notes: ["paste: fit paste to list context"] })
+			.content._collectText();
+		expect(text).toContain("What's new");
+		expect(text).toContain("paste: fit paste to list context");
+		expect(text).toContain("No script updates right now");
 	});
 
 	it("onClose empties the content element", () => {
