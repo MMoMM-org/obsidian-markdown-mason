@@ -305,6 +305,11 @@ export function fitToList(text: string, ctx: ListContext, indentUnit: string): s
 	// lines and verbatim blocks (code, tables) are re-anchored.
 	let contentIndent = ctx.indent + " ".repeat(ctx.prefixLen - ctx.indent.length);
 	let prevKind: BlockKind | null = null;
+	// The context's marker gap is mirrored onto generated items as a STYLE, not
+	// as a defect: a tab stays a tab, anything else collapses to a single space.
+	// Copying "-  " verbatim would replicate an accidental double space onto every
+	// pasted item — and tidyWhitespace would collapse that run anyway.
+	const gap = /\t/.test(ctx.gap) ? "\t" : " ";
 
 	const push = (prefix: string, body: string): void => {
 		if (firstPrefixLen < 0) firstPrefixLen = prefix.length;
@@ -328,7 +333,7 @@ export function fitToList(text: string, ctx: ListContext, indentUnit: string): s
 		const core = ctx.ordinal !== null
 			? `${String(ordinal++)}${ctx.terminator ?? "."}`
 			: ctx.glyph;
-		const prefix = ctx.indent + core + ctx.gap + (ctx.task ? "[ ] " : "");
+		const prefix = ctx.indent + core + gap + (ctx.task ? "[ ] " : "");
 		push(prefix, text);
 		contentIndent = ctx.indent + " ".repeat(prefix.length - ctx.indent.length);
 	};

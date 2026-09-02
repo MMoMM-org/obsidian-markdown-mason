@@ -149,6 +149,16 @@ describe("fitPasteToList — paragraphs become items", () => {
 		expect(paste("- [x] |", "One.\n\nTwo.")).toBe("- [x] One.\n- [ ] Two.");
 	});
 
+	it("collapses an accidental double space after the caret's marker", () => {
+		// The note's own "-  " is the user's text and stays; the items Mason
+		// GENERATES use a single space rather than replicating the typo.
+		expect(paste("-  |", "One.\n\nTwo.")).toBe("-  One.\n- Two.");
+	});
+
+	it("keeps a tab gap a tab", () => {
+		expect(paste("-\t|", "One.\n\nTwo.")).toBe("-\tOne.\n-\tTwo.");
+	});
+
 	it("does not double a checkbox the clipboard already carries", () => {
 		expect(paste("- [ ] |", "[ ] One.\n\n[ ] Two.")).toBe("- [ ] One.\n- [ ] Two.");
 	});
