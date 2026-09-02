@@ -1,3 +1,14 @@
+## [0.9.0](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.8.1...0.9.0) (2026-09-02)
+
+### Features
+
+* **paste:** fit pasted content to the cursor's list context ([1bf6097](https://github.com/MMoMM-org/obsidian-markdown-mason/commit/1bf6097eecb57c997bbcfb495cb07780e1f2bffc))
+* **ui:** show release notes in the update splash ([201121e](https://github.com/MMoMM-org/obsidian-markdown-mason/commit/201121e8b0118976f449e7e559669b2dd116c7d2))
+
+### Bug Fixes
+
+* **paste:** collapse an accidental double space after the caret's marker ([c031564](https://github.com/MMoMM-org/obsidian-markdown-mason/commit/c0315644dc9759deb8b6f3ac1205559e729c9cf6))
+
 ## [0.8.1](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.8.0...0.8.1) (2026-08-31)
 
 ### Bug Fixes
