@@ -1,6 +1,6 @@
 ---
 title: "Paste into a list — fit pasted content to the cursor's list context"
-status: draft
+status: implemented
 version: "1.0"
 ---
 
@@ -153,9 +153,12 @@ A `listItem` run in the pasted content is emitted:
 Relative depth **inside** the pasted list is preserved: an item that was two
 levels deep in the clipboard stays two levels below its own list's root.
 
-Pasted list items keep **their own** markers (already normalised to `-` by
-`normalizeBullets`, or their own ordinals) — only the paragraph-derived items in
-F2 adopt the context marker.
+Markers follow the level, not the origin: everything emitted **at the context
+level** — paragraph-derived items *and* pasted items that stay siblings of the
+cursor's item — adopts the context marker family, so a pasted ordered list cannot
+collide with the bullet list the user is writing. Everything **below** the context
+level keeps the author's own markers (already normalised to `-` by
+`normalizeBullets`, or their own ordinals).
 
 ### F4 — Continue the current line, don't restart it
 
@@ -272,7 +275,11 @@ Given pasteListContext is off
   leave duplicate ordinals below the insertion point. Running "Format selection"
   (`normalizeOrdered`) fixes it; auto-renumbering the rest of the note is out of
   scope because it would edit outside the inserted range.
-- Lazy continuation lines (a marker-less line that Markdown still folds into the
-  preceding item) are classified `paragraph` by `segmentBlocks()` and therefore
-  become their own item. Post-`dewrap` this is the desired reading in practice;
-  it is not separately detected.
+- A hard-wrapped item body (a marker-less continuation line) is classified
+  `paragraph` by `segmentBlocks()`. It is recovered as item content — not turned
+  into a new item — when it is fully indented and directly follows a list item.
+  A continuation line with **no** indent at all is indistinguishable from a new
+  paragraph and does become its own item.
+- A checkbox is a property of the level, not of the pasted line: pasting
+  `- [x] done` into a `- [ ] ` context yields an **unchecked** item. Carrying the
+  checked state over would silently mark work done that the user only quoted.

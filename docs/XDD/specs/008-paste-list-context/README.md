@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-09-02 |
-| **Current Phase** | SDD complete — ready to implement |
+| **Current Phase** | Implemented (unmerged; manual Obsidian smoke pending) |
 | **Last Updated** | 2026-09-02 |
 
 ## Documents
@@ -30,6 +30,10 @@
 | 2026-09-02 | Rank-based relative depth, no fixed indent step | Clipboard sources mix 2-space, 4-space and tab indents. Ranking the distinct observed widths preserves the author's hierarchy without guessing a unit (ADR-39). |
 | 2026-09-02 | Indent unit sniffed from the note, then the clipboard, then `\t` | Obsidian's `tabSize`/`useTab` live behind config APIs that `eslint-plugin-obsidianmd` flags as unsupported. Reading the vault's actual habit out of the note itself needs no API at all (F5). |
 | 2026-09-02 | Never renumber or re-indent the surrounding list | Editing outside the inserted range would break the single-`replaceSelection` / single-undo property. Pasting into the middle of an ordered list can therefore leave duplicate ordinals below; "Format selection" (`normalizeOrdered`) is the cure (ADR-42). |
+| 2026-09-02 | The marker follows the LEVEL, not the origin (ADR-41 refined during implementation) | Pasted top-level items become siblings of the cursor's item, and the first one has its own marker stripped by F4 — leaving authored markers there would emit `- a` above `2. b`. Context level adopts the context marker; everything below keeps the author's own. |
+| 2026-09-02 | An indented paragraph right after a list item is item BODY, not a new item | `segmentBlocks()` classifies a hard-wrapped item continuation as `paragraph`; without this rule every wrapped PDF list item would be split into two bullets. Requires full indentation + adjacency, so a genuine new paragraph is unaffected. |
+| 2026-09-02 | In a task context the generated prefix OWNS the checkbox | Pasting `- [ ] a` into `- [ ] ` doubled the box — invisibly on line 1, where the note supplies the prefix. The pasted box is now consumed, and a pasted `[x]` never carries its checked state over. |
+| 2026-09-02 | Implementation complete | `src/core/fitToList.ts` (`detectListContext` / `resolveIndentUnit` / `fitToList` / `fitPasteToList`) + `MasonSettings.pasteListContext` (optional, defaults true) + General settings toggle + wiring in `runPasteAndFormatCommand` and the two "no recognized format" branches of `runPasteCommand`. 47 new unit tests in `test/core/fitToList.test.ts`, 5 command tests in `main.pasteAndFormat.test.ts`, 3 in `scripts/integration.test.ts`. Full suite 1705 green; lint and typecheck clean. Docs updated (README, usage, configuration, commands-reference). |
 
 ## Context
 

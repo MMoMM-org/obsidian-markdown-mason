@@ -918,6 +918,54 @@ describe("T3.3 — data-driven paste chain dispatch via mason.pasteAndRunScripts
 		expect(notices.length).toBe(1);
 		expect(notices[0]).toMatch(/no recognized format/);
 	});
+
+	// spec-008 ADR-38: the no-match branch is a NORMAL outcome and gets the list
+	// fit; the rawFallback after a script THROWS stays a verbatim paste.
+	it("no handler + cursor in a list → clipboard is fitted to the list context", async () => {
+		const plugin = await makePluginAndFireLayout();
+		const editor = makePasteEditorStub("# Note\n\n- ");
+
+		plugin._commandInjection = {
+			clipboardReader: async () => "One.\n\nTwo.",
+			pasteScripts: [],
+		};
+
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
+		await cmd.editorCallback(editor);
+
+		expect(editor._replaced).toEqual(["One.\n- Two."]);
+	});
+
+	it("no handler + pasteListContext off → verbatim paste", async () => {
+		const plugin = await makePluginAndFireLayout();
+		plugin.settings.pasteListContext = false;
+		const editor = makePasteEditorStub("# Note\n\n- ");
+
+		plugin._commandInjection = {
+			clipboardReader: async () => "One.\n\nTwo.",
+			pasteScripts: [],
+		};
+
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
+		await cmd.editorCallback(editor);
+
+		expect(editor._replaced).toEqual(["One.\n\nTwo."]);
+	});
+
+	it("a script that THROWS still falls back to a verbatim paste (ADR-38)", async () => {
+		const plugin = await makePluginAndFireLayout();
+		const editor = makePasteEditorStub("# Note\n\n- ");
+
+		plugin._commandInjection = {
+			clipboardReader: async () => "One.\n\nTwo.",
+			failScript: true,
+		};
+
+		const cmd = findCommand(plugin, "mason.pasteAndRunScripts");
+		await cmd.editorCallback(editor);
+
+		expect(editor._replaced, "safe degradation must stay a plain paste").toEqual(["One.\n\nTwo."]);
+	});
 });
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 ---
 title: "Paste into a list — solution design"
-status: draft
+status: implemented
 version: "1.0"
 ---
 
@@ -88,9 +88,12 @@ Given the cleaned `text`, `ctx` and `indentUnit`:
    in the source and never depends on a fixed step size (ADR-39).
 3. Walk the blocks in order, appending to `out: string[]`:
    - `blank` → **skipped** (F2).
-   - `paragraph` → one item line: `indent + marker() + gap + firstLine`; any
-     further physical lines of the same paragraph become continuation lines at
-     the content column. Sets `sawParagraphItem = true`.
+   - `paragraph`, fully indented and directly after a `listItem` block → that
+     item's hard-wrapped body: emitted at the current content column, not turned
+     into a new item.
+   - `paragraph` otherwise → one item line via `emitContextItem()`; any further
+     physical lines of the same paragraph become continuation lines at the
+     content column. Sets `sawParagraphItem = true`.
    - `listItem` → for each marker line, `indent + indentUnit.repeat(nestOffset +
      depth) + <the line's own marker and text>`, where `nestOffset` is `1` when
      `sawParagraphItem` is true, else `0` (F3). Marker-less continuation lines
@@ -98,9 +101,13 @@ Given the cleaned `text`, `ctx` and `indentUnit`:
    - anything else (`fencedCode`, `tableRow`, `atxHeading`, `blockquote`,
      `thematicBreak`) → emitted verbatim, shifted to the current item's content
      column (F6).
-4. `marker()` yields the context marker family: the bullet glyph, or
-   `String(ordinal++) + terminator` for an ordered context, each followed by
-   `"[ ] "` when `ctx.task`.
+4. `emitContextItem(body)` yields the context marker family: the bullet glyph,
+   or `String(ordinal++) + terminator` for an ordered context, each followed by
+   `"[ ] "` when `ctx.task`. In a task context a checkbox the pasted line already
+   carries is **consumed** rather than repeated — the generated prefix owns the
+   box. This matters most on line 1, where the generated prefix is stripped and
+   the note's own `- [ ] ` supplies it, so a duplicate would be invisible here
+   and visible in the note.
 5. **First-line splice (F4).** Record the prefix length generated for `out[0]`
    and strip exactly that many characters from it; join with `\n`.
 6. `fitPasteToList` prepends `" "` when `ctx.beforeCursor` is non-empty and does
@@ -176,11 +183,15 @@ express (ADR-40).
   EditPlan and a second meaning for `ctx.input`. A "Fit selection to list
   context" command is listed as *Could* in the PRD and can be added later
   without touching this module.
-- **ADR-41 — paragraphs adopt the context marker, pasted items keep their own.**
-  A paragraph has no marker of its own, so it must borrow one; a pasted list item
-  already carries authored intent (ordered vs. bullet vs. checkbox) that must
-  survive the paste. `normalizeBullets` has already unified stray glyphs before
-  this step runs.
+- **ADR-41 — the marker follows the level, not the origin.** Everything emitted
+  at the **context level** adopts the context marker; everything **below** it keeps
+  the author's own. A paragraph has no marker and must borrow one either way. For a
+  pasted list the deciding fact is that its top-level items become *siblings of the
+  item the cursor is in* — a pasted `1.`/`2.` list left as-is next to the user's
+  `-` list produces two interleaved numbering schemes on one level, and the first
+  item is worse still: its own marker is stripped (F4) and replaced by the note's,
+  so it would read `- a` above `2. b`. Below the context level no such collision
+  exists, so authored intent (ordered vs. bullet vs. checkbox) survives intact.
 - **ADR-42 — never touch the surrounding list.** `fitToList` returns only the
   inserted string. Renumbering the ordered items *below* the insertion point
   would mean editing outside the paste range, breaking the single-`replaceSelection`
@@ -202,8 +213,10 @@ express (ADR-40).
   a tab source;
 - indent unit resolved from the note, from the clipboard, and the `\t` fallback;
 - fenced code inside the pasted content → emitted verbatim, never re-marked;
-- idempotency: running `fitPasteToList` on its own output with the same context
-  produces the same string;
+- idempotency over the resulting **item block** (the fitted string is not a
+  standalone document — line 1 deliberately lacks its marker — so the block a user
+  would copy again is the meaningful unit);
+- a task list pasted into a task context round-trips without doubling the box;
 - `pasteListContext: false` → identity at the command level.
 
 Command-level coverage rides the existing `CommandInjection` seams

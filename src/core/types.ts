@@ -55,6 +55,21 @@ export interface MasonSettings {
 	 * resolveFormatSelectionRecipe(). See spec 003 and spec 004.
 	 */
 	formatSelection?: Partial<FormatSelectionRecipe>;
+	/**
+	 * When true (default), pasted content is fitted to the list item the cursor is
+	 * in: each paragraph becomes its own item, the blank lines that separated them
+	 * are dropped, and a pasted sub-list nests under the item that introduces it.
+	 *
+	 * Deliberately NOT a FormatSelectionRecipe key: the recipe drives the Format
+	 * selection command's text-cleanup steps, whereas this is a paste-time context
+	 * adaptation (the sibling of headings.cascade, not of dewrap). See spec 008.
+	 *
+	 * Provably a no-op when the cursor is not inside a list, hence default on.
+	 *
+	 * Optional for backward-compat with persisted data predating this field;
+	 * treated as `true` when absent.
+	 */
+	pasteListContext?: boolean;
 }
 
 export const DEFAULT_SETTINGS: MasonSettings = {
@@ -63,6 +78,7 @@ export const DEFAULT_SETTINGS: MasonSettings = {
 	numericOnly: true,
 	showUpdateSplash: true,
 	lastSeenVersion: "",
+	pasteListContext: true, // spec-008 — fit paste to the cursor's list context
 	formatSelection: {
 		cascade: true, normalize: true, fromCitations: true, identity: true, move: true,
 		boxTable: true, // spec-007 — box-drawing → Markdown table, default on

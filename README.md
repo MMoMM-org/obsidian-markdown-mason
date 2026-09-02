@@ -29,6 +29,9 @@ notes.
 - **Paste and format** — paste the clipboard, then apply Mason's cleanup recipe to *just the
   pasted text* (7 steps: dewrap, dehyphenate, decompose ligatures and punctuation, tidy
   whitespace, normalize bullets and ordered lists, normalize headings) as a single undo step.
+- **Fit paste to list context** — paste inside a list item and the text joins the list:
+  one item per pasted paragraph, no leftover blank lines, and a pasted sub-list nested
+  under the paragraph that introduces it. Outside a list, nothing changes.
 - **Format selection** — run the full 11-step recipe on a selection or the whole note (the 7
   cleanup steps plus cascade headings and the three footnote steps).
 - **Run a script on a selection** — reformat text already in your note *in place*, or run a
@@ -65,7 +68,7 @@ Three commands cover the paste-and-format workflows. Pick by what you need:
 | Command | id | What it runs | Scope |
 |---|---|---|---|
 | **Paste and run scripts** | `mason.pasteAndRunScripts` | Runs your enabled paste-converter **scripts** on the clipboard (e.g. a Perplexity copy → structured Markdown) and inserts the result at the cursor; falls back to a plain paste if no script matches or one errors. | Clipboard → cursor |
-| **Paste and format** | `mason.pasteAndFormatText` | Pastes the clipboard, then applies the **7-step** cleanup recipe scoped to just the pasted text — 4 cleanup steps, 2 list steps, and normalize headings — as one undo. No scripts, no cascade, no footnote steps. | Clipboard → pasted text |
+| **Paste and format** | `mason.pasteAndFormatText` | Pastes the clipboard, then applies the **7-step** cleanup recipe scoped to just the pasted text — 4 cleanup steps, 2 list steps, and normalize headings — as one undo. Paste inside a list item and the result joins that list: one item per paragraph, sub-lists nested. No scripts, no cascade, no footnote steps. | Clipboard → pasted text |
 | **Format selection** | `preset.formatSelection` | Runs the full **11-step** recipe on the selection (or whole note) — the same 7 cleanup steps plus cascade headings and the 3 footnote steps. | Selection + whole note |
 
 The crisp distinction: **Paste and run scripts** is about converter scripts; **Paste and

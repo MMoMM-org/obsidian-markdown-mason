@@ -29,6 +29,12 @@ Out of the box, no scripts are active. Enable one, then run it:
   script matches or one errors, Mason falls back to a plain paste so you never lose the
   content; an empty clipboard just shows a notice. *(This command was previously named "Paste
   and format".)*
+- **Paste into a list.** Put the cursor in a list item (an open `- `, or the end of an
+  item you have typed) and paste: each pasted paragraph becomes its own item, the blank
+  lines between them go away, and a list that came with the text nests one level under the
+  paragraph introducing it. Ordered lists keep counting; task lists stay task lists.
+  Outside a list item nothing changes. Switch it off under **Settings → General → Fit
+  paste to list context**.
 - **Paste and format (clean up pasted text).** Run **Markdown Mason: Paste and format** to
   paste the clipboard and immediately tidy *just the pasted text* — no script required. It
   applies a 7-step cleanup recipe as a single undo: dewrap paragraphs, dehyphenate words,
