@@ -118,10 +118,17 @@ it is today. `createEl` only; `styles.css` gains list styling beside the existin
   hand-written file is always written for an unknown version and drifts silently.
   Deriving from `CHANGELOG.md` cannot drift: the notes and the version are produced
   by the same release run.
-- **ADR-45 — features only.** The splash answers "what can I do now". Bug fixes in
+- **ADR-45 — features only.** ~~The splash answers "what can I do now". Bug fixes in
   a modal interrupt read as a defect list, and a patch-only release should not
   produce a dialog with nothing to celebrate — it produces no notes and falls back
-  to the old content.
+  to the old content.~~ **SUPERSEDED by ADR-48 (2026-09-07).**
+- **ADR-48 — both groups, features first.** Release 0.9.1 was fix-only, so the
+  splash fired with a title, a script summary and nothing in between: the release a
+  reader is *most* likely to be asking "what changed?" about was the one that
+  answered least. The parser now returns `{ features, fixes }` and the splash labels
+  them "What's new" and "Fixed", each omitted when empty. The `MAX_NOTES` budget is
+  spent on features first, so ADR-45's priority survives as an ordering rule rather
+  than as an exclusion.
 - **ADR-46 — the parser lives in `scripts/`, not `src/`.** It runs at build time
   under node, never in the plugin. Putting it in `src/` would bundle dead code into
   every user's `main.js`. `scripts/check-manifest.mjs` set this precedent, tests

@@ -5,7 +5,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 // @ts-expect-error — plain .mjs build-time module, no type declarations
-import { extractFeatureNotes, cleanBullet } from "../scripts/releaseNotes.mjs";
+import { extractReleaseNotes, cleanBullet } from "../scripts/releaseNotes.mjs";
 
 const CHANGELOG = `## [0.8.1](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.8.0...0.8.1) (2026-08-31)
 
@@ -56,47 +56,64 @@ describe("cleanBullet", () => {
 	});
 });
 
-describe("extractFeatureNotes", () => {
+describe("extractReleaseNotes", () => {
+	const EMPTY = { features: [], fixes: [] };
+
 	it("reads the topmost section by default", () => {
-		// 0.8.1 is topmost and has no Features subsection.
-		expect(extractFeatureNotes(CHANGELOG)).toEqual([]);
+		// 0.8.1 is topmost: no Features subsection, one Bug Fixes bullet.
+		expect(extractReleaseNotes(CHANGELOG)).toEqual({
+			features: [],
+			fixes: ["scripts: pass local id to removeCommand so script commands actually unregister"],
+		});
 	});
 
 	it("reads a '##' section by version", () => {
-		expect(extractFeatureNotes(CHANGELOG, "0.8.0")).toEqual([
-			"cleanup: box-drawing table → Markdown table transform (spec 007)",
-		]);
+		expect(extractReleaseNotes(CHANGELOG, "0.8.0")).toEqual({
+			features: ["cleanup: box-drawing table → Markdown table transform (spec 007)"],
+			fixes: [],
+		});
 	});
 
 	it("reads a '#' major section and every bullet in it", () => {
-		expect(extractFeatureNotes(CHANGELOG, "0.6.0")).toEqual([
-			"scripts: vetted-repo script library with full lifecycle",
-			"ui: settings tab segments",
-		]);
+		expect(extractReleaseNotes(CHANGELOG, "0.6.0")).toEqual({
+			features: [
+				"scripts: vetted-repo script library with full lifecycle",
+				"ui: settings tab segments",
+			],
+			fixes: ["release: drop spurious issue links"],
+		});
 	});
 
-	it("stops at the next '###' subsection — no bug fixes leak in", () => {
-		const notes = extractFeatureNotes(CHANGELOG, "0.6.0") as string[];
-		expect(notes.some((n) => n.includes("drop spurious issue links"))).toBe(false);
+	it("keeps the two subsections apart — neither leaks into the other", () => {
+		const notes = extractReleaseNotes(CHANGELOG, "0.6.0") as { features: string[]; fixes: string[] };
+		expect(notes.features.some((n) => n.includes("drop spurious issue links"))).toBe(false);
+		expect(notes.fixes.some((n) => n.includes("settings tab segments"))).toBe(false);
 	});
 
 	it("falls back to the topmost section for an unknown version", () => {
-		expect(extractFeatureNotes(CHANGELOG, "9.9.9")).toEqual([]);
-		expect(extractFeatureNotes(CHANGELOG, "9.9.9")).toEqual(extractFeatureNotes(CHANGELOG));
+		expect(extractReleaseNotes(CHANGELOG, "9.9.9")).toEqual(extractReleaseNotes(CHANGELOG));
 	});
 
-	it("returns [] for empty, malformed and non-string input, never throwing", () => {
-		expect(extractFeatureNotes("")).toEqual([]);
-		expect(extractFeatureNotes("no headings at all\njust prose\n")).toEqual([]);
-		expect(extractFeatureNotes("## [1.0.0](u) (d)\n\n### Features\n\n")).toEqual([]);
-		expect(extractFeatureNotes(undefined as unknown as string)).toEqual([]);
-		expect(extractFeatureNotes(null as unknown as string)).toEqual([]);
+	it("returns both groups empty for empty, malformed and non-string input, never throwing", () => {
+		expect(extractReleaseNotes("")).toEqual(EMPTY);
+		expect(extractReleaseNotes("no headings at all\njust prose\n")).toEqual(EMPTY);
+		expect(extractReleaseNotes("## [1.0.0](u) (d)\n\n### Features\n\n")).toEqual(EMPTY);
+		expect(extractReleaseNotes(undefined as unknown as string)).toEqual(EMPTY);
+		expect(extractReleaseNotes(null as unknown as string)).toEqual(EMPTY);
 	});
 
 	it("parses the repository's real CHANGELOG.md without throwing", () => {
 		const real = readFileSync(resolve(__dirname, "../CHANGELOG.md"), "utf-8");
-		const notes = extractFeatureNotes(real, "0.8.0") as string[];
-		expect(notes).toEqual(["cleanup: box-drawing table → Markdown table transform (spec 007)"]);
-		expect(() => extractFeatureNotes(real)).not.toThrow();
+		expect(extractReleaseNotes(real, "0.8.0")).toEqual({
+			features: ["cleanup: box-drawing table → Markdown table transform (spec 007)"],
+			fixes: [],
+		});
+		// 0.9.1 is the fix-only release that motivated reading Bug Fixes at all.
+		const v091 = extractReleaseNotes(real, "0.9.1") as { features: string[]; fixes: string[] };
+		expect(v091.features).toEqual([]);
+		expect(v091.fixes).toEqual([
+			"reflow: keep list nesting instead of flattening every item to level 0",
+		]);
+		expect(() => extractReleaseNotes(real)).not.toThrow();
 	});
 });

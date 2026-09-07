@@ -33,9 +33,9 @@ declare const __MASON_PINNED_REF__: string | undefined;
 /**
  * Build-time release notes (spec 009).
  *
- * Injected by esbuild `define` from the "### Features" bullets of the current
- * version's CHANGELOG.md section. Undefined under any runner that defines no
- * globals (vitest) — src/core/releaseNotes.ts guards the read with `typeof`.
- * NEVER read this directly; import RELEASE_NOTES instead.
+ * Injected by esbuild `define` from the "### Features" and "### Bug Fixes"
+ * bullets of the current version's CHANGELOG.md section. Undefined under any
+ * runner that defines no globals (vitest) — src/core/releaseNotes.ts guards the
+ * read with `typeof`. NEVER read this directly; import RELEASE_NOTES instead.
  */
-declare const __MASON_RELEASE_NOTES__: string[] | undefined;
+declare const __MASON_RELEASE_NOTES__: { features: string[]; fixes: string[] } | undefined;

@@ -12,8 +12,10 @@
 //
 //   * **scripts:** pass local id to removeCommand … ([#35](…)) ([3bfde5a](…)), closes [#25](…)
 //
-// Only "### Features" is read (ADR-45): the splash answers "what can I do now",
-// not "what was repaired".
+// Both "### Features" and "### Bug Fixes" are read, kept as separate groups so
+// the splash can label them ("What's new" / "Fixed"). ADR-45 originally read
+// features only; a fix-only release then showed an empty splash, which is the
+// release the reader is most likely to be asking "what changed?" about.
 
 /** Matches a version section heading: "# [1.2.3](url) (date)" or "## 1.2.3 (date)". */
 const SECTION_RE = /^#{1,2}\s+\[?([0-9][^\]\s)]*)\]?/gm;
@@ -41,15 +43,47 @@ export function cleanBullet(line) {
 }
 
 /**
- * The "### Features" bullets of one changelog section, cleaned for a reader.
+ * The bullets of one "### <heading>" subsection, cleaned for a reader.
+ *
+ * `heading` is always one of our own literals ("Features", "Bug Fixes"), never
+ * caller input, so interpolating it into the pattern is safe.
+ *
+ * @param {string} section  One version section of the changelog.
+ * @param {string} heading  Subsection heading text.
+ * @returns {string[]}      Cleaned bullets; [] when the subsection is absent or empty.
+ */
+function subsectionBullets(section, heading) {
+	const at = new RegExp(`^###\\s+${heading}\\s*$`, "m").exec(section);
+	if (at === null) return [];
+
+	const bodyStart = at.index + at[0].length;
+	const nextSub = /^###\s+/m.exec(section.slice(bodyStart));
+	const body = nextSub === null
+		? section.slice(bodyStart)
+		: section.slice(bodyStart, bodyStart + nextSub.index);
+
+	return body
+		.split("\n")
+		.filter((l) => /^\s*[*-]\s+\S/.test(l))
+		.map(cleanBullet)
+		.filter((l) => l !== "");
+}
+
+/**
+ * @typedef {{ features: string[], fixes: string[] }} ReleaseNotes
+ */
+
+/**
+ * The feature and fix bullets of one changelog section, cleaned for a reader.
  *
  * @param {string} changelog  Full CHANGELOG.md text.
  * @param {string} [version]  Section to read; the topmost section when omitted
  *                            or when no section matches it.
- * @returns {string[]}        Cleaned bullets; [] for anything missing or malformed.
+ * @returns {ReleaseNotes}    Both groups; each [] for anything missing or malformed.
  */
-export function extractFeatureNotes(changelog, version) {
-	if (typeof changelog !== "string" || changelog === "") return [];
+export function extractReleaseNotes(changelog, version) {
+	const empty = { features: [], fixes: [] };
+	if (typeof changelog !== "string" || changelog === "") return empty;
 
 	// 1. Locate every version section.
 	const starts = [];
@@ -58,7 +92,7 @@ export function extractFeatureNotes(changelog, version) {
 	while ((m = SECTION_RE.exec(changelog)) !== null) {
 		starts.push({ version: m[1], index: m.index });
 	}
-	if (starts.length === 0) return [];
+	if (starts.length === 0) return empty;
 
 	// 2. Pick the requested section, else the topmost one.
 	let picked = starts[0];
@@ -68,19 +102,10 @@ export function extractFeatureNotes(changelog, version) {
 	const end = starts.find((s) => s.index > picked.index)?.index ?? changelog.length;
 	const section = changelog.slice(picked.index, end);
 
-	// 3. The "### Features" subsection, up to the next "###" or the section end.
-	const featuresAt = /^###\s+Features\s*$/m.exec(section);
-	if (featuresAt === null) return [];
-	const bodyStart = featuresAt.index + featuresAt[0].length;
-	const nextSub = /^###\s+/m.exec(section.slice(bodyStart));
-	const body = nextSub === null
-		? section.slice(bodyStart)
-		: section.slice(bodyStart, bodyStart + nextSub.index);
-
-	// 4. Clean each bullet, dropping anything that cleans away to nothing.
-	return body
-		.split("\n")
-		.filter((l) => /^\s*[*-]\s+\S/.test(l))
-		.map(cleanBullet)
-		.filter((l) => l !== "");
+	// 3. Each subsection, cleaned. Order is fixed here, not taken from the file:
+	// the splash always leads with features.
+	return {
+		features: subsectionBullets(section, "Features"),
+		fixes: subsectionBullets(section, "Bug Fixes"),
+	};
 }

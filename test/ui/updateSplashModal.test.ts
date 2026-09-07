@@ -14,6 +14,7 @@ import {
 	clearCapturedSettings,
 	MockHTMLElement,
 } from "../__mocks__/obsidian";
+import type { ReleaseNotes } from "../../src/core/releaseNotes";
 
 interface MockToggleControl {
 	_value: boolean;
@@ -35,7 +36,7 @@ const { UpdateSplashModal } = await import("../../src/ui/updateSplashModal");
 interface SplashOverrides {
 	version?: string;
 	updatableCount?: number;
-	notes?: readonly string[];
+	notes?: ReleaseNotes;
 	showSplash?: boolean;
 	onToggleSplash?: (v: boolean) => void;
 	onOpenScripts?: () => void;
@@ -52,7 +53,7 @@ function openModal(overrides: SplashOverrides = {}): {
 	const modal = new UpdateSplashModal(new App() as never, {
 		version: overrides.version ?? "0.3.0",
 		updatableCount: overrides.updatableCount ?? 2,
-		notes: overrides.notes ?? [],
+		notes: overrides.notes ?? { features: [], fixes: [] },
 		showSplash: overrides.showSplash ?? true,
 		onToggleSplash,
 		onOpenScripts,
@@ -124,7 +125,13 @@ describe("UpdateSplashModal", () => {
 	// spec-009 — release notes
 	it("renders a 'What's new' list, one item per note, above the summary", () => {
 		const { content } = openModal({
-			notes: ["cleanup: box-drawing table → Markdown table transform", "paste: fit paste to list context"],
+			notes: {
+				features: [
+					"cleanup: box-drawing table → Markdown table transform",
+					"paste: fit paste to list context",
+				],
+				fixes: [],
+			},
 		});
 		const text = content._collectText();
 		expect(text).toContain("What's new");
@@ -135,13 +142,42 @@ describe("UpdateSplashModal", () => {
 	});
 
 	it("renders no notes section when there are none (pre-009 dialog)", () => {
-		const withoutNotes = openModal({ notes: [] }).content._collectText();
+		const withoutNotes = openModal({ notes: { features: [], fixes: [] } }).content._collectText();
 		expect(withoutNotes).not.toContain("What's new");
+		expect(withoutNotes).not.toContain("Fixed");
+	});
+
+	it("renders a 'Fixed' list for a fix-only release", () => {
+		// The 0.9.1 case: no features at all, so the splash would otherwise be bare.
+		const text = openModal({
+			notes: { features: [], fixes: ["reflow: keep list nesting instead of flattening every item"] },
+		}).content._collectText();
+		expect(text).toContain("Fixed");
+		expect(text).toContain("reflow: keep list nesting instead of flattening every item");
+		expect(text).not.toContain("What's new");
+		expect(text.indexOf("Fixed")).toBeLessThan(text.indexOf("updates available"));
+	});
+
+	it("renders both groups with features first", () => {
+		const text = openModal({
+			notes: { features: ["ui: a new thing"], fixes: ["paste: a repaired thing"] },
+		}).content._collectText();
+		expect(text.indexOf("What's new")).toBeLessThan(text.indexOf("Fixed"));
+		expect(text.indexOf("ui: a new thing")).toBeLessThan(text.indexOf("paste: a repaired thing"));
+	});
+
+	it("omits the heading of an empty group rather than showing a bare heading", () => {
+		const text = openModal({ notes: { features: ["ui: a new thing"], fixes: [] } })
+			.content._collectText();
+		expect(text).toContain("What's new");
+		expect(text).not.toContain("Fixed");
 	});
 
 	it("shows notes even when no script updates are waiting", () => {
-		const text = openModal({ updatableCount: 0, notes: ["paste: fit paste to list context"] })
-			.content._collectText();
+		const text = openModal({
+			updatableCount: 0,
+			notes: { features: ["paste: fit paste to list context"], fixes: [] },
+		}).content._collectText();
 		expect(text).toContain("What's new");
 		expect(text).toContain("paste: fit paste to list context");
 		expect(text).toContain("No script updates right now");

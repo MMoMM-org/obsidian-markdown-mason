@@ -9,9 +9,9 @@
 // it fires once per version bump and tells the user, up front, how many scripts
 // now have updates waiting — with a one-click route to review and re-consent.
 //
-// Content is DERIVED, never hand-maintained (spec 009): the "### Features"
-// bullets of this version's CHANGELOG.md section, baked in at build time, plus
-// the updatable-script count and a route into the Scripts tab. Detection +
+// Content is DERIVED, never hand-maintained (spec 009): the "### Features" and
+// "### Bug Fixes" bullets of this version's CHANGELOG.md section, baked in at
+// build time, plus the updatable-script count and a route into the Scripts tab. Detection +
 // version persistence live in main.ts (_maybeShowUpdateSplash); this modal is
 // presentation only.
 //
@@ -24,6 +24,7 @@
 
 import { Modal, Setting } from "obsidian";
 import type { App } from "obsidian";
+import type { ReleaseNotes } from "../core/releaseNotes";
 
 // ---------------------------------------------------------------------------
 // Options
@@ -35,11 +36,11 @@ export interface UpdateSplashOptions {
 	/** Number of curated scripts whose catalog version now exceeds the consented one. */
 	updatableCount: number;
 	/**
-	 * Feature bullets for this version (spec 009), already cleaned of link syntax
-	 * and SHAs. Empty for a release with no features — the "What's new" section is
-	 * then omitted entirely and the dialog matches its pre-009 form.
+	 * Feature and fix bullets for this version (spec 009), already cleaned of link
+	 * syntax and SHAs. Each group is omitted when empty; with both empty the
+	 * dialog matches its pre-009 form.
 	 */
-	notes: readonly string[];
+	notes: ReleaseNotes;
 	/** Current value of settings.showUpdateSplash — reflected by the in-splash toggle. */
 	showSplash: boolean;
 	/** Persist a change to the "show update notes" preference. */
@@ -56,7 +57,8 @@ export interface UpdateSplashOptions {
  * One-shot post-update splash.
  *
  * Title:   "Markdown Mason — updated to v{version}"
- * Notes:   "What's new" + one list item per feature bullet (omitted when empty).
+ * Notes:   "What's new" (features) then "Fixed" (bug fixes), one list item per
+ *          bullet; each group omitted when empty.
  * Summary: "{N} script(s) have updates available…" (or an all-clear line at 0).
  * Toggle:  "Show update notes on new versions" (mirrors settings.showUpdateSplash).
  * Actions: "Open scripts settings" (only when there are updates) + "Close".
@@ -79,18 +81,10 @@ export class UpdateSplashModal extends Modal {
 		});
 
 		// spec-009: what the update actually brought, above the script summary —
-		// it is the reason the user is reading this dialog. Omitted when there are
-		// no features in this release, leaving the pre-009 content untouched.
-		if (this._opts.notes.length > 0) {
-			contentEl.createEl("h3", {
-				text: "What's new",
-				cls: "mason-update-splash-notes-heading",
-			});
-			const list = contentEl.createEl("ul", { cls: "mason-update-splash-notes" });
-			for (const note of this._opts.notes) {
-				list.createEl("li", { text: note });
-			}
-		}
+		// it is the reason the user is reading this dialog. Features lead; fixes
+		// follow under their own heading. With neither, the pre-009 content stands.
+		this._renderNotes("What's new", this._opts.notes.features);
+		this._renderNotes("Fixed", this._opts.notes.fixes);
 
 		const count = this._opts.updatableCount;
 		contentEl.createEl("p", {
@@ -130,6 +124,22 @@ export class UpdateSplashModal extends Modal {
 		close.addEventListener("click", () => {
 			this.close();
 		});
+	}
+
+	/**
+	 * One labelled bullet group, or nothing at all when the group is empty —
+	 * a bare heading over no items reads as a rendering bug.
+	 */
+	private _renderNotes(heading: string, notes: readonly string[]): void {
+		if (notes.length === 0) return;
+		this.contentEl.createEl("h3", {
+			text: heading,
+			cls: "mason-update-splash-notes-heading",
+		});
+		const list = this.contentEl.createEl("ul", { cls: "mason-update-splash-notes" });
+		for (const note of notes) {
+			list.createEl("li", { text: note });
+		}
 	}
 
 	onClose(): void {
