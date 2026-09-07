@@ -1,3 +1,9 @@
+## [0.9.2](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.9.1...0.9.2) (2026-09-07)
+
+### Bug Fixes
+
+* **ui:** show fix bullets in the update splash, not features only ([e20a742](https://github.com/MMoMM-org/obsidian-markdown-mason/commit/e20a742323be103e7e3b6ab4c02db9d22c1d2636))
+
 ## [0.9.1](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.9.0...0.9.1) (2026-09-07)
 
 ### Bug Fixes
