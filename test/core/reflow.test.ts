@@ -80,6 +80,96 @@ describe("reflow — list mode", () => {
 });
 
 // ============================================================
+// Nesting — a marker line keeps its level (indent-rank, ADR-39)
+// ============================================================
+
+describe("reflow — nesting", () => {
+	it("leaves an already-tidy nested list untouched (the spec-009 paste regression)", () => {
+		// Verbatim shape of the clipboard that reported the bug: 4-space steps,
+		// three levels, no blank lines. reflow used to flatten all of it to level 0.
+		const doc = [
+			"- Phases A-D: Architecture Definition",
+			"    - Phase A (Vision):",
+			"        - Define scope, constraints, stakeholders, and business context.",
+			"    - Phases B-D (Architecture Design):",
+			"        - Assess capability maturity, identify gaps, define future-state architecture.",
+			"- Phases E-F: Planning & Execution",
+			"    - Phase E (Opportunities & Solutions):",
+			"        - Select target solutions, refine models, and define transition architectures.",
+		].join("\n") + "\n";
+		expect(reflow(makeCtx(doc))).toHaveLength(0);
+		expect(run(doc)).toBe(doc);
+	});
+
+	it("keeps two-space nesting at two spaces", () => {
+		const doc = "- top\n  - child\n- top two\n";
+		expect(reflow(makeCtx(doc))).toHaveLength(0);
+	});
+
+	it("keeps NBSP nesting (clipboard text from a web page or Word)", () => {
+		const doc = "- top\n\u00a0\u00a0- child\n- top two\n";
+		expect(reflow(makeCtx(doc))).toHaveLength(0);
+	});
+
+	it("keeps tab nesting as tabs", () => {
+		const doc = "- top\n\t- child\n\t\t- grandchild\n";
+		expect(reflow(makeCtx(doc))).toHaveLength(0);
+	});
+
+	it("normalizes an uneven indent scale onto the run's own level-0→1 step", () => {
+		// Widths 0 / 3 / 7 rank to levels 0 / 1 / 2; the emitted step is the
+		// run's own first step (3 spaces), so level 2 lands at 6, not 7.
+		const doc = "- top\n   - child\n       - grandchild\n";
+		expect(run(doc)).toBe("- top\n   - child\n      - grandchild\n");
+	});
+
+	it("normalizes the OCR marker glyph without losing the level", () => {
+		const doc = "• parent point\n    • nested point\n• second parent\n";
+		expect(run(doc)).toBe("- parent point\n    - nested point\n- second parent\n");
+	});
+
+	it("leaves an indented ◦/‣ sub-bullet alone (segmentBlocks reads it as indented code)", () => {
+		// Pre-existing spec-006 boundary, asserted so it cannot change silently:
+		// segmentBlocks() only accepts [-*+•–·] and digits as list markers, so an
+		// indented ◦ line is an indentedCode BARRIER and never enters a run.
+		const doc = "• parent point\n    ◦ nested point\n• second parent\n";
+		expect(reflow(makeCtx(doc))).toHaveLength(0);
+	});
+
+	it("folds a hard-wrapped nested item into its own item at its own level", () => {
+		const doc = [
+			"• Big data requires a service that can orchestrate",
+			"    • refine these enormous stores of raw data into",
+			"actionable business insights.",
+			"• Azure Data Factory is a managed cloud service.",
+		].join("\n") + "\n";
+		expect(run(doc)).toBe([
+			"- Big data requires a service that can orchestrate",
+			"    - refine these enormous stores of raw data into actionable business insights.",
+			"- Azure Data Factory is a managed cloud service.",
+		].join("\n") + "\n");
+	});
+
+	it("keeps a nested ordered item at its level and preserves its number", () => {
+		const doc = "1. first\n    2) nested\n1. second\n";
+		expect(reflow(makeCtx(doc))).toHaveLength(0);
+	});
+
+	it("is idempotent on a nested list that DID need reflowing", () => {
+		const doc = "• parent that wraps\nonto a second line\n    • child point\n";
+		const first = run(doc);
+		expect(first).toBe("- parent that wraps onto a second line\n    - child point\n");
+		expect(reflow(makeCtx(first))).toHaveLength(0);
+	});
+
+	it("still flattens nothing when the whole run sits at one level", () => {
+		// A flat capture keeps rendering flush left — the OCR case reflow exists for.
+		const doc = "• one\n• two\n";
+		expect(run(doc)).toBe("- one\n- two\n");
+	});
+});
+
+// ============================================================
 // Hyphen handling at wrap boundaries
 // ============================================================
 

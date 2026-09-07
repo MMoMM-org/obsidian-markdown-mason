@@ -42,10 +42,12 @@ footnotes, resolve footnote identity, move footnotes to resources).
 
 > **Reflow wrapped text** rebuilds screen-capture OCR text (e.g. TextSniper slide captures)
 > that has hard line breaks and no blank lines between blocks, turning it back into
-> paragraphs and `- ` bullet lists. It is off by default because it reshapes structure more
-> aggressively than the other steps — enable it when you paste OCR/slide text, or run the
-> standalone **Markdown Mason: Reflow wrapped text** command on a selection. It runs before
-> the other cleanup steps.
+> paragraphs and `- ` bullet lists. Nesting survives: a sub-bullet keeps its level, and the
+> indent step you already used (2 spaces, 4 spaces or a tab) is the one written back, so an
+> already-tidy nested list passes through untouched. It is off by default because it reshapes
+> structure more aggressively than the other steps — enable it when you paste OCR/slide text,
+> or run the standalone **Markdown Mason: Reflow wrapped text** command on a selection. It
+> runs before the other cleanup steps.
 
 These toggles configure the *Format selection* command — and **also govern the *Paste and
 format* command**, which applies the cleanup subset to the pasted text:
