@@ -1,3 +1,9 @@
+## [0.9.1](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.9.0...0.9.1) (2026-09-07)
+
+### Bug Fixes
+
+* **reflow:** keep list nesting instead of flattening every item to level 0 ([812773f](https://github.com/MMoMM-org/obsidian-markdown-mason/commit/812773f0af5fe17bfa1405fed8ee067c938074d6))
+
 ## [0.9.0](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.8.1...0.9.0) (2026-09-02)
 
 ### Features
