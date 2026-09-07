@@ -543,7 +543,7 @@ export class MasonSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Reflow wrapped text")
-			.setDesc("Rebuild hard-wrapped OCR/slide captures (no blank lines between blocks) into paragraphs and bullet lists. Off by default; enable for screen-capture text. Runs before dehyphenate and dewrap.")
+			.setDesc("Rebuild hard-wrapped OCR/slide captures (no blank lines between blocks) into paragraphs and bullet lists, keeping any sub-bullet nesting. Off by default; enable for screen-capture text. Runs before dehyphenate and dewrap.")
 			.addToggle((t) => {
 				t.setValue(recipe.reflow).onChange(async (v) => {
 					if (!this._plugin.settings.formatSelection) {

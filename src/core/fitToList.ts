@@ -17,6 +17,7 @@
 
 import { segmentBlocks } from "./markdownBlocks";
 import type { Block, BlockKind } from "./markdownBlocks";
+import { indentWidth } from "./indent";
 
 // ---------------------------------------------------------------------------
 // Patterns
@@ -75,17 +76,6 @@ export interface ListContext {
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
-
-/** Leading-whitespace width in columns; a tab counts as 4. */
-function indentWidth(line: string): number {
-	let w = 0;
-	for (const ch of line) {
-		if (ch === "\t") w += 4;
-		else if (ch === " ") w += 1;
-		else break;
-	}
-	return w;
-}
 
 /** The leading whitespace of a line, verbatim. */
 function leadingWhitespace(line: string): string {
