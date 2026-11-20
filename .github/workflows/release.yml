@@ -55,24 +55,31 @@ jobs:
         run: npm ci
 
       # ADR-15 Phase 5: auto-pin the catalog. Resolve the scripts repo's current
-      # main SHA and export it as MASON_PINNED_REF, which esbuild bakes into the
-      # bundle (pinnedRef.ts). Every later step — including semantic-release's
-      # prepareCmd rebuild — inherits it via $GITHUB_ENV, so a release always
-      # ships the latest reviewed catalog revision without a manual SHA bump.
-      # Fail-safe: only export a valid 40-hex SHA; otherwise the build falls back
-      # to the committed PINNED_REF_DEFAULT (never a placeholder).
+      # main SHA and WRITE it into PINNED_REF_DEFAULT in pinnedRef.ts. The
+      # @semantic-release/git step commits that file with the release, so the
+      # tagged commit contains the exact pin the bundle was built with — the
+      # release is reproducible from source alone (no env var needed), which
+      # Obsidian's build-verification check requires. Deliberately NOT an env
+      # var: a rebuild from the tag without it produced a different main.js.
+      # Fail-safe: only write a valid 40-hex SHA; otherwise the committed
+      # PINNED_REF_DEFAULT stays as-is (never a placeholder).
       - name: Resolve catalog pin
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CATALOG_REPO: MMoMM-org/markdown-mason-scripts
           CATALOG_BRANCH: main
+          PIN_FILE: src/scripts/catalog/pinnedRef.ts
         run: |
           REF="$(gh api "repos/${CATALOG_REPO}/commits/${CATALOG_BRANCH}" --jq '.sha' 2>/dev/null || true)"
           if [[ "$REF" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "MASON_PINNED_REF=$REF" >> "$GITHUB_ENV"
+            sed -i -E "s/^(const PINNED_REF_DEFAULT = \")[0-9a-f]{40}(\";)$/\1${REF}\2/" "$PIN_FILE"
+            if ! grep -q "^const PINNED_REF_DEFAULT = \"${REF}\";$" "$PIN_FILE"; then
+              echo "::error::Failed to write catalog pin into ${PIN_FILE} (PINNED_REF_DEFAULT line not found)"
+              exit 1
+            fi
             echo "Pinned catalog ${CATALOG_REPO}@${CATALOG_BRANCH} -> $REF"
           else
-            echo "::warning::Could not resolve catalog SHA for ${CATALOG_REPO}@${CATALOG_BRANCH}; falling back to committed PINNED_REF_DEFAULT"
+            echo "::warning::Could not resolve catalog SHA for ${CATALOG_REPO}@${CATALOG_BRANCH}; keeping committed PINNED_REF_DEFAULT"
           fi
 
       # Pre-release gates: fail fast before semantic-release does anything.

@@ -81,10 +81,11 @@ const context = await esbuild.context({
 	// "true" in dev → branch is live and DevDirAdapter is bundled for local testing.
 	//
 	// ADR-15 Phase 5: catalog distribution coordinates. MASON_RAW_BASE /
-	// MASON_PINNED_REF override RAW_BASE / PINNED_REF at build time (the release
-	// workflow exports MASON_PINNED_REF resolved from the catalog repo's HEAD, so
-	// releases auto-pin). Empty string when unset → pinnedRef.ts falls back to its
-	// committed *_DEFAULT (its typeof guard makes "" fall through).
+	// MASON_PINNED_REF override RAW_BASE / PINNED_REF at build time — LOCAL use
+	// only. Releases leave them unset and instead commit the pin into
+	// pinnedRef.ts, so the release is reproducible from the tagged source.
+	// Empty string when unset → pinnedRef.ts falls back to its committed
+	// *_DEFAULT (its typeof guard makes "" fall through).
 	define: {
 		__MASON_DEV__: isProd ? "false" : "true",
 		__MASON_RAW_BASE__: JSON.stringify(process.env.MASON_RAW_BASE ?? ""),

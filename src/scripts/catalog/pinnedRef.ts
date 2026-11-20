@@ -6,19 +6,22 @@
 //
 // BUILD-TIME OVERRIDE (ADR-15 Phase 5)
 // ------------------------------------
-// RAW_BASE and PINNED_REF resolve from esbuild `define` globals injected from
-// the MASON_RAW_BASE / MASON_PINNED_REF env vars (see esbuild.config.mjs). The
-// release workflow resolves the catalog repo's current SHA and exports
-// MASON_PINNED_REF, so a plugin release auto-pins to it — no manual edit here.
+// RAW_BASE and PINNED_REF can be overridden by esbuild `define` globals injected
+// from the MASON_RAW_BASE / MASON_PINNED_REF env vars (see esbuild.config.mjs) —
+// a LOCAL-ONLY convenience. Releases never set them: the release workflow
+// rewrites PINNED_REF_DEFAULT below in place with the catalog repo's current
+// SHA, and semantic-release commits this file with the release. The tagged
+// commit thus holds the exact pin, so rebuilding from source reproduces the
+// released main.js byte for byte (Obsidian's build-verification check).
 //
-// The committed *_DEFAULT values below are the fallback used whenever the env
-// override is absent: local builds, `npm run build` without the var set, and
-// the vitest runner (which defines no globals — the `typeof` guard makes the
-// module-level read safe there). They MUST stay a known-good owner + SHA, never
-// a placeholder, so a build with no override still ships a working catalog pin.
+// The committed *_DEFAULT values are what every un-overridden build uses: CI
+// releases, local `npm run build`, and the vitest runner (which defines no
+// globals — the `typeof` guard makes the module-level read safe there). They
+// MUST stay a known-good owner + SHA, never a placeholder. Keep the
+// PINNED_REF_DEFAULT line format intact — the workflow's sed matches it.
 //
-// To move the pin by hand (e.g. without the workflow): republish the catalog
-// repo and update PINNED_REF_DEFAULT to the new commit SHA.
+// To move the pin by hand: republish the catalog repo and update
+// PINNED_REF_DEFAULT to the new commit SHA.
 
 // __MASON_RAW_BASE__ / __MASON_PINNED_REF__ are esbuild `define` globals
 // (declared in src/global.d.ts): a string when the env override is set, else ""
