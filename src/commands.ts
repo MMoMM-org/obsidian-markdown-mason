@@ -265,17 +265,12 @@ function runOperation(
 // offsets would be stale against the pre-heading doc), we compose ALL steps
 // in-memory on a scratch string and emit a SINGLE diffToEditPlan result.
 //
-// Pipeline (9 gated transforms → 1 fused edit; final diff is unconditional):
-//   1. dehyphenate:       join end-of-line hyphenated words (MUST precede dewrap)
-//   2. dewrap:            join soft-wrapped paragraph lines into one line per para
-//   3. tidyWhitespace:    collapse double spaces, strip trailing whitespace
-//   4. decomposeLigatures: replace smart quotes and ligatures with ASCII
-//   5. normalizeBullets:  replace non-'-' bullet markers with '-'
-//   6. normalizeOrdered:  renumber ordered list items sequentially
-//   7. normalize:         close heading level gaps (whole-note)
-//   8. cascade:           shift selected headings relative to context heading
-//   9. tidyFootnotes:     C → O+D → M fused footnote pipeline
-//  10. diff original→final: one non-overlapping EditPlan → one CM6 transaction
+// Pipeline (gated stages → 1 fused edit; the final diff is unconditional):
+//   cleanup:       the gated text transforms run by applyTextCleanup, which
+//                  owns their list and order (see core/formatPipeline.ts)
+//   cascade:       shift selected headings relative to context heading
+//   tidyFootnotes: C → O+D → M fused footnote pipeline
+//   diff original→final: one non-overlapping EditPlan → one CM6 transaction
 //
 // Ordering rationale:
 //   dehyphenate before dewrap: dehyphenation removes the hyphen-newline sequence
@@ -304,7 +299,7 @@ function fusedFormatNote(editor: Editor, settings: MasonSettings): EditPlan {
 	// one "format: <name> …" line per step.
 	const s7 = applyTextCleanup(original, recipe, log);
 
-	// Step 8: cascade (EXISTING — preserve the current null-guard EXACTLY)
+	// Cascade stage (EXISTING — preserve the current null-guard EXACTLY)
 	let s8 = s7;
 	if (recipe.cascade && ctx.selection !== undefined) {
 		const cascadeEntry = buildRegistry().entries.find((e) => e.id === "headings.cascade");
@@ -316,7 +311,7 @@ function fusedFormatNote(editor: Editor, settings: MasonSettings): EditPlan {
 		}
 	}
 
-	// Step 9: tidyFootnotes (EXISTING) — with per-stage gates from recipe
+	// Footnote stage: tidyFootnotes (EXISTING) — with per-stage gates from recipe
 	const tidyPlan = tidyFootnotes({ ...ctx, doc: s8 }, {
 		fromCitations: recipe.fromCitations,
 		identity:      recipe.identity,
@@ -324,7 +319,7 @@ function fusedFormatNote(editor: Editor, settings: MasonSettings): EditPlan {
 	});
 	const s9 = applyToString(s8, tidyPlan);
 
-	// Step 10: diff original→final — one non-overlapping edit (single undo step).
+	// Diff stage: diff original→final — one non-overlapping edit (single undo step).
 	// Empty result when nothing changed → caller shows "Nothing to format".
 	const plan = diffToEditPlan(original, s9);
 	log?.(`format: result ${plan.length} edit${plan.length === 1 ? "" : "s"}`);

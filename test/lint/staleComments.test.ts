@@ -18,6 +18,7 @@ const STALE_PHRASES: ReadonlyArray<{ label: string; pattern: RegExp }> = [
 	{ label: "General settings tab (now the main settings page)", pattern: /\bgeneral settings tab\b/i },
 	{ label: "hard-coded cleanup step count", pattern: /\b7[- ](?:in-memory )?cleanup\b/i },
 	{ label: "hard-coded cleanup step range", pattern: /\bsteps 1-7\b/i },
+	{ label: "hard-coded gated transform count", pattern: /\b\d+ gated transforms\b/i },
 ];
 
 function listTypeScriptFiles(dir: string): string[] {
