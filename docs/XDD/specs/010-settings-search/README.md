@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-11-21 |
-| **Current Phase** | PLAN |
+| **Current Phase** | Ready |
 | **Decomposition tier** | Incremental |
 | **Model tier** | frontier |
 | **Last Updated** | 2026-11-21 |
@@ -16,7 +16,7 @@
 |----------|--------|-------|
 | requirements.md | completed | v1.0: 10 features (7 Must, 3 Should), 38 acceptance criteria |
 | solution.md | completed | v1.0: 8 ADRs confirmed, 19 EARS criteria, 9 components |
-| plan/ | in_progress | Incremental tier |
+| plan/ | completed | Incremental: 4 phases, 19 tasks (9 parallel), all 38 PRD criteria mapped |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
 
@@ -38,6 +38,7 @@
 | 2026-11-21 | SDD approved; ADR-1 to ADR-8 confirmed | ADR-1 minAppVersion **1.13.1**, refining Path A's 1.13.0: page displayValue/status are @since 1.13.1, and 1.13.0 and 1.13.1 were early-access only. ADR-2 umbrella Format selection group + 4 sibling groups. ADR-3 Documentation row at the end of Advanced (user asked about tabs; the API has none; About sub-page declined). ADR-4 private openPagePath + fallback. ADR-5 get/setControlValue override via saveSettings (the base saveData would erase the scripts namespace). ADR-6 ScriptsCache single flight. ADR-7 header icons + searchable action rows. ADR-8 pure builders + definition-level tests. Runtime behaviour verified by reading the obsidian-1.15.1 bundle. |
 | 2026-11-21 | Decomposition tier: Incremental | Classifier recommended Incremental (rule 1: 7 Must features, 6 new components; 38 PRD / 19 SDD criteria). Accepted. |
 | 2026-11-21 | Model tier: frontier | Classifier recommended frontier (rule 2: novel_pattern=true, declarative definition builders; high_risks=2, settings reset and script rows losing actions; adr_count=8). Accepted; frontier cost sentence shown. |
+| 2026-11-21 | PLAN complete → Ready; commit only | Plan written without a second discovery round (SDD research already covered sequencing, tests and risks). User chose commit only: no push or PR yet. Implementation branch: spec/010-settings-search-impl. |
 
 ## Context
 
