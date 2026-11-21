@@ -16,7 +16,17 @@
  *                        _findAllButtons(), _dispatch()
  *   - Modal              base class: contentEl (MockHTMLElement), titleEl, open/close,
  *                        onOpen/onClose lifecycle hooks called synchronously
+ *
+ * Extensions for spec 010 T1.1 (declarative settings API, Obsidian 1.13):
+ *   - PluginSettingTab   getSettingDefinitions/update/refreshDomState; the base
+ *                        getControlValue/setControlValue THROW (SDD ADR-5)
+ *   - Setting            settingEl/infoEl/nameEl/descEl/controlEl, addExtraButton,
+ *                        setDisabled, setTooltip
+ *   - SettingGroup       constructible stub (second argument of a render callback)
+ *   - MockHTMLElement    getBoundingClientRect()
  */
+
+import type { SettingDefinitionItem } from "obsidian";
 
 export interface EventRef {
 	_mockEventRef: true;
@@ -133,6 +143,11 @@ export class MockHTMLElement {
 	/** DOM API: focus this element. Sets _focused = true for test assertions. */
 	focus(): void {
 		this._focused = true;
+	}
+
+	/** DOM API: the mock has no layout, so every element sits at the origin with no size. */
+	getBoundingClientRect(): { x: number; y: number; left: number; top: number; right: number; bottom: number; width: number; height: number } {
+		return { x: 0, y: 0, left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 };
 	}
 
 	/**
@@ -713,6 +728,41 @@ class MockButtonControl {
 	}
 }
 
+class MockExtraButtonControl {
+	readonly extraSettingsEl: MockHTMLElement = new MockHTMLElement("div");
+	_icon: string = "";
+	_tooltip: string = "";
+	_disabled: boolean = false;
+	private _clickCbs: Array<() => unknown> = [];
+
+	setIcon(icon: string): this {
+		this._icon = icon;
+		return this;
+	}
+
+	setTooltip(tooltip: string): this {
+		this._tooltip = tooltip;
+		return this;
+	}
+
+	setDisabled(disabled: boolean): this {
+		this._disabled = disabled;
+		return this;
+	}
+
+	/** As in Obsidian, the callback receives no mouse event. */
+	onClick(cb: () => unknown): this {
+		this._clickCbs.push(cb);
+		return this;
+	}
+
+	async _simulateClick(): Promise<void> {
+		for (const cb of this._clickCbs) {
+			await cb();
+		}
+	}
+}
+
 // ---------------------------------------------------------------------------
 // CapturedSetting — the record stored per new Setting(containerEl)
 // ---------------------------------------------------------------------------
@@ -724,6 +774,9 @@ interface CapturedSettingRecord {
 	textControls: MockTextControl[];
 	toggleControls: MockToggleControl[];
 	buttonControls: MockButtonControl[];
+	extraButtonControls: MockExtraButtonControl[];
+	disabled: boolean;
+	tooltip: string;
 }
 
 // Module-level capture list — cleared between tests via clearCapturedSettings().
@@ -749,9 +802,19 @@ export function clearCapturedSettings(): void {
 //   addText(cb)   — add a text input; cb receives MockTextControl
 //   addToggle(cb) — add a toggle; cb receives MockToggleControl
 //   addButton(cb) — add a button; cb receives MockButtonControl
+//   addExtraButton(cb) — add an icon button; cb receives MockExtraButtonControl
+//   setDisabled(b) / setTooltip(s) — captured on the record
+//   settingEl > infoEl > (nameEl, descEl), settingEl > controlEl — row elements
+//     for render rows that append their own spans; the row is not attached to
+//     containerEl, so container-level text assertions are unaffected
 // ---------------------------------------------------------------------------
 
 export class Setting {
+	readonly settingEl: MockHTMLElement = new MockHTMLElement("div");
+	readonly infoEl: MockHTMLElement = this.settingEl.createDiv();
+	readonly nameEl: MockHTMLElement = this.infoEl.createDiv();
+	readonly descEl: MockHTMLElement = this.infoEl.createDiv();
+	readonly controlEl: MockHTMLElement = this.settingEl.createDiv();
 	private readonly _record: CapturedSettingRecord;
 
 	/** containerEl is accepted to match the Obsidian API signature; not used in the mock. */
@@ -763,17 +826,32 @@ export class Setting {
 			textControls: [],
 			toggleControls: [],
 			buttonControls: [],
+			extraButtonControls: [],
+			disabled: false,
+			tooltip: "",
 		};
 		_capturedSettings.push(this._record);
 	}
 
 	setName(name: string): this {
 		this._record.name = name;
+		this.nameEl.setText(name);
 		return this;
 	}
 
 	setDesc(desc: string): this {
 		this._record.desc = desc;
+		this.descEl.setText(desc);
+		return this;
+	}
+
+	setDisabled(disabled: boolean): this {
+		this._record.disabled = disabled;
+		return this;
+	}
+
+	setTooltip(tooltip: string): this {
+		this._record.tooltip = tooltip;
 		return this;
 	}
 
@@ -802,6 +880,53 @@ export class Setting {
 		cb(ctrl);
 		return this;
 	}
+
+	addExtraButton(cb: (button: MockExtraButtonControl) => unknown): this {
+		const ctrl = new MockExtraButtonControl();
+		this._record.extraButtonControls.push(ctrl);
+		cb(ctrl);
+		return this;
+	}
+}
+
+// ---------------------------------------------------------------------------
+// SettingGroup — spec 010 T1.1
+//
+// Stub for the group a declarative `render(setting, group)` callback receives.
+// Settings added through it are captured like any other Setting.
+// ---------------------------------------------------------------------------
+
+export class SettingGroup {
+	readonly listEl: MockHTMLElement = new MockHTMLElement("div");
+	_heading: string = "";
+	readonly _extraButtonControls: MockExtraButtonControl[] = [];
+
+	/** containerEl is accepted to match the Obsidian API signature; not used in the mock. */
+	constructor(_containerEl: unknown) {}
+
+	setHeading(text: string): this {
+		this._heading = text;
+		return this;
+	}
+
+	addClass(...classes: string[]): this {
+		for (const cls of classes) {
+			this.listEl.addClass(cls);
+		}
+		return this;
+	}
+
+	addSetting(cb: (setting: Setting) => void): this {
+		cb(new Setting(this.listEl));
+		return this;
+	}
+
+	addExtraButton(cb: (button: MockExtraButtonControl) => unknown): this {
+		const ctrl = new MockExtraButtonControl();
+		this._extraButtonControls.push(ctrl);
+		cb(ctrl);
+		return this;
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -815,6 +940,12 @@ export class Setting {
 export class PluginSettingTab {
 	app: App;
 	containerEl: MockHTMLElement;
+	/** The tree last stored by update(). */
+	settingItems: SettingDefinitionItem[] = [];
+	/** Test helper: how often update() ran. */
+	_updateCalls: number = 0;
+	/** Test helper: how often refreshDomState() ran. */
+	_refreshDomStateCalls: number = 0;
 
 	constructor(app: App, _plugin: unknown) {
 		this.app = app;
@@ -829,5 +960,38 @@ export class PluginSettingTab {
 	/** Override to clean up. */
 	hide(): void {
 		// no-op base implementation
+	}
+
+	/** Override to provide the declarative definition tree. */
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		return [];
+	}
+
+	/** Stores the current definition tree, as Obsidian does before indexing and rendering it. */
+	update(): void {
+		this.settingItems = this.getSettingDefinitions();
+		this._updateCalls += 1;
+	}
+
+	/** In Obsidian this re-evaluates `visible`/`disabled` predicates; here it is only counted. */
+	refreshDomState(): void {
+		this._refreshDomStateCalls += 1;
+	}
+
+	/**
+	 * The real base reads `plugin.settings[key]`, which cannot resolve Mason's
+	 * nested keys. Throwing makes a tab without its own override fail loudly.
+	 */
+	getControlValue(key: string): unknown {
+		throw new Error(`Mock PluginSettingTab.getControlValue("${key}") reached the base class; the tab must override it.`);
+	}
+
+	/**
+	 * The real base persists via `saveData(plugin.settings)`, which would erase
+	 * the `scripts` namespace of data.json (SDD ADR-5). Throwing makes a tab
+	 * without its own override fail loudly.
+	 */
+	setControlValue(key: string, _value: unknown): void | Promise<void> {
+		throw new Error(`Mock PluginSettingTab.setControlValue("${key}") reached the base class; the tab must override it.`);
 	}
 }
