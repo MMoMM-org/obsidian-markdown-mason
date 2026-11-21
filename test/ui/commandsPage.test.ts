@@ -10,6 +10,7 @@
  *   2. It always starts with the intro row (hint text, aliases hotkey and
  *      command palette), also with no enabled script.
  *   3. One render row per `enabled === true` script, else the empty-state row.
+ *      Before the cache loaded, a loading row stands in for both.
  *   4. A row's toggle reflects record.command; on registers under commandName or
  *      the id, off unregisters and keeps `enabled`.
  *   5. Renaming trims, persists and re-registers an active command; an empty
@@ -32,6 +33,7 @@ import type { DefinitionNode } from "./helpers/definitionTree";
 import type { ScriptRecord } from "../../src/scripts/store";
 import type { LifecycleState } from "../../src/scripts/lifecycle";
 import type { ScriptFunction } from "../../src/scripts/context";
+import { ScriptsCache, buildOfflineScriptItems } from "../../src/ui/scriptsCache";
 import {
 	COMMANDS_PAGE_NAME,
 	buildCommandsPage,
@@ -56,6 +58,14 @@ function makeRecord(overrides?: Partial<ScriptRecord>): ScriptRecord {
 	};
 }
 
+/** A cache the way the plugin creates it: nothing loaded until the first refresh. */
+function makeUnloadedCache(scripts: Record<string, ScriptRecord>): ScriptsCache {
+	return new ScriptsCache({
+		store: { getScripts: async () => ({ ...scripts }) },
+		setUpdatableCount: () => undefined,
+	});
+}
+
 const scriptFn: ScriptFunction = () => undefined;
 
 function activeState(_id: string): LifecycleState {
@@ -63,12 +73,12 @@ function activeState(_id: string): LifecycleState {
 }
 
 /**
- * A page wired to fakes. The store hands out copies, so a test can tell a
- * patched cache from a store read.
+ * A page wired to fakes over a cache that has already loaded `scripts`. The
+ * store hands out copies, so a test can tell a patched cache from a store read.
  */
 function makePage(scripts: Record<string, ScriptRecord>) {
 	const persisted: Record<string, ScriptRecord> = { ...scripts };
-	const cache = { records: { ...scripts } };
+	const cache = { records: { ...scripts }, items: buildOfflineScriptItems(scripts) };
 	const store = {
 		getScripts: vi.fn(async () => ({ ...persisted })),
 		setRecord: vi.fn(async (id: string, record: ScriptRecord) => {
@@ -213,6 +223,39 @@ describe("buildCommandsPage — rows", () => {
 	it("shows the empty-state row when the cache holds no scripts", () => {
 		const { page } = makePage({});
 		expect(rowsOf(page).slice(1).map(row => row.name)).toEqual(["No enabled scripts"]);
+	});
+
+	it("before the cache loads, shows the loading row and not the empty state", () => {
+		const cache = makeUnloadedCache({ "off-script": makeRecord({ enabled: false }) });
+		const { deps } = makePage({});
+
+		const rows = rowsOf(buildCommandsPage(cache, deps));
+
+		expect(rows[0].desc).toBe(HINT);
+		expect(rows.slice(1).map(row => row.name)).toEqual(["Loading scripts…"]);
+		expect(rows[1].type).toBe("empty");
+		expect(rows.map(row => row.name)).not.toContain("No enabled scripts");
+	});
+
+	it("after a refresh with no enabled scripts, shows the empty state and not the loading row", async () => {
+		const cache = makeUnloadedCache({ "off-script": makeRecord({ enabled: false }) });
+		const { deps } = makePage({});
+		await cache.refresh();
+
+		const rows = rowsOf(buildCommandsPage(cache, deps));
+
+		expect(rows[0].desc).toBe(HINT);
+		expect(rows.slice(1).map(row => row.name)).toEqual(["No enabled scripts"]);
+	});
+
+	it("after a refresh with an enabled script, shows its row and not the loading row", async () => {
+		const cache = makeUnloadedCache({ "my-script": makeRecord() });
+		const { deps } = makePage({});
+		await cache.refresh();
+
+		const rows = rowsOf(buildCommandsPage(cache, deps));
+
+		expect(rows.slice(1).map(row => row.name)).toEqual(["my-script"]);
 	});
 
 	it("leaves the empty-state row out once a script is enabled", () => {

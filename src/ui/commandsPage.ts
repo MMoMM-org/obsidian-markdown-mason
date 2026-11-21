@@ -1,8 +1,10 @@
 // Commands page — turn enabled scripts into named commands (ADR-17, spec 010).
 //
 // buildCommandsPage returns the declarative page: an intro row that is always
-// there, then one row per ENABLED script, or the empty-state row. It builds
-// synchronously from the ScriptsCache records and performs no I/O.
+// there, then one row per ENABLED script, or the empty-state row. Until the
+// ScriptsCache has loaded, a loading row stands in for both, so the page never
+// claims "no enabled scripts" about scripts it has not read yet. It builds
+// synchronously from the ScriptsCache and performs no I/O.
 //
 // A command row has a name field (placeholder = the script id) and a toggle:
 //   toggle on  → commandManager.register(id, name, fn, getState) + record.command = true
@@ -46,8 +48,11 @@ export type ScriptFnResolver = (id: string) => ScriptFunction;
 /** Returns the current LifecycleState for a script id. */
 export type StateResolver = (id: string) => LifecycleState;
 
-/** The part of ScriptsCache the Commands page reads and patches. */
+/** The part of ScriptsCache a command row reads and patches. */
 export type CommandRecordsCache = Pick<ScriptsCache, "records">;
+
+/** The part of ScriptsCache the Commands page builds from; `items === null` means not loaded yet. */
+export type CommandPageCache = Pick<ScriptsCache, "records" | "items">;
 
 /** The narrow collaborators the Commands page needs. */
 export interface CommandPageDeps {
@@ -76,13 +81,27 @@ export const COMMANDS_EMPTY_STATE = {
 	desc: "Enable a script in the Scripts tab first, then return here to create a command for it.",
 } as const;
 
+/** Shown instead of the script rows until the cache has loaded. */
+export const COMMANDS_LOADING_TEXT = "Loading scripts…";
+
 /**
  * Build the Commands page from the cached script records.
  *
  * Row names are the script ids: stable and unique among siblings, which is what
  * the settings runtime keys rows by.
  */
-export function buildCommandsPage(cache: CommandRecordsCache, deps: CommandPageDeps): SettingDefinitionPage {
+export function buildCommandsPage(cache: CommandPageCache, deps: CommandPageDeps): SettingDefinitionPage {
+	return {
+		type: "page",
+		name: COMMANDS_PAGE_NAME,
+		items: [introRow(), ...scriptRows(cache, deps)],
+	};
+}
+
+/** The rows below the intro: loading, one per enabled script, or the empty state. */
+function scriptRows(cache: CommandPageCache, deps: CommandPageDeps): SettingDefinition[] {
+	if (cache.items === null) return [loadingRow()];
+
 	const rowDeps: CommandRowDeps = { ...deps, cache };
 	const commandRows: SettingDefinition[] = Object.entries(cache.records)
 		.filter(([, record]) => record.enabled)
@@ -90,12 +109,7 @@ export function buildCommandsPage(cache: CommandRecordsCache, deps: CommandPageD
 			name: id,
 			render: (setting: Setting) => configureCommandRow(setting, id, record, rowDeps),
 		}));
-
-	return {
-		type: "page",
-		name: COMMANDS_PAGE_NAME,
-		items: [introRow(), ...(commandRows.length > 0 ? commandRows : [emptyStateRow()])],
-	};
+	return commandRows.length > 0 ? commandRows : [emptyStateRow()];
 }
 
 /** Turn `setting` into the command row of script `id`: name field plus create-command toggle. */
@@ -144,6 +158,10 @@ export function configureCommandRow(
 
 function introRow(): SettingDefinitionEmpty {
 	return { ...COMMANDS_INTRO, aliases: [...COMMANDS_INTRO.aliases] };
+}
+
+function loadingRow(): SettingDefinitionEmpty {
+	return { name: COMMANDS_LOADING_TEXT };
 }
 
 function emptyStateRow(): SettingDefinitionEmpty {
