@@ -16,7 +16,7 @@ phase: 2
 - `[ref: SDD/Complex Logic]`: Build Scripts page algorithm
 - `[ref: SDD/Interface Specifications/Internal API Changes]`: scriptsCache, scriptsPage, commandsPage
 - `[ref: SDD/Error Handling]`
-- `[ref: SDD/Implementation Gotchas]`: wired-once list buttons, stable ids, ⋯ menu positioning, no `update()` on command edits
+- `[ref: SDD/Implementation Gotchas]`: wired-once list buttons, stable names (deviation D-1), ⋯ menu positioning, no `update()` on command edits
 
 **Key Decisions**:
 - ADR-6: ScriptsCache feeds `update()`; `items === null` means "Loading scripts…".
@@ -69,9 +69,9 @@ Enables the two dynamic sub-pages: async script state that refreshes safely, scr
 
   1. Prime: src/ui/scriptsTab.ts helpers (`pillLabel`, `pillIcon`, `toggleValue`, `showsToggle`, `blockedReasonText`, `blockedRecovery`, `menuActions`, `reReviewAction`, `provenanceBadge`, L143-349, L389-391); test/ui/scriptsTab.test.ts `[ref: SDD/Complex Logic]` `[ref: SDD/ADR-7]`
   2. Test:
-     - `buildScriptsPage` returns a page with `id: "scripts"` and name "Scripts";
+     - `buildScriptsPage` returns a page named "Scripts" with no `id` field (deviation D-1);
      - `displayValue` is "1 update available" / "N updates available" and `status` is "warning" when count > 0; both are empty/null at 0;
-     - the list has one row per script in store order, with `id: "script:<id>"`, `name` = displayName, `desc` = description, and aliases including the id;
+     - the list has one row per script in store order, with `name` = displayName (unique, no `id` field), `desc` = description, and aliases including the id;
      - `emptyState` is "Loading scripts…" while `items` is null, and today's empty-state text when there are 0 scripts;
      - `addItem` = Import from vault; `extraButtons` = Browse official; both read ops at click time;
      - an action-row group "Import from vault" / "Browse official" carries the aliases catalog, official scripts, import.
@@ -101,7 +101,7 @@ Enables the two dynamic sub-pages: async script state that refreshes safely, scr
 
   1. Prime: src/ui/commandsTab.ts (L74-153 row handlers, empty state L91-97); test/ui/commandsTab.test.ts; the script function resolver in settingsTab.ts L489-496 `[ref: SDD/Acceptance Criteria/Commands page]`
   2. Test:
-     - `buildCommandsPage` returns a page with `id: "commands"` and name "Commands";
+     - `buildCommandsPage` returns a page named "Commands" with no `id` field;
      - it always starts with an intro row (today's hint text, aliases hotkey and command palette), even with 0 enabled scripts;
      - it has one row per `enabled === true` script, or the empty-state message.
 
@@ -119,4 +119,4 @@ Enables the two dynamic sub-pages: async script state that refreshes safely, scr
   Run `npx tsc -noEmit -skipLibCheck && npm run lint && npm test`. Confirm:
   - every helper exists once (no copies between scriptsTab.ts and scriptsPage.ts, or between commandsTab.ts and commandsPage.ts);
   - list `extraButtons`/`addItem` callbacks don't capture stale snapshots;
-  - every page and row has a stable `id`.
+  - every page and row has a stable, sibling-unique name, and no definition carries `id` (deviation D-1).

@@ -75,6 +75,9 @@ When implementation requires changes from the specification:
 3. Update SDD when the deviation improves the design
 4. Record all deviations in this plan for traceability
 
+Recorded deviations:
+- **D-1 (2026-11-21, approved):** no `id` on pages or rows. The Obsidian 1.13.1 typings declare none, and the 1.15.1 runtime falls back to `id ?? name`. Pages and rows are keyed by stable names; the splash deep link uses `openPagePath(pluginId, ["Scripts"])`. SDD and phases 2-3 updated. Found by T1.1.
+
 ## Metadata Reference
 
 - `[parallel: true]` - Tasks that can run concurrently

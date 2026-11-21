@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: Foundations: test harness, storage adapter, fixed definitions"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 1
 ---
@@ -32,7 +32,7 @@ phase: 1
 
 Establishes the test harness for the declarative API, the single source of truth for the 18 fixed settings, and the storage adapter that keeps `data.json` intact.
 
-- [ ] **T1.1 Declarative-API test harness** `[activity: test-infrastructure]` `[parallel: true]`
+- [x] **T1.1 Declarative-API test harness** `[activity: test-infrastructure]` `[parallel: true]`
 
   1. Prime: Read the mock `Setting`/`PluginSettingTab` (test/__mocks__/obsidian.ts ~L630-834) and the 1.13 members in obsidian.d.ts `[ref: SDD/Implementation Gotchas]` `[ref: SDD/Test Examples as Interface Documentation]`
   2. Test: Harness self-tests:
@@ -46,7 +46,7 @@ Establishes the test harness for the declarative API, the single source of truth
   4. Validate: Full suite still green (existing UI tests untouched); `tsc -noEmit` clean (vitest 4 `Mock<…>` typing).
   5. Success: The throwing base setter makes any missing override fail loudly `[ref: SDD/ADR-5]`; the tree walker supports every definition kind used by the SDD `[ref: SDD/Application Data Models]`
 
-- [ ] **T1.2 Storage adapter: settingsControlStore** `[activity: domain-modeling]` `[parallel: true]`
+- [x] **T1.2 Storage adapter: settingsControlStore** `[activity: domain-modeling]` `[parallel: true]`
 
   1. Prime: `[ref: SDD/Implementation Examples/Control-key resolution with nested Format selection]`; src/core/types.ts (`MasonSettings`, `DEFAULT_SETTINGS`); src/core/formatSelection.ts (`resolveFormatSelectionRecipe`)
   2. Test:
@@ -58,7 +58,7 @@ Establishes the test harness for the declarative API, the single source of truth
   4. Validate: Unit tests pass; lint clean; types check.
   5. Success: Defaults identical to today's for a fresh install `[ref: PRD/F3.2]`; stored 0.9.4 values reported unchanged `[ref: PRD/F3.1]`; SDD criteria "missing key → defaults" and "unknown key → no mutation" `[ref: SDD/Acceptance Criteria/Behaviour parity]`
 
-- [ ] **T1.3 Documentation row: pluginIdentity** `[activity: frontend-ui]` `[parallel: true]`
+- [x] **T1.3 Documentation row: pluginIdentity** `[activity: frontend-ui]` `[parallel: true]`
 
   1. Prime: src/ui/HeaderSection.ts (`REPO_URL` L19, author parsing L98-104), test/ui/headerSection.test.ts `[ref: SDD/ADR-3]`
   2. Test:
@@ -95,4 +95,4 @@ Establishes the test harness for the declarative API, the single source of truth
 
 - [ ] **T1.5 Phase validation** `[activity: validate]`
 
-  Run `npx tsc -noEmit -skipLibCheck && npm run lint && npm test`. Verify the new modules against the SDD responsibility table (each owns exactly one responsibility; no ordering logic outside `buildMainPageItems`). The existing segmented tab and its tests still pass unchanged.
+  Run `npx tsc -noEmit -skipLibCheck && npm run lint && npm test`. Remove the `id` surface (`idOf`, `withId`, `DefinitionNode.id` and its assertions) from test/ui/helpers/definitionTree.ts and harness.test.ts per deviation D-1. Verify the new modules against the SDD responsibility table (each owns exactly one responsibility; no ordering logic outside `buildMainPageItems`). The existing segmented tab and its tests still pass unchanged.

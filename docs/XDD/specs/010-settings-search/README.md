@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-11-21 |
-| **Current Phase** | Ready |
+| **Current Phase** | Implementing |
 | **Decomposition tier** | Incremental |
 | **Model tier** | frontier |
 | **Last Updated** | 2026-11-21 |
@@ -39,6 +39,7 @@
 | 2026-11-21 | Decomposition tier: Incremental | Classifier recommended Incremental (rule 1: 7 Must features, 6 new components; 38 PRD / 19 SDD criteria). Accepted. |
 | 2026-11-21 | Model tier: frontier | Classifier recommended frontier (rule 2: novel_pattern=true, declarative definition builders; high_risks=2, settings reset and script rows losing actions; adr_count=8). Accepted; frontier cost sentence shown. |
 | 2026-11-21 | PLAN complete → Ready; commit only | Plan written without a second discovery round (SDD research already covered sequencing, tests and risks). User chose commit only: no push or PR yet. Implementation branch: spec/010-settings-search-impl. |
+| 2026-11-21 | Deviation D-1: pages and rows keyed by stable names, not `id` | Found in T1.1: Obsidian 1.13.1 typings declare no `id` on SettingDefinition*, and the 1.15.1 runtime keys by `id ?? name`. User approved: drop `id`; the deep link becomes openPagePath(pluginId, ['Scripts']). SDD (ADR-4 text, gotchas, interfaces) and phases 2-3 updated. |
 
 ## Context
 

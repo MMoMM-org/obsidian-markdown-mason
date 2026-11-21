@@ -196,7 +196,7 @@ inbound:
     data_flow: "User asks to open Scripts settings"
 
 outbound:
-  - name: "app.setting.openPagePath(pluginId, ['scripts'])"
+  - name: "app.setting.openPagePath(pluginId, ['Scripts'])"
     type: private Obsidian API (feature-detected)
     criticality: LOW (fallback to open + openTabById)
   - name: "LifecycleResolver.resolveItems / LifecycleController ops / CommandManager"
@@ -352,12 +352,12 @@ scriptsCache:
   }
 
 scriptsPage:
-  SCRIPTS_PAGE_ID = "scripts"
+  SCRIPTS_PAGE_NAME = "Scripts"   # page key: Obsidian falls back to name (no id in 1.13.1 typings)
   buildScriptsPage(cache, ops): SettingDefinitionPage
   configureScriptRow(setting: Setting, item: ScriptItem, ops: LifecycleOps): void
 
 commandsPage:
-  COMMANDS_PAGE_ID = "commands"
+  COMMANDS_PAGE_NAME = "Commands"
   buildCommandsPage(cache, deps: CommandRowDeps): SettingDefinitionPage
   configureCommandRow(setting: Setting, id: string, record: ScriptRecord, deps: CommandRowDeps): void
 
@@ -373,7 +373,7 @@ MasonSettingTab (extends PluginSettingTab):
   REMOVED: display(), selectScriptsSegment(), all segment/render privates
 
 MasonPlugin:
-  _openScriptsSettings(): void   # CHANGED: openPagePath(manifest.id, [SCRIPTS_PAGE_ID]) with fallback
+  _openScriptsSettings(): void   # CHANGED: openPagePath(manifest.id, [SCRIPTS_PAGE_NAME]) with fallback
 ```
 
 #### Application Data Models
@@ -399,8 +399,8 @@ The main-page tree (ADR-2, ADR-3), in render order:
 
 ```
 [bare]  Resources section heading (text) · Show update notes · Numeric-only footnotes · Fit paste to list context
-[page]  Scripts      id=scripts   displayValue "N updates available" · status warning when N>0
-[page]  Commands     id=commands
+[page]  Scripts      (keyed by name)   displayValue "N updates available" · status warning when N>0
+[page]  Commands     (keyed by name)
 [group] Format selection : intro row "Which steps run" (empty def, aliases: paste, paste and format)
 [group] Cleanup   : box table, reflow (aliases OCR, TextSniper), dewrap, dehyphenate, ligatures, tidy whitespace
 [group] Lists     : normalize bullets, normalize ordered list
@@ -425,7 +425,7 @@ Bare items and the two page entries render together in the implicit untitled fir
   data_flow: "await tab.scripts.refresh(); updatableScriptCount = cache.updatableCount (replaces the second catalog fetch in _countUpdatableScripts)"
 - from: MasonPlugin._openScriptsSettings
   to: app.setting (private)
-  data_flow: "open(); openPagePath(id, ['scripts']) if a function, else openTabById(id)"
+  data_flow: "open(); openPagePath(id, [SCRIPTS_PAGE_NAME]) if a function, else openTabById(id)"
 ```
 
 ### Implementation Examples
@@ -563,7 +563,7 @@ sequenceDiagram
 3. Obsidian re-runs `getSettingDefinitions()`, diffs, and redraws the open Scripts page in place. The page entry's `displayValue`/`status` are re-evaluated when the user goes back to the main page.
 
 #### Flow: Splash → Scripts page
-`onOpenScripts` calls `app.setting.open()`, then `openPagePath("markdown-mason", ["scripts"])` if it exists, else `openTabById("markdown-mason")`.
+`onOpenScripts` calls `app.setting.open()`, then `openPagePath("markdown-mason", ["Scripts"])` if it exists, else `openTabById("markdown-mason")`.
 
 ### Error Handling
 - **Persist failure** (`saveSettings` rejects): Notice "Mason: could not save settings." plus a debug trace. The in-memory value stays, so the next save retries it.
@@ -578,11 +578,11 @@ sequenceDiagram
 ```
 ALGORITHM: Build Scripts page
 INPUT: cache.items (ScriptItem[] | null), ops
-OUTPUT: SettingDefinitionPage {id:"scripts", name:"Scripts", ...}
+OUTPUT: SettingDefinitionPage {name:"Scripts", ...}
 1. displayValue = count>0 ? `${count} update${count===1?"":"s"} available` : ""; status = count>0 ? "warning" : null
 2. list.emptyState = items===null ? "Loading scripts…" : "No scripts yet. Import one from your vault, or browse the official catalog to get started."
 3. list.addItem = {name:"Import from vault", action: ops.importFromVault}; list.extraButtons = [Browse official (icon "store", tooltip)]
-4. FOR each item (store order): row {id:`script:${id}`, name: displayName, desc: description, aliases: [id],
+4. FOR each item (store order): row {name: displayName, desc: description, aliases: [id],
      render: s => configureScriptRow(s, item, ops)}
 5. A separate group after the list holds search-only action rows: "Import from vault" and "Browse official",
    with aliases [catalog, official scripts, import], so search can reach them (addItem/extraButtons are not indexed)
@@ -620,7 +620,7 @@ No change: single artifact. Rollback means publishing a new release (users below
 
 ### User Interface & UX (if applicable)
 
-**Information Architecture:** the main page plus 2 sub-pages (`scripts`, `commands`), with explicit page ids so navigation paths don't depend on names.
+**Information Architecture:** the main page plus 2 sub-pages (Scripts, Commands). Pages and rows are keyed by their fixed English names (deviation D-1), so names must stay stable and unique among siblings.
 
 ```
 ┌─ Markdown Mason ──────────────────────────────────┐
@@ -682,7 +682,7 @@ N/A: single plugin process.
   - Trade-offs: the author link and tagline are lost; identity sits at the bottom.
   - User confirmed: **Yes (2026-11-21)**
 
-- [x] **ADR-4 Splash deep link:** feature-detected private `app.setting.openPagePath(pluginId, ["scripts"])`, falling back to `openTabById`.
+- [x] **ADR-4 Splash deep link:** feature-detected private `app.setting.openPagePath(pluginId, ["Scripts"])`, falling back to `openTabById`.
   - Rationale: the only way to land directly on the sub-page (Feature 6); Obsidian uses it internally (seen in the 1.15.1 bundle).
   - Trade-offs: private API may change, so the fallback lands on the main page (where the Scripts badge still shows). Covered by the smoke test.
   - User confirmed: **Yes (2026-11-21)**
@@ -739,7 +739,7 @@ N/A: single plugin process.
 - [ ] WHEN a 0.9.4 `data.json` is loaded, THE SYSTEM SHALL report every stored value unchanged and keep the `scripts` namespace after any write.
 
 **Scripts page (PRD Feature 4)**
-- [ ] THE SYSTEM SHALL render one list row per script, in store order, with id `script:<id>`, showing provenance, pill, version, toggle (only for states where `showsToggle` is true) and the ⋯ menu with `menuActions(state)`.
+- [ ] THE SYSTEM SHALL render one list row per script, in store order, keyed by its unique display name, showing provenance, pill, version, toggle (only for states where `showsToggle` is true) and the ⋯ menu with `menuActions(state)`.
 - [ ] WHEN a lifecycle op calls `rerender`, THE SYSTEM SHALL refresh the cache and call `update()` once per settled state; WHILE a refresh is in flight, THE SYSTEM SHALL coalesce further requests into one follow-up pass.
 - [ ] IF a script is Blocked, THEN THE SYSTEM SHALL show `blockedReasonText` and the `blockedRecovery` button.
 - [ ] WHILE the cache is unloaded, THE SYSTEM SHALL show the "Loading scripts…" empty state; WHEN loaded with 0 scripts, THE SYSTEM SHALL show today's empty-state text.
@@ -750,7 +750,7 @@ N/A: single plugin process.
 
 **Indicator and deep link (PRD Feature 6)**
 - [ ] WHILE `updatableCount > 0`, THE SYSTEM SHALL set the Scripts page `status` to `"warning"` and `displayValue` to "N update(s) available"; otherwise neither.
-- [ ] WHEN the splash requests Scripts, THE SYSTEM SHALL call `openPagePath(manifest.id, ["scripts"])` if available, else `openTabById(manifest.id)`.
+- [ ] WHEN the splash requests Scripts, THE SYSTEM SHALL call `openPagePath(manifest.id, ["Scripts"])` if available, else `openTabById(manifest.id)`.
 
 **Version and tooling (PRD Features 7, 10)**
 - [ ] THE SYSTEM SHALL declare `minAppVersion` 1.13.1, keep existing `versions.json` entries, and pass lint with `obsidianmd/prefer-setting-definitions` enabled.
@@ -774,7 +774,7 @@ N/A: single plugin process.
 - **Never call `update()` from inside `getSettingDefinitions()`** (loop). The stale-triggered refresh is fire-and-forget and clears `stale` before awaiting.
 - **Commands text field:** patch `cache.records`, don't `update()`. Focus is preserved for control rows only; a `render` row is rebuilt.
 - **List `extraButtons`/`addItem` are wired once.** Their callbacks must read current state at click time (ops via closure over the cache, not a snapshot).
-- **Give every page and every list row a stable `id`.** Diff keys use id → control key → name → index.
+- **Keep page and row names stable and unique among siblings.** The 1.13.1 typings have no `id`, so the runtime keys the diff (and openPagePath) by control key → name → index (deviation D-1). Never put changing text such as counts into a name; use `displayValue`.
 - **`ExtraButtonComponent.onClick` provides no mouse event.** Position the ⋯ menu from `extraSettingsEl.getBoundingClientRect()`.
 - **`test/compliance.test.ts` L283-290** requires `versions[manifest.version] === minAppVersion`. Relax it to allow a pending release where minAppVersion is ahead of the last entry, or the PR fails CI.
 - **Sentence-case lint only checks `setName`/`setDesc` calls**, not object literal `name:` fields. A tree-walking test covers it.

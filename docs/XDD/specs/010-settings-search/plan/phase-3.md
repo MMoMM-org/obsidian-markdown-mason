@@ -21,7 +21,7 @@ phase: 3
 **Key Decisions**:
 - ADR-5: overrides persist via `saveSettings()`; `debugLogging` calls `setDebugLogging` before saving; unknown keys are ignored.
 - ADR-6: `setRerender` wired once; cache seeded at layout-ready; `hide()` marks it stale.
-- ADR-4: splash calls `openPagePath(manifest.id, ["scripts"])` when present, else `openTabById`.
+- ADR-4: splash calls `openPagePath(manifest.id, ["Scripts"])` when present, else `openTabById`.
 
 **Dependencies**: Phases 1 and 2 complete. This phase removes the old segmented UI, so the build only stays green if T3.1 rewrites the obsolete tests in the same commit.
 
@@ -70,7 +70,7 @@ Swaps the segmented tab for the declarative one, wires it into the plugin lifecy
   2. Test:
      - at layout-ready, `tab.scripts.refresh()` runs once and `updatableScriptCount` comes from the cache;
      - the splash's separate catalog count fetch is gone (one resolve per startup);
-     - `_openScriptsSettings` calls `setting.open()` then `openPagePath("markdown-mason", ["scripts"])` when it is a function;
+     - `_openScriptsSettings` calls `setting.open()` then `openPagePath("markdown-mason", ["Scripts"])` when it is a function;
      - when `openPagePath` is absent it falls back to `openTabById`;
      - when `app.setting` is missing it does nothing and doesn't throw;
      - script rows are present in `settingItems` after the seed refresh (searchable after startup).
