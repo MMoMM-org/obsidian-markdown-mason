@@ -36,6 +36,7 @@
 
 import * as path from "node:path";
 import type { ScriptFunction } from "./context";
+import type { LifecycleState } from "./lifecycle";
 import { debug } from "../core/debug";
 
 // ---------------------------------------------------------------------------
@@ -255,7 +256,7 @@ export function buildRequireFn(scriptsDir: string): RequireFn {
  * Load and return the `run` function from a materialized script module.
  *
  * Returns a safe no-op if the module cannot be loaded (soft-fail).
- * Used by resolveScriptFn in the Run script launcher and Commands tab.
+ * Called through buildScriptFnResolver, which adds the Active-only rule.
  */
 export function loadRunFnSafe(
 	id: string,
@@ -270,6 +271,38 @@ export function loadRunFnSafe(
 		debug(`[MarkdownMason] resolveScriptFn: failed to load module "${id}":`, err);
 		return (): undefined => undefined;
 	}
+}
+
+/** Where and how a materialized script module is loaded from. */
+export interface ScriptLoadContext {
+	/** Absolute scripts directory (see resolveScriptsDir). */
+	scriptsDir: string;
+	requireFn: RequireFn;
+}
+
+/**
+ * Build the function that maps a script id to what a command or the Run
+ * script launcher invokes: the materialized module's `run` for an Active
+ * script, a safe no-op for every other state and for a module that fails to
+ * load. This is the single copy of that rule.
+ *
+ * The no-op is never run for a script that is not Active, because
+ * CommandManager re-checks the state before it invokes a script.
+ *
+ * The state is read on every call. `getLoadContext` is called once per Active
+ * resolution and never otherwise, so the caller decides whether the scripts
+ * directory and the require function are computed once (return a captured
+ * object) or on demand (compute them in the callback).
+ */
+export function buildScriptFnResolver(
+	getState: (id: string) => LifecycleState,
+	getLoadContext: () => ScriptLoadContext,
+): (id: string) => ScriptFunction {
+	return (id) => {
+		if (getState(id).kind !== "Active") return (): undefined => undefined;
+		const { scriptsDir, requireFn } = getLoadContext();
+		return loadRunFnSafe(id, scriptsDir, requireFn);
+	};
 }
 
 /**

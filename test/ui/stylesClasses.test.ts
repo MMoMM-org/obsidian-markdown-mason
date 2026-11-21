@@ -22,14 +22,25 @@ const CLASS_PREFIX = "mason-";
 /** Stands in for a `${…}` expression while a class string is tokenised. */
 const DYNAMIC_PART = "\u0000";
 
-/** A call site that hands a class to the DOM: `cls:`, addClass(…), className = … */
+/**
+ * A call site that hands a class to the DOM: `cls:`, addClass(…),
+ * classList.add(…), setAttr("class", …), className = …
+ *
+ * Not matched, so a mason class applied only this way goes unseen: a class
+ * held in a variable or constant and applied later, setAttribute("class", …),
+ * classList.replace(…) and classList.value = …. src/ uses none of them for a
+ * mason class; add the form here before introducing one.
+ */
 const CLASS_SITE =
-	/(?:\bcls\s*:|\.(?:addClass|addClasses|toggleClass|removeClass)\(|\.setAttr\(\s*["']class["']\s*,|\.className\s*=)\s*/g;
+	/(?:\bcls\s*:|\.(?:addClass|addClasses|toggleClass|removeClass)\(|\.classList\.(?:add|remove|toggle)\(|\.setAttr\(\s*["']class["']\s*,|\.className\s*=)\s*/g;
+/** Sites that take any number of class arguments; every leading string literal is a class. */
+const VARIADIC_SITE = /\.(?:addClass|removeClass|classList\.(?:add|remove))\(\s*$/;
+const ARGUMENT_SEPARATOR = /\s*,\s*/y;
 const STRING_LITERAL = /"([^"\n]*)"|'([^'\n]*)'|`([^`]*)`/y;
 const STRING_LITERALS = /"([^"\n]*)"|'([^'\n]*)'|`([^`]*)`/g;
 const ARRAY_LITERAL = /\[([^\]]*)\]/y;
 
-export interface AppliedClasses {
+interface AppliedClasses {
 	/** Complete class names, e.g. `mason-script-pill`. */
 	literals: Set<string>;
 	/** Static head of a templated class, e.g. `mason-pill-` for `mason-pill-${kind}`. */
@@ -39,18 +50,18 @@ export interface AppliedClasses {
 }
 
 /** The `.mason-*` classes a stylesheet has selectors for. Comments are ignored. */
-export function extractCssClasses(css: string): Set<string> {
+function extractCssClasses(css: string): Set<string> {
 	const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
 	return new Set(Array.from(withoutComments.matchAll(/\.(mason-[a-z0-9-]+)/g), (m) => m[1]));
 }
 
 /** The `mason-*` classes a TypeScript source applies to elements. */
-export function extractAppliedClasses(source: string): AppliedClasses {
+function extractAppliedClasses(source: string): AppliedClasses {
 	const applied: AppliedClasses = { literals: new Set(), dynamicPrefixes: new Set(), unrecognised: [] };
 
 	for (const site of source.matchAll(CLASS_SITE)) {
 		const argumentStart = site.index + site[0].length;
-		const classStrings = classStringsAt(source, argumentStart);
+		const classStrings = classStringsAt(source, argumentStart, VARIADIC_SITE.test(site[0]));
 		if (classStrings === null) {
 			applied.unrecognised.push(source.slice(site.index, argumentStart + 40).split("\n")[0]);
 			continue;
@@ -62,12 +73,27 @@ export function extractAppliedClasses(source: string): AppliedClasses {
 	return applied;
 }
 
-/** The string literal(s) starting at `index`, or null when the argument is something else. */
-function classStringsAt(source: string, index: number): string[] | null {
+/**
+ * The string literal(s) starting at `index`, or null when the argument is
+ * something else. At a variadic site the string literals that follow as
+ * further arguments are read too.
+ */
+function classStringsAt(source: string, index: number, variadic: boolean): string[] | null {
 	STRING_LITERAL.lastIndex = index;
-	const single = STRING_LITERAL.exec(source);
-	if (single) {
-		return [literalContent(single)];
+	const first = STRING_LITERAL.exec(source);
+	if (first) {
+		const classStrings = [literalContent(first)];
+		let end = STRING_LITERAL.lastIndex;
+		while (variadic) {
+			ARGUMENT_SEPARATOR.lastIndex = end;
+			if (!ARGUMENT_SEPARATOR.test(source)) break;
+			STRING_LITERAL.lastIndex = ARGUMENT_SEPARATOR.lastIndex;
+			const next = STRING_LITERAL.exec(source);
+			if (!next) break;
+			classStrings.push(literalContent(next));
+			end = STRING_LITERAL.lastIndex;
+		}
+		return classStrings;
 	}
 	ARRAY_LITERAL.lastIndex = index;
 	const array = ARRAY_LITERAL.exec(source);
@@ -135,14 +161,17 @@ const UNSTYLED_CLASSES: Record<string, string> = {
 };
 
 /**
- * Class call sites the extractor cannot read, each checked by hand.
- * disclosure.ts `_makeButton` takes the class as a parameter; its callers pass
- * only Obsidian's "mod-cta" or "", never a mason class.
+ * How many class call sites per file the extractor cannot read, each checked
+ * by hand. Keyed by file and count, so reformatting such a site does not fail
+ * the guard while a new one does.
+ *
+ * disclosure.ts (2): `_makeButton` takes the class as its `cls: string`
+ * parameter and applies it with `addClass(cls)`; its callers pass only
+ * Obsidian's "mod-cta" or "", never a mason class.
  */
-const INDIRECT_CLASS_SITES = [
-	"src/scripts/disclosure.ts: cls: string,",
-	"src/scripts/disclosure.ts: .addClass(cls);",
-];
+const INDIRECT_CLASS_SITE_COUNTS: Record<string, number> = {
+	"src/scripts/disclosure.ts": 2,
+};
 
 function sourceFiles(dir: string): string[] {
 	return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -154,17 +183,25 @@ function sourceFiles(dir: string): string[] {
 	});
 }
 
-function readRepoClasses(): { css: Set<string>; applied: Set<string>; dynamicPrefixes: string[]; unrecognised: string[] } {
+function readRepoClasses(): {
+	css: Set<string>;
+	applied: Set<string>;
+	dynamicPrefixes: string[];
+	/** The call sites the extractor could not read, by repo-relative file. */
+	unrecognised: Record<string, string[]>;
+} {
 	const css = extractCssClasses(fs.readFileSync(path.join(REPO_ROOT, "styles.css"), "utf8"));
 	const applied = new Set<string>();
 	const dynamicPrefixes = new Set<string>();
-	const unrecognised: string[] = [];
+	const unrecognised: Record<string, string[]> = {};
 
 	for (const file of sourceFiles(path.join(REPO_ROOT, "src")).sort()) {
 		const found = extractAppliedClasses(fs.readFileSync(file, "utf8"));
 		found.literals.forEach((cls) => applied.add(cls));
 		found.dynamicPrefixes.forEach((prefix) => dynamicPrefixes.add(prefix));
-		unrecognised.push(...found.unrecognised.map((site) => `${path.relative(REPO_ROOT, file)}: ${site}`));
+		if (found.unrecognised.length > 0) {
+			unrecognised[path.relative(REPO_ROOT, file).split(path.sep).join("/")] = found.unrecognised;
+		}
 	}
 	for (const prefix of dynamicPrefixes) {
 		(DYNAMIC_CLASS_SUFFIXES[prefix] ?? []).forEach((suffix) => applied.add(prefix + suffix));
@@ -210,6 +247,42 @@ describe("extractAppliedClasses", () => {
 		expect([...extractAppliedClasses(source).literals].sort()).toEqual(["mason-a", "mason-b", "mason-c", "mason-d"]);
 	});
 
+	it("collects classes from classList add, remove and toggle", () => {
+		const source = `
+			el.classList.add("mason-a");
+			el.classList.remove('mason-b');
+			el.classList.toggle("mason-c", on);
+		`;
+		const found = extractAppliedClasses(source);
+		expect([...found.literals].sort()).toEqual(["mason-a", "mason-b", "mason-c"]);
+		expect(found.unrecognised).toEqual([]);
+	});
+
+	it("reads every string argument of a variadic class call", () => {
+		const source = `
+			el.classList.add("mason-a", "mason-b");
+			el.addClass("mason-c", 'mason-d');
+			el.removeClass("mason-e",
+				"mason-f");
+		`;
+		expect([...extractAppliedClasses(source).literals].sort()).toEqual([
+			"mason-a", "mason-b", "mason-c", "mason-d", "mason-e", "mason-f",
+		]);
+	});
+
+	it("does not read a string after a non-variadic class site as a class", () => {
+		const source = `
+			el.createDiv({ cls: "mason-a", "mason-key": 1 });
+			el.toggleClass("mason-b", "mason-not-a-class" in flags);
+		`;
+		expect([...extractAppliedClasses(source).literals].sort()).toEqual(["mason-a", "mason-b"]);
+	});
+
+	it("flags a classList argument it cannot read statically", () => {
+		const found = extractAppliedClasses("el.classList.add(...names); el.classList.add(name);");
+		expect(found.unrecognised).toHaveLength(2);
+	});
+
 	it("reports a templated class as its static prefix", () => {
 		const source = "pill.addClass(`mason-fixed mason-pill-${state.kind.toLowerCase()}`);";
 		const found = extractAppliedClasses(source);
@@ -243,7 +316,10 @@ describe("styles.css and src/ agree on mason classes", () => {
 	});
 
 	it("src/ only passes class arguments the extractor can read, bar the reviewed ones", () => {
-		expect(repo.unrecognised).toEqual(INDIRECT_CLASS_SITES);
+		const counts = Object.fromEntries(Object.entries(repo.unrecognised).map(([file, sites]) => [file, sites.length]));
+		expect(counts, `unreadable class sites: ${JSON.stringify(repo.unrecognised, null, 2)}`).toEqual(
+			INDIRECT_CLASS_SITE_COUNTS,
+		);
 	});
 
 	it("every templated class has its possible values listed", () => {

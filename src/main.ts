@@ -27,7 +27,7 @@ import { MaterializedFingerprintStore } from "./scripts/materializedFingerprint"
 import { LifecycleController } from "./scripts/lifecycleController";
 import type { LifecycleVault } from "./scripts/lifecycleController";
 import { ImportPickerModal } from "./ui/importPickerModal";
-import { loadScriptModule, buildRequireFn, loadRunFnSafe, resolveScriptsDir } from "./scripts/loader";
+import { loadScriptModule, buildRequireFn, buildScriptFnResolver, resolveScriptsDir } from "./scripts/loader";
 import { buildEnabledPasteScripts } from "./scripts/pasteAssembly";
 import { debug, setDebugLogging } from "./core/debug";
 import { resolveFormatSelectionRecipe } from "./core/formatSelection";
@@ -507,10 +507,10 @@ export class MarkdownMasonPlugin extends Plugin {
 			getState = () => ({ kind: "Disabled" });
 		}
 
+		// One load context for the whole batch, built before the first id.
 		const scriptsDir = resolveScriptsDir(this.app.vault.adapter, this.manifest.dir);
-		const requireFn = buildRequireFn(scriptsDir);
-		const resolveScriptFn = (id: string): import("./scripts/context").ScriptFunction =>
-			getState(id).kind !== "Active" ? (): undefined => undefined : loadRunFnSafe(id, scriptsDir, requireFn);
+		const loadContext = { scriptsDir, requireFn: buildRequireFn(scriptsDir) };
+		const resolveScriptFn = buildScriptFnResolver(getState, () => loadContext);
 
 		for (const id of targets) {
 			const name = (records[id].commandName ?? "").trim() || id;
@@ -675,18 +675,12 @@ export class MarkdownMasonPlugin extends Plugin {
 					getState = () => ({ kind: "Disabled" });
 				}
 
-				// T6.3: resolveScriptFn — loads the module for a runnable (Active) script
-				// and returns its run function. Falls back to a safe no-op for non-runnable
-				// ids (CommandManager._invokeScript re-checks getState before invoking, so
-				// this no-op is never actually invoked for non-Active scripts).
+				// T6.3: resolveScriptFn — the run function of a runnable (Active) script,
+				// a safe no-op for every other id (see buildScriptFnResolver). One load
+				// context per launcher invocation, built before the modal opens.
 				const scriptsDir = resolveScriptsDir(this.app.vault.adapter, this.manifest.dir);
-				const requireFn = buildRequireFn(scriptsDir);
-				const resolveScriptFn = (id: string): import("./scripts/context").ScriptFunction => {
-					if (getState(id).kind !== "Active") {
-						return (): undefined => undefined;
-					}
-					return loadRunFnSafe(id, scriptsDir, requireFn);
-				};
+				const loadContext = { scriptsDir, requireFn: buildRequireFn(scriptsDir) };
+				const resolveScriptFn = buildScriptFnResolver(getState, () => loadContext);
 
 				// Runnable (Active) scripts, with name + description for the picker cards.
 				const entries = items

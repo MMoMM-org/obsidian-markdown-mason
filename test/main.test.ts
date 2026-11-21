@@ -263,33 +263,43 @@ describe("MarkdownMasonPlugin", () => {
 		 * onload with a counting fake resolver in place of the live one, and two
 		 * curated records in the store: one UpdateAvailable, one Active.
 		 */
-		async function loadSeedablePlugin(opts: { version: string; lastSeen: string }): Promise<SeededPlugin> {
+		async function loadSeedablePlugin(opts: {
+			version: string;
+			lastSeen: string;
+			/** Makes every resolve pass reject, as a failing cache refresh does. */
+			resolveFails?: boolean;
+		}): Promise<SeededPlugin> {
 			const plugin = makePlugin();
 			const states: Record<string, LifecycleState> = {
 				"perplexity-app": { kind: "UpdateAvailable" } as LifecycleState,
 				"perplexity-web": { kind: "Active" } as LifecycleState,
 			};
 			const resolveItems = vi.fn((records: Record<string, ScriptRecord>): Promise<ScriptItem[]> =>
-				Promise.resolve(
-					Object.keys(records).map((id) => ({
-						id,
-						displayName: id,
-						description: "",
-						record: records[id],
-						state: states[id] ?? ({ kind: "Disabled" } as LifecycleState),
-						version: 1,
-						provenance: "curated" as const,
-						catalogVersion: undefined,
-					})),
-				),
+				opts.resolveFails === true
+					? Promise.reject(new Error("catalog unreachable"))
+					: Promise.resolve(
+						Object.keys(records).map((id) => ({
+							id,
+							displayName: id,
+							description: "",
+							record: records[id],
+							state: states[id] ?? ({ kind: "Disabled" } as LifecycleState),
+							version: 1,
+							provenance: "curated" as const,
+							catalogVersion: undefined,
+						})),
+					),
 			);
 			// The tab's cache captures the resolver at construction, so the fake must
-			// be in place before onload builds the tab.
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			(plugin as any)._initLifecycleResolver = (): Promise<void> => {
+			// be in place before onload builds the tab. spyOn throws when the method
+			// is gone, so a rename fails here instead of silently using the live one.
+			vi.spyOn(
+				plugin as unknown as { _initLifecycleResolver(): Promise<void> },
+				"_initLifecycleResolver",
+			).mockImplementation((): Promise<void> => {
 				plugin.lifecycleResolver = { resolveItems, clearCache: (): void => undefined } as unknown as LifecycleResolver;
 				return Promise.resolve();
-			};
+			});
 			await plugin.onload();
 			await plugin.store.setRecord("perplexity-app", CURATED);
 			await plugin.store.setRecord("perplexity-web", CURATED);
@@ -334,6 +344,26 @@ describe("MarkdownMasonPlugin", () => {
 			expect(resolveItems).toHaveBeenCalledTimes(1);
 			const modal = lastOpenedModal() as unknown as { _opts: { updatableCount: number } };
 			expect(modal._opts.updatableCount).toBe(1);
+		});
+
+		it("still shows the splash, with count 0, when the cache refresh fails", async () => {
+			const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+			const { plugin, cache, resolveItems } = await loadSeedablePlugin({
+				version: "0.3.0",
+				lastSeen: "0.2.0",
+				resolveFails: true,
+			});
+
+			fireLayoutReady(plugin);
+
+			await vi.waitFor(() => expect(lastOpenedModal()).toBeInstanceOf(UpdateSplashModal));
+			expect(resolveItems).toHaveBeenCalledTimes(1);
+			expect(cache.items).toBeNull();
+			expect(plugin.updatableScriptCount).toBeUndefined();
+			const modal = lastOpenedModal() as unknown as { _opts: { updatableCount: number } };
+			expect(modal._opts.updatableCount).toBe(0);
+			expect(warn).toHaveBeenCalledWith("[mason] scripts refresh failed", expect.any(Error));
+			warn.mockRestore();
 		});
 
 		it("makes the script rows part of settingItems after the seed (searchable after startup)", async () => {

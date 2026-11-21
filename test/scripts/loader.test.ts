@@ -13,7 +13,14 @@ import * as path from "node:path";
 import * as os from "node:os";
 import * as module from "node:module";
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { loadScriptFresh, loadScriptModule, resolveScriptsDir, extractScriptDescription } from "../../src/scripts/loader";
+import {
+	buildScriptFnResolver,
+	loadScriptFresh,
+	loadScriptModule,
+	resolveScriptsDir,
+	extractScriptDescription,
+} from "../../src/scripts/loader";
+import type { LifecycleState } from "../../src/scripts/lifecycle";
 import type { RequireFn, ScriptModule, PasteBlock } from "../../src/scripts/loader";
 
 // ---------------------------------------------------------------------------
@@ -397,5 +404,85 @@ describe("extractScriptDescription", () => {
 		// A source that would throw if evaluated still yields its description.
 		const src = "// description: safe\nthrow new Error('should never run');";
 		expect(extractScriptDescription(src)).toBe("safe");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// buildScriptFnResolver — only an Active script gets its real run function
+// ---------------------------------------------------------------------------
+
+describe("buildScriptFnResolver", () => {
+	const ACTIVE: LifecycleState = { kind: "Active" };
+	const DISABLED: LifecycleState = { kind: "Disabled" };
+
+	/** A scripts dir holding `<id>.cjs`, whose run returns `marker`. */
+	function scriptsDirWith(id: string, marker: string): string {
+		const dir = makeTempDir("mason-resolver-");
+		fs.writeFileSync(
+			path.join(dir, `${id}.cjs`),
+			`module.exports = { run() { return ${JSON.stringify(marker)}; } };`,
+		);
+		return dir;
+	}
+
+	function loadContextFor(scriptsDir: string) {
+		return vi.fn(() => ({ scriptsDir, requireFn: makeRequireFn(scriptsDir) }));
+	}
+
+	it("returns the materialized module's run function for an Active script", () => {
+		const scriptsDir = scriptsDirWith("alpha", "ran alpha");
+		const resolve = buildScriptFnResolver(() => ACTIVE, loadContextFor(scriptsDir));
+
+		expect(resolve("alpha")({} as never)).toBe("ran alpha");
+	});
+
+	it.each<LifecycleState["kind"]>(["Available", "Absent", "Disabled", "Materializing", "UpdateAvailable", "Blocked"])(
+		"returns a no-op for a %s script, without asking for the load context",
+		(kind) => {
+			const scriptsDir = scriptsDirWith("alpha", "ran alpha");
+			const getLoadContext = loadContextFor(scriptsDir);
+			const resolve = buildScriptFnResolver(() => ({ kind }) as LifecycleState, getLoadContext);
+
+			expect(resolve("alpha")({} as never)).toBeUndefined();
+			expect(getLoadContext).not.toHaveBeenCalled();
+		},
+	);
+
+	it("asks for the state of the id it resolves", () => {
+		const scriptsDir = scriptsDirWith("alpha", "ran alpha");
+		const getState = vi.fn((id: string) => (id === "alpha" ? ACTIVE : DISABLED));
+		const resolve = buildScriptFnResolver(getState, loadContextFor(scriptsDir));
+
+		expect(resolve("beta")({} as never)).toBeUndefined();
+		expect(resolve("alpha")({} as never)).toBe("ran alpha");
+		expect(getState.mock.calls).toEqual([["beta"], ["alpha"]]);
+	});
+
+	it("reads the state on every call, so it follows a later state change", () => {
+		const scriptsDir = scriptsDirWith("alpha", "ran alpha");
+		let state: LifecycleState = DISABLED;
+		const resolve = buildScriptFnResolver(() => state, loadContextFor(scriptsDir));
+
+		expect(resolve("alpha")({} as never)).toBeUndefined();
+		state = ACTIVE;
+		expect(resolve("alpha")({} as never)).toBe("ran alpha");
+	});
+
+	it("asks for the load context once per Active resolution (the caller decides what to cache)", () => {
+		const scriptsDir = scriptsDirWith("alpha", "ran alpha");
+		const getLoadContext = loadContextFor(scriptsDir);
+		const resolve = buildScriptFnResolver(() => ACTIVE, getLoadContext);
+
+		resolve("alpha");
+		resolve("alpha");
+
+		expect(getLoadContext).toHaveBeenCalledTimes(2);
+	});
+
+	it("soft-fails to a no-op when the Active script's module cannot be loaded", () => {
+		const scriptsDir = makeTempDir("mason-resolver-empty-");
+		const resolve = buildScriptFnResolver(() => ACTIVE, loadContextFor(scriptsDir));
+
+		expect(resolve("missing")({} as never)).toBeUndefined();
 	});
 });

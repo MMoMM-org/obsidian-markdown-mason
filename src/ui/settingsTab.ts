@@ -4,7 +4,7 @@ import type { MasonSettings } from "../core/types";
 import type { ScriptStore } from "../scripts/store";
 import type { LifecycleResolver } from "../scripts/lifecycleResolver";
 import type { LifecycleController } from "../scripts/lifecycleController";
-import { buildRequireFn, loadRunFnSafe, resolveScriptsDir } from "../scripts/loader";
+import { buildRequireFn, buildScriptFnResolver, resolveScriptsDir } from "../scripts/loader";
 import { debug, setDebugLogging } from "../core/debug";
 import { buildCommandsPage } from "./commandsPage";
 import type { CommandManagerPort, CommandPageDeps } from "./commandsPage";
@@ -168,14 +168,13 @@ export class MasonSettingTab extends PluginSettingTab {
 			store: plugin.store,
 			commandManager: plugin.commandManager,
 			getState,
-			resolveScriptFn: (id) => {
-				// CommandManager re-checks the state before it invokes a script, so
-				// this no-op is never run for a script that is not Active.
-				if (getState(id).kind !== "Active") return (): undefined => undefined;
+			// The load context is computed on demand, when an Active script's
+			// command is registered — not while the tab is constructed.
+			resolveScriptFn: buildScriptFnResolver(getState, () => {
 				// Absolute path: require needs one, and manifest.dir is vault-relative.
 				const scriptsDir = resolveScriptsDir(plugin.app.vault.adapter, plugin.manifest.dir);
-				return loadRunFnSafe(id, scriptsDir, buildRequireFn(scriptsDir));
-			},
+				return { scriptsDir, requireFn: buildRequireFn(scriptsDir) };
+			}),
 		};
 	}
 }

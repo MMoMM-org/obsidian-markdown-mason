@@ -204,6 +204,52 @@ describe("MasonSettingTab — getSettingDefinitions", () => {
 		expect(own.filter((name) => name.startsWith("_render") || name === "_selectSegment")).toEqual([]);
 	});
 
+	it("puts no static alias on two targets across the whole tree, script and command rows included", async () => {
+		// "import" is a script id that equals a static alias: a script row's own
+		// id alias is user data and exempt (SDD Acceptance Criteria, T3.5).
+		const { tab } = makeTab({ scripts: { ...TWO_SCRIPTS, import: makeScriptRecord() } });
+		await tab.scripts.refresh();
+		const items = tab.getSettingDefinitions();
+		const scriptIds = new Set((tab.scripts.items ?? []).map((item) => item.id));
+		const isScriptRow = (node: DefinitionNode): boolean => node.type === "render" && node.path[0] === "Scripts";
+
+		const targetsByAlias = new Map<string, string[]>();
+		let exemptIdAliases = 0;
+		for (const node of walk(items)) {
+			for (const alias of node.aliases ?? []) {
+				if (isScriptRow(node) && scriptIds.has(alias)) {
+					exemptIdAliases++;
+					continue;
+				}
+				const key = alias.toLowerCase();
+				const target = [...node.path, node.name ?? ""].join(" > ");
+				targetsByAlias.set(key, [...(targetsByAlias.get(key) ?? []), target]);
+			}
+		}
+
+		// Not vacuous: script and command rows are in the tree, and every static alias was seen.
+		expect(exemptIdAliases).toBe(3);
+		expect(walk([pageNamed(items, "Commands")]).filter((node) => node.type === "render")).toHaveLength(2);
+		expect([...targetsByAlias.keys()].sort()).toEqual([
+			"catalog",
+			"command palette",
+			"console",
+			"debug",
+			"footnotes",
+			"help",
+			"hotkey",
+			"import",
+			"ocr",
+			"official scripts",
+			"paste",
+			"paste and format",
+			"textsniper",
+			"version",
+		]);
+		const clashes = [...targetsByAlias].filter(([, targets]) => targets.length > 1);
+		expect(clashes).toEqual([]);
+	});
+
 	it("a setting is found by a search for its name; an unrelated term finds nothing", () => {
 		const { tab } = makeTab();
 		const items = tab.getSettingDefinitions();
