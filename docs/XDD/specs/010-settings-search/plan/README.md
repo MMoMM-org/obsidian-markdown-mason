@@ -156,7 +156,7 @@ Each phase is defined in a separate file. Tasks follow red-green-refactor: **Pri
 
 > **Tracking Principle**: Track logical units that produce verifiable outcomes. The TDD cycle is the method, not separate tracked items.
 
-- [ ] [Phase 1: Foundations: test harness, storage adapter, fixed definitions](phase-1.md)
+- [x] [Phase 1: Foundations: test harness, storage adapter, fixed definitions](phase-1.md)
 - [ ] [Phase 2: Scripts and Commands pages](phase-2.md)
 - [ ] [Phase 3: Tab swap and plugin wiring](phase-3.md)
 - [ ] [Phase 4: Release hygiene and end-to-end validation](phase-4.md)

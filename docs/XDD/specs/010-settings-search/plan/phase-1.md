@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: Foundations: test harness, storage adapter, fixed definitions"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 1
 ---
@@ -81,7 +81,7 @@ Establishes the test harness for the declarative API, the single source of truth
      - exactly 18 controls with today's names and descs verbatim, each bound to the right `FixedKey` and control type (text with placeholder "## Resources" for resourcesName, toggles otherwise);
      - main-page order: 4 bare General controls, then the injected Scripts page, then the injected Commands page, then the Format selection group with the intro row "Which steps run" (today's intro desc), then Cleanup (6), Lists (2), Headings (2), Footnotes (3), then Advanced (Debug logging, then the injected Documentation row);
      - the "Format selection only" suffix is on exactly cascade, fromCitations, identity and move;
-     - aliases: OCR and TextSniper → reflow; paste and paste and format → intro; console and debug → Debug logging; no alias appears on two targets;
+     - aliases: OCR and TextSniper → reflow; footnotes → Resolve footnote identity (added in T1.6); paste and paste and format → intro; console and debug → Debug logging; no alias appears on two targets;
      - every name, desc, heading and alias is in sentence case (tree-walking check, because lint can't see object literals);
      - the result is never empty.
   3. Implement: Create `src/ui/settingsDefinitions.ts` with `FIXED_SETTINGS` (one `FixedSettingSpec` per setting) and `buildMainPageItems({scriptsPage, commandsPage, identityRow})`. Pages and the identity row are injected, so the module has no dependency on the scripts code.
@@ -93,7 +93,7 @@ Establishes the test harness for the declarative API, the single source of truth
      - [x] Sentence case `[ref: PRD/F2.4]`
      - [x] Everyday-word aliases for fixed settings `[ref: PRD/F8.1]` `[ref: PRD/F8.2]`
 
-- [ ] **T1.6 Search reach and noise for fixed settings** `[activity: frontend-ui]`
+- [x] **T1.6 Search reach and noise for fixed settings** `[activity: frontend-ui]`
 
   Added by the Phase 1 drift check (2026-11-21): the PRD's search-by-description and no-noise criteria had no test.
 

@@ -735,7 +735,7 @@ N/A: single plugin process.
 
 **Fixed settings and search (PRD Features 1, 8)**
 - [ ] THE SYSTEM SHALL return, from `getSettingDefinitions()`, exactly 18 control definitions whose `name`/`desc` match today's strings verbatim.
-- [ ] THE SYSTEM SHALL attach these aliases: OCR and TextSniper to reflow; paste and paste and format to the Format selection intro; console and debug to Debug logging; hotkey and command palette to the Commands page's always-present intro row (today's hint "Name the command, toggle to create it, then bind keys in core hotkeys.", which no longer repeats on every row); catalog, official scripts and import to the Scripts action rows. No alias appears on more than one target.
+- [ ] THE SYSTEM SHALL attach these aliases: OCR and TextSniper to reflow; footnotes to Resolve footnote identity (T1.6, its wording is singular); paste and paste and format to the Format selection intro; console and debug to Debug logging; hotkey and command palette to the Commands page's always-present intro row (today's hint "Name the command, toggle to create it, then bind keys in core hotkeys.", which no longer repeats on every row); catalog, official scripts and import to the Scripts action rows. No alias appears on more than one target.
 - [ ] THE SYSTEM SHALL never return an empty definitions array.
 
 **Layout (PRD Feature 2)**

@@ -23,6 +23,8 @@ phase: 2
 - ADR-7: list `addItem` = Import from vault, `extraButtons` = Browse official, plus a searchable action-row group (aliases catalog, official scripts, import).
 - ADR-1: page `displayValue`/`status` for the update indicator.
 
+**Test-helper note (from T1.6 review)**: `search()` in test/ui/helpers/definitionTree.ts checks `visible`/`searchable` per node, not inherited. If a page, group or list here gets a `visible`/`searchable` predicate, make `search()` inherit the parent's flags (Obsidian skips a hidden container with everything inside it) before pinning search results.
+
 **Dependencies**: Phase 1 complete (harness T1.1). Old renderers in scriptsTab.ts / commandsTab.ts keep working by importing the moved helpers; they are deleted in T3.1.
 
 ---
