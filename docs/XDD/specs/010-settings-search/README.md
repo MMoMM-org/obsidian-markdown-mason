@@ -40,6 +40,7 @@
 | 2026-11-21 | Model tier: frontier | Classifier recommended frontier (rule 2: novel_pattern=true, declarative definition builders; high_risks=2, settings reset and script rows losing actions; adr_count=8). Accepted; frontier cost sentence shown. |
 | 2026-11-21 | PLAN complete → Ready; commit only | Plan written without a second discovery round (SDD research already covered sequencing, tests and risks). User chose commit only: no push or PR yet. Implementation branch: spec/010-settings-search-impl. |
 | 2026-11-21 | Deviation D-1: pages and rows keyed by stable names, not `id` | Found in T1.1: Obsidian 1.13.1 typings declare no `id` on SettingDefinition*, and the 1.15.1 runtime keys by `id ?? name`. User approved: drop `id`; the deep link becomes openPagePath(pluginId, ['Scripts']). SDD (ADR-4 text, gotchas, interfaces) and phases 2-3 updated. |
+| 2026-11-21 | Phase 1 drift check: update spec + add T1.6 | Drift and alignment checks: 0 FAIL, mostly SDD text lagging approved code. Recorded D-2 (old tab reads strings from the module already). SDD updated: no "intro" in the section enum, exports documented (FIXED_KEYS, fixedSetting, MainPageParts, FixedGroupRow, shared constants, REPO_URL, parseAuthorName, openUrl seam), code-context refs point at pluginIdentity.ts, responsibility row, directory map. New task T1.6 tests search reach and noise (PRD F1.2, F8.1, F8.2); the OCR→Dehyphenate and paste→suffix overlaps are pinned as related. |
 
 ## Context
 

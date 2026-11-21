@@ -41,7 +41,7 @@ Establishes the test harness for the declarative API, the single source of truth
      - the base `getControlValue`/`setControlValue` **throw**;
      - mock `Setting` exposes `nameEl`/`descEl`/`controlEl`/`settingEl`, `addExtraButton` (with `setIcon`/`setTooltip`/`onClick`/`extraSettingsEl`), `setDisabled`, `setTooltip`;
      - a `SettingGroup` stub can be constructed;
-     - a `walk(items)` test helper flattens a definition tree into `{path, type, id, name, key, desc, aliases}` in render order, recursing through groups, lists and pages.
+     - a `walk(items)` test helper flattens a definition tree into `{path, type, name, key, desc, aliases}` (no `id`, deviation D-1) in render order, recursing through groups, lists and pages.
   3. Implement: Extend `test/__mocks__/obsidian.ts` (additive; existing captures unchanged). Add `test/ui/helpers/definitionTree.ts` with `walk()`.
   4. Validate: Full suite still green (existing UI tests untouched); `tsc -noEmit` clean (vitest 4 `Mock<…>` typing).
   5. Success: The throwing base setter makes any missing override fail loudly `[ref: SDD/ADR-5]`; the tree walker supports every definition kind used by the SDD `[ref: SDD/Application Data Models]`
@@ -72,7 +72,7 @@ Establishes the test harness for the declarative API, the single source of truth
   4. Validate: Unit tests pass; headerSection tests still pass; lint and types clean.
   5. Success: Version and Documentation link reachable without a heading above General `[ref: PRD/F9.1]`; SDD identity criterion `[ref: SDD/Acceptance Criteria/Identity]`
 
-- [ ] **T1.4 Fixed settings SSOT and main-page tree: settingsDefinitions** `[activity: frontend-ui]`
+- [x] **T1.4 Fixed settings SSOT and main-page tree: settingsDefinitions** `[activity: frontend-ui]`
 
   Depends on T1.1, T1.2, T1.3.
 
@@ -85,14 +85,29 @@ Establishes the test harness for the declarative API, the single source of truth
      - every name, desc, heading and alias is in sentence case (tree-walking check, because lint can't see object literals);
      - the result is never empty.
   3. Implement: Create `src/ui/settingsDefinitions.ts` with `FIXED_SETTINGS` (one `FixedSettingSpec` per setting) and `buildMainPageItems({scriptsPage, commandsPage, identityRow})`. Pages and the identity row are injected, so the module has no dependency on the scripts code.
-  4. Validate: Unit tests pass; lint and types clean; no string is duplicated between this file and the still-live settingsTab.ts. The old tab is not yet switched to read from here; T3.1 deletes its copies.
+  4. Validate: Unit tests pass; lint and types clean; no string is duplicated between this file and the still-live settingsTab.ts. The old tab reads its strings from here (deviation D-2), so each string exists once; T3.1 deletes the old tab.
   5. Success:
-     - [ ] All 18 settings findable by name or desc `[ref: PRD/F1.1]` `[ref: PRD/F1.2]`
-     - [ ] Layout order and headings `[ref: PRD/F2.1]` `[ref: PRD/F2.2]`
-     - [ ] "Format selection only" note kept `[ref: PRD/F2.3]`
-     - [ ] Sentence case `[ref: PRD/F2.4]`
-     - [ ] Everyday-word aliases for fixed settings `[ref: PRD/F8.1]` `[ref: PRD/F8.2]`
+     - [x] All 18 settings findable by name or desc `[ref: PRD/F1.1]` `[ref: PRD/F1.2]`
+     - [x] Layout order and headings `[ref: PRD/F2.1]` `[ref: PRD/F2.2]`
+     - [x] "Format selection only" note kept `[ref: PRD/F2.3]`
+     - [x] Sentence case `[ref: PRD/F2.4]`
+     - [x] Everyday-word aliases for fixed settings `[ref: PRD/F8.1]` `[ref: PRD/F8.2]`
 
-- [ ] **T1.5 Phase validation** `[activity: validate]`
+- [ ] **T1.6 Search reach and noise for fixed settings** `[activity: frontend-ui]`
+
+  Added by the Phase 1 drift check (2026-11-21): the PRD's search-by-description and no-noise criteria had no test.
+
+  1. Prime: PRD Feature 1.2 and Feature 8 `[ref: PRD/F1.2]` `[ref: PRD/F8.1]` `[ref: PRD/F8.2]`; Obsidian matches a row by name, desc text and each alias (simple substring search) `[ref: SDD/Constraints]`; test/ui/settingsDefinitions.test.ts
+  2. Test:
+     - a test-only `search(items, term)` helper returns the names of rows whose name, desc or any alias contains the term (case-insensitive), walking the whole tree;
+     - description words reach their target: "ligature" → Decompose ligatures and punctuation, "OCR" → Reflow wrapped text;
+     - each Feature 8 word returns exactly a pinned result set (OCR, TextSniper, paste, footnotes, console, debug);
+     - known overlaps are pinned as related, not noise: "OCR" also matches Dehyphenate words (OCR artifacts), "paste" also matches the four "Format selection only" toggles through their suffix;
+     - no fixed-settings search word returns an unrelated row.
+  3. Implement: the helper in `test/ui/helpers/definitionTree.ts` next to `walk()`, and the tests in `test/ui/settingsDefinitions.test.ts`. Change production text only if a pinned result reveals real noise; record any such change.
+  4. Validate: tests pass; tsc and lint clean.
+  5. Success: search by description `[ref: PRD/F1.2]`; everyday words reach their target `[ref: PRD/F8.1]`; no unrelated noise `[ref: PRD/F8.2]`
+
+- [x] **T1.5 Phase validation** `[activity: validate]`
 
   Run `npx tsc -noEmit -skipLibCheck && npm run lint && npm test`. Remove the `id` surface (`idOf`, `withId`, `DefinitionNode.id` and its assertions) from test/ui/helpers/definitionTree.ts and harness.test.ts per deviation D-1. Verify the new modules against the SDD responsibility table (each owns exactly one responsibility; no ordering logic outside `buildMainPageItems`). The existing segmented tab and its tests still pass unchanged.

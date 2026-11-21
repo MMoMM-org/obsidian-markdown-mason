@@ -122,9 +122,9 @@ version: "1.0"
 - file: src/ui/commandsTab.ts
   relevance: HIGH
   why: "Per-script command row handlers (L99-153) to reuse"
-- file: src/ui/HeaderSection.ts
+- file: src/ui/pluginIdentity.ts
   relevance: MEDIUM
-  why: "REPO_URL, author parsing (L19, L98-104) for the Documentation row"
+  why: "REPO_URL and parseAuthorName (moved here from HeaderSection.ts in T1.3); Documentation row"
 - file: src/main.ts
   relevance: HIGH
   why: "onload order (L176-181), saveSettings/pickSettingsFields (L531-541, L925-934), splash (L382-456), resolver/controller wiring (L217-263)"
@@ -249,7 +249,7 @@ graph LR
     Tab --> CommandsPage[commandsPage<br/>Commands page + rows]
     Tab --> Cache[scriptsCache<br/>async script state]
     ScriptsPage --> Ops[scriptLifecycleOps<br/>LifecycleOps builder]
-    Fixed --> Identity[pluginIdentity<br/>Documentation row]
+    Tab -.->|injects row| Identity[pluginIdentity<br/>Documentation row]
     Cache --> Res[LifecycleResolver]
     Cache --> Store[ScriptStore]
     Ops --> Ctl[LifecycleController]
@@ -263,7 +263,7 @@ Responsibilities (MECE):
 
 | Component | Single responsibility |
 |---|---|
-| `settingsDefinitions` | Owns name, desc, aliases, key and grouping of the 18 fixed settings, and assembles the main-page items (General, Format selection groups, Advanced including the Documentation row) |
+| `settingsDefinitions` | Owns name, desc, aliases, key and grouping of the 18 fixed settings, plus the Format selection intro row and the group headings, and assembles the main-page items (General, Format selection groups, Advanced including the Documentation row) |
 | `settingsControlStore` | Maps a control key to a read from / write into the in-memory `MasonSettings` (flat and nested `formatSelection.*`), with defaults |
 | `scriptsCache` | Holds the last resolved script state; runs refreshes (single flight, coalescing, generation check); notifies on change |
 | `scriptsPage` | Builds the Scripts page definition and configures one script row from a `ScriptItem` (pill, version, toggle, menu, recovery) |
@@ -300,6 +300,7 @@ Responsibilities (MECE):
     ├── __mocks__/obsidian.ts      # MODIFY: declarative-API mock additions
     ├── compliance.test.ts         # MODIFY: allow minAppVersion ahead of the last versions.json entry (pending release)
     └── ui/                        # REWRITE/MODIFY: see Test strategy
+        └── helpers/definitionTree.ts # NEW (T1.1): walk()/controls() flatten a definition tree for assertions
 ```
 Docs: `README.md`, `docs/configuration.md`, `docs/installation.md` (MODIFY, Feature 10).
 
@@ -332,13 +333,20 @@ No HTTP endpoints. These module interfaces are new or changed:
 settingsControlStore:
   type FixedKey = "resourcesName" | "showUpdateSplash" | "numericOnly" | "pasteListContext"
                 | "debugLogging" | `formatSelection.${keyof FormatSelectionRecipe}`
+  FIXED_KEYS: readonly FixedKey[]              # the 18 keys; formatSelection.* derived from resolveFormatSelectionRecipe(DEFAULT_SETTINGS)
   isFixedKey(key: string): key is FixedKey
   readControl(settings: MasonSettings, key: FixedKey): string | boolean     # always concrete (defaults applied)
-  writeControl(settings: MasonSettings, key: FixedKey, value: unknown): void # mutates in memory, no I/O
+  writeControl(settings: MasonSettings, key: FixedKey, value: unknown): void # mutates in memory, no I/O; also ignores non-FixedKey input
 
 settingsDefinitions:
   FIXED_SETTINGS: readonly FixedSettingSpec[]   # SSOT rows {key, section, name, desc, aliases?, control}
-  buildMainPageItems(deps: {scriptsPage, commandsPage, identityRow}): SettingDefinitionItem<FixedKey>[]
+  fixedSetting(key: FixedKey): FixedSettingSpec  # lookup; throws on an unknown key (bridge for the old tab until T3.1)
+  FORMAT_SELECTION_INTRO: SettingDefinitionEmpty # "Which steps run" row (no control key), aliases paste / paste and format
+  FORMAT_SELECTION_ONLY, FORMAT_SELECTION_HEADING, SECTION_HEADINGS, RESOURCES_NAME_PLACEHOLDER  # shared text constants
+  type MainPageParts = {scriptsPage: SettingDefinitionPage, commandsPage: SettingDefinitionPage, identityRow: SettingDefinitionAction}
+  type FixedGroupRow = SettingDefinition<FixedKey>  # what a fixed group may contain (rows only)
+  buildMainPageItems(parts: MainPageParts): SettingDefinitionItem<FixedKey>[]
+  # T3.1: prune fixedSetting and constants that only the old tab used
 
 scriptsCache:
   class ScriptsCache {
@@ -362,7 +370,9 @@ commandsPage:
   configureCommandRow(setting: Setting, id: string, record: ScriptRecord, deps: CommandRowDeps): void
 
 pluginIdentity:
-  buildDocumentationRow(manifest: PluginManifest): SettingDefinitionAction
+  REPO_URL: string
+  parseAuthorName(author: string | undefined): string   # strips "<email>"
+  buildDocumentationRow(manifest: PluginManifest, openUrl?: (url: string) => void): SettingDefinitionAction  # openUrl = test seam, defaults to window.open
 
 MasonSettingTab (extends PluginSettingTab):
   getSettingDefinitions(): SettingDefinitionItem[]   # never empty
@@ -382,7 +392,7 @@ MasonPlugin:
 ENTITY: FixedSettingSpec (NEW, in settingsDefinitions)
   FIELDS:
     key: FixedKey
-    section: "general" | "intro" | "cleanup" | "lists" | "headings" | "footnotes" | "advanced"
+    section: "general" | "cleanup" | "lists" | "headings" | "footnotes" | "advanced"   # the intro row has no FixedKey, so it is FORMAT_SELECTION_INTRO, not a spec
     name: string            # verbatim from today's setName
     desc: string            # verbatim from today's setDesc (+ FORMAT_SELECTION_ONLY suffix where it applies)
     aliases?: string[]      # Feature 8 vocabulary
