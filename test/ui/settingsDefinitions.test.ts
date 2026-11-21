@@ -381,11 +381,15 @@ describe("buildMainPageItems — search aliases", () => {
 		expect(aliasesOf("Debug logging")).toEqual(["console", "debug"]);
 	});
 
+	it('makes "Resolve footnote identity" findable by "footnotes", which its singular wording misses', () => {
+		expect(aliasesOf("Resolve footnote identity")).toEqual(["footnotes"]);
+	});
+
 	it("gives no other fixed setting an alias", () => {
 		const aliased = controls(flatTree())
 			.filter((row) => row.aliases !== undefined)
 			.map((row) => row.key);
-		expect(aliased).toEqual(["formatSelection.reflow", "debugLogging"]);
+		expect(aliased).toEqual(["formatSelection.reflow", "formatSelection.identity", "debugLogging"]);
 	});
 
 	it("never points one alias at two targets", () => {
@@ -433,6 +437,7 @@ const PINNED_SEARCH_RESULTS: Record<string, string[]> = {
 		"Resources section heading",
 		"Numeric-only footnotes",
 		"Convert citations to footnotes",
+		"Resolve footnote identity",
 		"Move footnotes to resources",
 	],
 	"console": ["Debug logging"],
@@ -442,6 +447,7 @@ const PINNED_SEARCH_RESULTS: Record<string, string[]> = {
 	// Remaining aliases of the fixed tree
 	"paste and format": ["Which steps run", ...FORMAT_SELECTION_ONLY_ROWS],
 	"help": ["Documentation"],
+	// "Show update notes" is a related overlap, not noise: it shows what a new version brought.
 	"version": ["Show update notes", "Documentation"],
 };
 

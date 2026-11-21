@@ -185,6 +185,7 @@ export const FIXED_SETTINGS: readonly FixedSettingSpec[] = [
 		section: "footnotes",
 		name: "Resolve footnote identity",
 		desc: "Renumber footnote references to remove gaps and duplicates." + FORMAT_SELECTION_ONLY,
+		aliases: ["footnotes"],
 		control: TOGGLE,
 	},
 	{
