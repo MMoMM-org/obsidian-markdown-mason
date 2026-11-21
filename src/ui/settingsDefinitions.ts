@@ -44,10 +44,10 @@ export interface FixedSettingSpec {
 /** Desc suffix of the steps that "Paste and format" skips. */
 export const FORMAT_SELECTION_ONLY = ' ℹ️ "Format selection" only — not applied by "Paste and format".';
 
-export const FORMAT_SELECTION_HEADING = "Format selection";
+const FORMAT_SELECTION_HEADING = "Format selection";
 
 /** Group headings of the sections that have one; General controls sit bare on the page. */
-export const SECTION_HEADINGS = {
+const SECTION_HEADINGS = {
 	cleanup: "Cleanup",
 	lists: "Lists",
 	headings: "Headings",
@@ -68,11 +68,11 @@ export const FORMAT_SELECTION_INTRO: IntroRowSpec = {
 	aliases: ["paste", "paste and format"],
 };
 
-export const RESOURCES_NAME_PLACEHOLDER = "## Resources";
+const RESOURCES_NAME_PLACEHOLDER = "## Resources";
 
 const TOGGLE: FixedSettingControl = { type: "toggle" };
 
-/** Every fixed setting, in render order within its section. */
+/** Every fixed setting, in render order within its section. Every FixedKey has one (asserted by the unit tests). */
 export const FIXED_SETTINGS: readonly FixedSettingSpec[] = [
 	{
 		key: "resourcesName",
@@ -204,15 +204,6 @@ export const FIXED_SETTINGS: readonly FixedSettingSpec[] = [
 		control: TOGGLE,
 	},
 ];
-
-/** The spec of one fixed setting. Every FixedKey has one (asserted by the unit tests). */
-export function fixedSetting(key: FixedKey): FixedSettingSpec {
-	const spec = FIXED_SETTINGS.find((candidate) => candidate.key === key);
-	if (spec === undefined) {
-		throw new Error(`No fixed setting is defined for control key "${key}"`);
-	}
-	return spec;
-}
 
 function toControlRow(spec: FixedSettingSpec): SettingDefinition<FixedKey> {
 	return {

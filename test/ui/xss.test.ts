@@ -6,8 +6,8 @@
  * Lock in that untrusted strings in v0.1 are always rendered as TEXT, never
  * parsed as HTML markup.  Untrusted strings in scope:
  *
- *   - Script manifest fields: `source` (and any id) — shown in the Scripts
- *     settings section via Setting.setName() / Setting.setDesc().
+ *   - Script record fields: `source` (and any id) — shown in a row of the
+ *     Scripts settings page, filled by configureScriptRow.
  *   - Script vault-relative path — shown in the ScriptDisclosureModal via
  *     createEl({text}).
  *
@@ -18,13 +18,10 @@
  * introduced an unsafe sink.
  *
  * Failure scenario (hypothetical):
- *   If _renderScriptsSection were changed to:
- *     containerEl.innerHTML += `<div>${entry.source}</div>`;
- *   then:
- *     1. The captured Setting's desc would no longer contain the raw payload
- *        (setDesc would not be called), breaking assertion (S1).
- *     2. The mock's _collectText() would not find the payload as text
- *        (innerHTML is not modelled in the mock), breaking assertion (S2).
+ *   If configureScriptRow were changed to:
+ *     setting.descEl.innerHTML += `<div>${item.record.source}</div>`;
+ *   then the mock's _collectText() would not find the payload as text
+ *   (innerHTML is not modelled in the mock), breaking assertions S1 and S2.
  *   Similarly for the disclosure modal (D1, D2).
  *
  * STATIC GUARANTEE
@@ -42,17 +39,19 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { App } from "obsidian";
-import type { ScriptRecord } from "../../src/scripts/store";
+import type { Setting as ObsidianSetting } from "obsidian";
+import { buildOfflineScriptItems } from "../../src/ui/scriptsCache";
+import type { LifecycleOps } from "../../src/ui/scriptsPage";
 import {
-	clearCapturedSettings,
 	MockHTMLElement,
+	Setting,
 } from "../__mocks__/obsidian";
 
 // ---------------------------------------------------------------------------
 // Imports resolved after module alias is set up by vitest
 // ---------------------------------------------------------------------------
 
-const { MasonSettingTab } = await import("../../src/ui/settingsTab");
+const { configureScriptRow } = await import("../../src/ui/scriptsPage");
 const { ScriptDisclosureModal } = await import("../../src/scripts/disclosure");
 
 // ---------------------------------------------------------------------------
@@ -85,26 +84,34 @@ const PAYLOADS = {
 };
 
 // ---------------------------------------------------------------------------
-// Helpers — settings tab
+// Helpers — Scripts page row
 // ---------------------------------------------------------------------------
 
-/**
- * Build a minimal plugin double with a manifest entry whose source field
- * contains the given hostile payload.
- */
-function makePluginWithPayload(sourcePayload: string, idPayload: string = "safe-id") {
-	const app = new App();
-	const settings = {
-		resourcesName: "Resources",
-		debugLogging: false,
-		numericOnly: true,
-	};
-	const saveSettings = vi.fn().mockResolvedValue(undefined);
+/** No test here triggers an action; the row only needs something to close over. */
+const UNUSED_OPS: LifecycleOps = {
+	enable: vi.fn(),
+	disable: vi.fn(),
+	remove: vi.fn(),
+	retry: vi.fn(),
+	update: vi.fn(),
+	reReview: vi.fn(),
+	viewSource: vi.fn(),
+	importFromVault: vi.fn(),
+	browseOfficial: vi.fn(),
+};
 
-	// New ScriptRecord shape (T1.4). okayed.version = 1 keeps the rendered desc
-	// "Source: <payload>  ·  v1" identical to the v0.1 shape, so the XSS
-	// text-rendering assertions below remain valid against the migrated tab.
-	const scripts: Record<string, ScriptRecord> = {
+/**
+ * Render the Scripts page row of an imported script whose `source` (and
+ * optionally id) is hostile, and return the row element so tests can assert
+ * that the strings appear as TEXT via _collectText().
+ *
+ * The item is resolved the way the plugin resolves a stored record, so the
+ * hostile id becomes the row name and the hostile source its description
+ * ("Source: <payload>"). Obsidian sets name and description from the row's
+ * definition before configureScriptRow runs; the mock Setting does the same.
+ */
+function renderScriptRow(sourcePayload: string, idPayload: string = "safe-id"): MockHTMLElement {
+	const [item] = buildOfflineScriptItems({
 		[idPayload]: {
 			provenance: "imported",
 			enabled: false,
@@ -112,48 +119,10 @@ function makePluginWithPayload(sourcePayload: string, idPayload: string = "safe-
 			source: sourcePayload,
 			command: false,
 		},
-	};
-	const store = {
-		getScripts: vi.fn().mockResolvedValue(scripts),
-		setRecord: vi.fn().mockResolvedValue(undefined),
-	};
-
-	// Plugin manifest — required by HeaderSection (wired into display()).
-	const pluginManifest = {
-		id: "markdown-mason",
-		name: "Markdown Mason",
-		version: "0.0.1",
-		minAppVersion: "1.6.6",
-		description: "Test description.",
-		author: "Marcus Breiden",
-		authorUrl: "https://www.mmomm.org",
-		isDesktopOnly: true,
-	};
-
-	return { app, settings, saveSettings, store, manifest: pluginManifest } as const;
-}
-
-/**
- * Render the settings tab with the given plugin double and navigate to the
- * Scripts segment, so the card-based Scripts tab (scriptsTab.ts) renders into
- * the container. Returns the container (a MockHTMLElement) so tests can assert
- * that hostile strings appear as TEXT via _collectText(). T4.2: per-script rows
- * are no longer Setting() rows — the source/id are rendered as card text via
- * createEl({text}) (a text sink, never innerHTML).
- */
-async function renderTabWithPlugin(
-	plugin: ReturnType<typeof makePluginWithPayload>,
-): Promise<MockHTMLElement> {
-	clearCapturedSettings();
-	const tab = new MasonSettingTab(plugin.app as never, plugin as never);
-	await tab.display();
-	// Navigate to the Scripts segment so script cards render into the container.
-	const containerEl = tab.containerEl as unknown as MockHTMLElement;
-	const scriptsButton = containerEl._findButtonByText("Scripts");
-	clearCapturedSettings();
-	scriptsButton!._click();
-	await Promise.resolve();
-	return containerEl;
+	});
+	const setting = new Setting(null).setName(item!.displayName).setDesc(item!.description);
+	configureScriptRow(setting as unknown as ObsidianSetting, item!, UNUSED_OPS);
+	return setting.settingEl;
 }
 
 // ---------------------------------------------------------------------------
@@ -257,14 +226,14 @@ describe("XSS — static: no unsafe HTML write-sinks in src/", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Suite XSS-2 — Settings tab: hostile script source/id field (T4.2 card DOM)
+// Suite XSS-2 — Scripts page: hostile script source/id in a row
 //
-// The Scripts tab (scriptsTab.ts) renders each script as a CARD whose text is
-// built via createEl({ text }) / setText — text sinks, never innerHTML. The
-// hostile `source` appears in the card description ("Source: <payload>") and the
-// hostile `id` appears as the card display name.
+// A script row (configureScriptRow, scriptsPage.ts) shows its text through
+// the definition's name/desc and createSpan/createDiv({ text }) — text sinks,
+// never innerHTML. The hostile `source` appears in the row description
+// ("Source: <payload>") and the hostile `id` appears as the row name.
 //
-// Assertion S1: the verbatim payload appears in the container's collected TEXT.
+// Assertion S1: the verbatim payload appears in the row's collected TEXT.
 // Assertion S2: it is stored as text content, never parsed into markup child
 //               elements (an innerHTML sink would not surface via _collectText).
 //
@@ -273,38 +242,33 @@ describe("XSS — static: no unsafe HTML write-sinks in src/", () => {
 // breaking S1.
 // ---------------------------------------------------------------------------
 
-describe("XSS — settings tab: hostile source field rendered as text", () => {
+describe("XSS — Scripts page row: hostile source field rendered as text", () => {
 	for (const [name, payload] of Object.entries(PAYLOADS).filter(([k]) => k !== "path")) {
-		it(`source payload "${name}" is rendered as verbatim card text, not parsed as markup`, async () => {
-			const plugin = makePluginWithPayload(payload);
-			const container = await renderTabWithPlugin(plugin);
+		it(`source payload "${name}" is rendered as verbatim row text, not parsed as markup`, () => {
+			const row = renderScriptRow(payload);
 
-			// S1: the raw hostile payload appears verbatim in the card's text.
-			// createEl({text}) is a text helper — it stores the string as-is.
-			expect(container._collectText()).toContain(payload);
+			// S1: the raw hostile payload appears verbatim in the row's text.
+			expect(row._collectText()).toContain(payload);
 		});
 	}
 
-	it("hostile script id is rendered as verbatim card text, not parsed as markup", async () => {
-		// The id is used directly as the card display name via createEl({ text }).
+	it("hostile script id is rendered as verbatim row text, not parsed as markup", () => {
+		// The id is the row name and labels the row's controls.
 		const idPayload = PAYLOADS.script;
-		const plugin = makePluginWithPayload("safe-source", idPayload);
-		const container = await renderTabWithPlugin(plugin);
+		const row = renderScriptRow("safe-source", idPayload);
 
-		// S1: the raw hostile id payload appears verbatim in the container text.
-		expect(container._collectText()).toContain(idPayload);
+		// S1: the raw hostile id payload appears verbatim in the row text.
+		expect(row._collectText()).toContain(idPayload);
 	});
 
-	it("card text is the LITERAL payload — no markup was injected as a child element", async () => {
-		// This assertion targets the container (MockHTMLElement) directly.
+	it("row text is the LITERAL payload — no markup was injected as a child element", () => {
 		// _collectText() recursively collects all text set via setText / createEl({text}).
 		// If an unsafe innerHTML sink were used, the payload would be parsed into DOM
 		// nodes (not modelled by the mock) and would NOT surface as collected text.
-		const plugin = makePluginWithPayload(PAYLOADS.imgOnerror);
-		const container = await renderTabWithPlugin(plugin);
+		const row = renderScriptRow(PAYLOADS.imgOnerror);
 
 		// S2: the exact payload appears as text — it was not stripped or parsed.
-		expect(container._collectText()).toContain(`Source: ${PAYLOADS.imgOnerror}`);
+		expect(row._collectText()).toContain(`Source: ${PAYLOADS.imgOnerror}`);
 	});
 });
 

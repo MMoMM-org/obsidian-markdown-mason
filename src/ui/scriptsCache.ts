@@ -10,8 +10,10 @@
 // while a refresh is running collapses into one follow-up pass that starts after
 // the running one settled. So the last state always wins and two resolves never
 // overlap.
+//
+// Failures are reported with console.warn, not debug(): they are genuine errors
+// and must surface without the debug logging setting.
 
-import { debug } from "../core/debug";
 import { evaluateState } from "../scripts/lifecycle";
 import type { LifecycleResolver } from "../scripts/lifecycleResolver";
 import type { ScriptRecord, ScriptStore } from "../scripts/store";
@@ -22,7 +24,7 @@ export interface ScriptsCacheDeps {
 	store: Pick<ScriptStore, "getScripts">;
 	/** Live resolver. Absent → states come from buildOfflineScriptItems. */
 	resolver?: Pick<LifecycleResolver, "clearCache" | "resolveItems">;
-	/** Publishes the number of scripts with an update waiting (the Scripts badge). */
+	/** Publishes the number of scripts with an update waiting (the Scripts page indicator). */
 	setUpdatableCount(count: number): void;
 }
 
@@ -121,7 +123,7 @@ export class ScriptsCache {
 			const items = await this._resolve(records);
 			this._apply(records, items);
 		} catch (err) {
-			debug("[mason] scripts refresh failed", err);
+			console.warn("[mason] scripts refresh failed", err);
 		} finally {
 			this._inFlight = false;
 			if (this._pending) {
@@ -147,12 +149,12 @@ export class ScriptsCache {
 		try {
 			this._deps.setUpdatableCount(this.updatableCount);
 		} catch (err) {
-			debug("[mason] publishing the scripts update count failed", err);
+			console.warn("[mason] publishing the scripts update count failed", err);
 		}
 		try {
 			this.onChange();
 		} catch (err) {
-			debug("[mason] scripts change listener failed", err);
+			console.warn("[mason] scripts change listener failed", err);
 		}
 	}
 }

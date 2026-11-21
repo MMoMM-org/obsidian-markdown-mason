@@ -1,80 +1,63 @@
 /**
- * T4.1 — MasonSettingTab segmented shell tests (RED → GREEN).
+ * Spec 010 T3.1 — the declarative MasonSettingTab.
  *
- * Verifies the four-segment settings tab introduced in T4.1.
+ * The tab is thin: it assembles the main page from the builders, maps control
+ * keys onto the settings, and connects the ScriptsCache to `update()`. These
+ * tests pin that wiring on the definition tree the tab returns; a render row
+ * is exercised by calling its `render` with a mock Setting, as Obsidian does.
  *
- * Observable behaviour contracts:
- *   1. Four segment buttons rendered: General · Scripts · Commands · Advanced
- *   2. Default segment (General) renders its controls on display()
- *   3. Selecting a segment re-renders and shows ONLY that section's Settings
- *   4. General retains v0.1 controls (resourcesName text + numericOnly toggle)
- *   5. Advanced retains debugLogging toggle
- *   6. All setName strings follow sentence case
- *   7. No innerHTML / outerHTML / insertAdjacentHTML usage
- *   8. display() is idempotent (calling twice yields same count for default segment)
+ * Contracts:
+ *   1. getSettingDefinitions() is buildMainPageItems over the real Scripts
+ *      page, Commands page and Documentation row; never empty; no I/O.
+ *   2. getControlValue reads through readControl (defaults applied).
+ *   3. setControlValue writes in memory, then persists through saveSettings
+ *      exactly once. The mock base class throws, so a missing override fails.
+ *   4. hide() marks the cache stale; the next build refreshes it once.
+ *   5. A cache change redraws through update().
+ *   6. The lifecycle ops, and with them the controller's re-render callback,
+ *      are built once, in the constructor.
+ *
+ * HOUSE STYLE: tabs, double quotes, factory test data.
  */
 
-import { describe, it, expect, vi } from "vitest";
-import { App } from "obsidian";
-import type { ScriptRecord } from "../../src/scripts/store";
-import type { LifecycleState } from "../../src/scripts/lifecycle";
-import type { LifecycleResolver } from "../../src/scripts/lifecycleResolver";
-
-// ---------------------------------------------------------------------------
-// Pull in test helpers from the mock (populated by the Setting extension).
-// Imported via the relative path so TypeScript resolves our mock types
-// (not the obsidian package .d.ts) and vitest uses the same module instance
-// as the alias (Vite deduplicates by resolved path).
-// ---------------------------------------------------------------------------
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import type {
+	Setting as ObsidianSetting,
+	SettingDefinitionItem,
+	SettingDefinitionList,
+	SettingDefinitionPage,
+	SettingGroup as ObsidianSettingGroup,
+} from "obsidian";
 import {
+	App,
+	MockHTMLElement,
+	Setting,
+	SettingGroup,
 	capturedSettings,
 	clearCapturedSettings,
-	MockHTMLElement,
+	clearNoticeLog,
+	noticeLog,
 } from "../__mocks__/obsidian";
-
-// ---------------------------------------------------------------------------
-// Local types for the Setting builder introspection shape.
-// Defined here to ensure the tests are coupled only to the SHAPE, not the impl.
-// ---------------------------------------------------------------------------
-
-interface MockTextControl {
-	_value: string;
-	setValue(v: string): MockTextControl;
-	getValue(): string;
-	onChange(cb: (v: string) => void): MockTextControl;
-}
-
-interface MockToggleControl {
-	_value: boolean;
-	setValue(v: boolean): MockToggleControl;
-	getValue(): boolean;
-	onChange(cb: (v: boolean) => void): MockToggleControl;
-}
-
-interface MockButtonControl {
-	_text: string;
-	setButtonText(text: string): MockButtonControl;
-	onClick(cb: () => void | Promise<void>): MockButtonControl;
-}
-
-interface CapturedSetting {
-	/** The name passed to setName(). */
-	name: string;
-	/** The description passed to setDesc(). */
-	desc: string;
-	/** Whether setHeading() was called. */
-	isHeading: boolean;
-	/** Text controls registered via addText(). */
-	textControls: MockTextControl[];
-	/** Toggle controls registered via addToggle(). */
-	toggleControls: MockToggleControl[];
-	/** Button controls registered via addButton(). */
-	buttonControls: MockButtonControl[];
-}
-
-// ---------------------------------------------------------------------------
-// Dynamic import of the module under test (after mocks are resolved).
-// ---------------------------------------------------------------------------
+import { controls, search, walk } from "./helpers/definitionTree";
+import type { DefinitionNode } from "./helpers/definitionTree";
+import {
+	TEST_MANIFEST,
+	makeFakeController,
+	makeFakeResolver,
+	makeScriptRecord,
+	makeTabPlugin,
+	settle,
+} from "./helpers/settingsTabPlugin";
+import type { TabPluginOptions } from "./helpers/settingsTabPlugin";
+import { isDebugLogging, setDebugLogging } from "../../src/core/debug";
+import { DEFAULT_SETTINGS } from "../../src/core/types";
+import type { MasonSettings } from "../../src/core/types";
+import type { LifecycleState } from "../../src/scripts/lifecycle";
+import { buildCommandsPage } from "../../src/ui/commandsPage";
+import { buildDocumentationRow, REPO_URL } from "../../src/ui/pluginIdentity";
+import { buildScriptsPage } from "../../src/ui/scriptsPage";
+import { FIXED_KEYS, readControl } from "../../src/ui/settingsControlStore";
+import { buildMainPageItems } from "../../src/ui/settingsDefinitions";
 
 const { MasonSettingTab } = await import("../../src/ui/settingsTab");
 
@@ -82,996 +65,632 @@ const { MasonSettingTab } = await import("../../src/ui/settingsTab");
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Build a minimal MarkdownMasonPlugin-like test double.
- * Exposes settings (with all required fields) and a spy-able saveSettings().
- */
-function makePlugin(overrides?: {
-	resourcesName?: string;
-	debugLogging?: boolean;
-	numericOnly?: boolean;
-	lifecycleResolver?: LifecycleResolver;
-	lifecycleController?: unknown;
-}) {
-	const app = new App();
-	const settings = {
-		resourcesName: overrides?.resourcesName ?? "Resources",
-		debugLogging: overrides?.debugLogging ?? false,
-		numericOnly: overrides?.numericOnly ?? true,
-	};
-	const saveSettings = vi.fn().mockResolvedValue(undefined);
+/** The tab as the mock base class extends it: with the update() call counter. */
+type TestTab = InstanceType<typeof MasonSettingTab> & { _updateCalls: number };
 
-	// Minimal ScriptStore double — new ScriptRecord shape (T1.4).
-	const scripts: Record<string, ScriptRecord> = {
-		"perplexity-auto": {
-			provenance: "curated", enabled: true, okayed: { version: 1, checksum: "sha256:abc" },
-			source: "vault/perplexity-auto.cjs", command: false,
-		},
-		"perplexity-web": {
-			provenance: "curated", enabled: false, okayed: { version: 1, checksum: "sha256:def" },
-			source: "vault/perplexity-web.cjs", command: false,
-		},
-	};
-	const store = {
-		getScripts: vi.fn().mockResolvedValue(scripts),
-		setRecord: vi.fn().mockResolvedValue(undefined),
-	};
-
-	// Plugin manifest — required by HeaderSection (wired into display()).
-	const pluginManifest = {
-		id: "markdown-mason",
-		name: "Markdown Mason",
-		version: "0.0.1",
-		minAppVersion: "1.6.6",
-		description: "Test description.",
-		author: "Marcus Breiden",
-		authorUrl: "https://www.mmomm.org",
-		isDesktopOnly: true,
-	};
-
-	// Minimal CommandManager double for T4.4 Commands tab wiring.
-	const commandManager = {
-		register: vi.fn(),
-		unregister: vi.fn(),
-		disableScript: vi.fn().mockResolvedValue(undefined),
-	};
-
-	const lifecycleResolver = overrides?.lifecycleResolver;
-	const lifecycleController = overrides?.lifecycleController;
-
-	return { app, settings, saveSettings, store, manifest: pluginManifest, commandManager, lifecycleResolver, lifecycleController } as const;
+function makeTab(options: TabPluginOptions = {}) {
+	const { plugin, scripts } = makeTabPlugin(options);
+	const tab = new MasonSettingTab(plugin.app as never, plugin as never) as TestTab;
+	return { tab, plugin, scripts };
 }
 
-/**
- * Build a tab, call display(), and return the captured settings list.
- * Awaits the async display() so all store reads complete before assertions.
- */
-async function renderTab(plugin: ReturnType<typeof makePlugin>): Promise<CapturedSetting[]> {
+/** What the tree looks like, without the callbacks two builds never share. */
+function outline(items: readonly SettingDefinitionItem[]): unknown[] {
+	return walk(items).map(({ path, type, name, key, desc, aliases }) => ({ path, type, name, key, desc, aliases }));
+}
+
+function pageNamed(items: readonly SettingDefinitionItem[], name: string): SettingDefinitionPage {
+	const page = items.find((item): item is SettingDefinitionPage => "type" in item && item.type === "page" && item.name === name);
+	if (page === undefined) throw new Error(`no page named "${name}"`);
+	return page;
+}
+
+function rowNamed(items: readonly SettingDefinitionItem[], pageName: string, name: string): DefinitionNode {
+	const row = walk([pageNamed(items, pageName)]).find((node) => node.name === name && node.type !== "page");
+	if (row === undefined) throw new Error(`no row named "${name}" on the ${pageName} page`);
+	return row;
+}
+
+/** Renders a `render` row the way Obsidian does and returns its captured Setting. */
+function renderRow(row: DefinitionNode) {
+	if (!("render" in row.definition) || row.definition.render === undefined) {
+		throw new Error(`"${row.name ?? ""}" is not a render row`);
+	}
 	clearCapturedSettings();
-	const tab = new MasonSettingTab(plugin.app as never, plugin as never);
-	await tab.display();
-	return capturedSettings() as unknown as CapturedSetting[];
+	row.definition.render(
+		new Setting(null) as unknown as ObsidianSetting,
+		new SettingGroup(null) as unknown as ObsidianSettingGroup,
+	);
+	return capturedSettings()[0]!;
 }
 
+/** Runs an `action` row the way a click does. */
+function runAction(row: DefinitionNode): void {
+	if (!("action" in row.definition) || row.definition.action === undefined) {
+		throw new Error(`"${row.name ?? ""}" is not an action row`);
+	}
+	row.definition.action(new MockHTMLElement("div") as unknown as HTMLElement, 0);
+}
+
+const TWO_SCRIPTS = {
+	"perplexity-auto": makeScriptRecord(),
+	"perplexity-web": makeScriptRecord({ enabled: false }),
+};
+
+afterEach(() => {
+	setDebugLogging(false);
+	vi.restoreAllMocks();
+	vi.unstubAllGlobals();
+});
+
 // ---------------------------------------------------------------------------
-// SEGMENT NAVIGATION
+// DEFINITIONS
 // ---------------------------------------------------------------------------
 
-describe("MasonSettingTab — segment navigation", () => {
-	it("renders exactly four segment buttons: General, Scripts, Commands, Advanced", async () => {
-		const plugin = makePlugin();
-		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
-		clearCapturedSettings();
-		await tab.display();
-
-		// The segment buttons are rendered as <button> elements on containerEl.
-		const buttons = (tab.containerEl as unknown as MockHTMLElement)._findAllButtons();
-		const labels = buttons.map((b) => b._text);
-
-		expect(labels).toContain("General");
-		expect(labels).toContain("Scripts");
-		expect(labels).toContain("Commands");
-		expect(labels).toContain("Advanced");
+describe("MasonSettingTab — getSettingDefinitions", () => {
+	it("is never empty, also before any script state has loaded", () => {
+		const { tab } = makeTab();
+		expect(tab.getSettingDefinitions().length).toBeGreaterThan(0);
+		expect(controls(walk(tab.getSettingDefinitions()))).toHaveLength(18);
 	});
 
-	it("default segment (General) shows General controls after display()", async () => {
-		const plugin = makePlugin();
-		const settings = await renderTab(plugin);
+	it("assembles buildMainPageItems from the real Scripts page, Commands page and Documentation row", async () => {
+		const { tab, plugin } = makeTab({ scripts: TWO_SCRIPTS });
+		await tab.scripts.refresh();
+		const unusedOps = {} as Parameters<typeof buildScriptsPage>[1];
+		const unusedDeps = {} as Parameters<typeof buildCommandsPage>[1];
 
-		// General section must have a text control for resourcesName.
-		const resourcesSetting = settings.find(
-			(s) => !s.isHeading && s.textControls.length > 0 && s.name.toLowerCase().includes("resources"),
-		);
-		expect(resourcesSetting).toBeDefined();
+		const expected = buildMainPageItems({
+			scriptsPage: buildScriptsPage(tab.scripts, unusedOps),
+			commandsPage: buildCommandsPage(tab.scripts, unusedDeps),
+			identityRow: buildDocumentationRow(plugin.manifest),
+		});
 
-		// General section must have a toggle for numericOnly.
-		const numericSetting = settings.find(
-			(s) => !s.isHeading && s.toggleControls.length > 0 && s.name.toLowerCase().includes("numeric"),
-		);
-		expect(numericSetting).toBeDefined();
+		expect(outline(tab.getSettingDefinitions())).toEqual(outline(expected));
 	});
 
-	it("default segment (General) does NOT show debugLogging toggle", async () => {
-		const plugin = makePlugin();
-		const settings = await renderTab(plugin);
+	it("lists every script on the Scripts page and every enabled one on the Commands page", async () => {
+		const { tab } = makeTab({ scripts: TWO_SCRIPTS });
+		await tab.scripts.refresh();
+		const items = tab.getSettingDefinitions();
 
-		// Advanced's debugLogging control must not be present in the default General view.
-		const debugSetting = settings.find(
-			(s) => !s.isHeading && s.toggleControls.length > 0 && s.name.toLowerCase().includes("debug"),
-		);
-		expect(debugSetting).toBeUndefined();
+		const scriptRows = walk([pageNamed(items, "Scripts")]).filter((node) => node.type === "render");
+		expect(scriptRows.map((node) => node.name)).toEqual(["perplexity-auto", "perplexity-web"]);
+		const commandRows = walk([pageNamed(items, "Commands")]).filter((node) => node.type === "render");
+		expect(commandRows.map((node) => node.name)).toEqual(["perplexity-auto"]);
 	});
 
-	it("selecting the Advanced segment shows only debugLogging toggle, not resourcesName", async () => {
-		const plugin = makePlugin();
-		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
-		clearCapturedSettings();
-		await tab.display();
+	it("shows the loading state on both pages until the cache has loaded", () => {
+		const { tab } = makeTab({ scripts: TWO_SCRIPTS });
+		const items = tab.getSettingDefinitions();
 
-		// Click the "Advanced" segment button.
-		const advancedButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Advanced");
-		expect(advancedButton).toBeDefined();
-
-		clearCapturedSettings();
-		advancedButton!._click();
-
-		const settings = capturedSettings() as unknown as CapturedSetting[];
-
-		// debugLogging toggle must appear.
-		const debugSetting = settings.find(
-			(s) => !s.isHeading && s.toggleControls.length > 0 && s.name.toLowerCase().includes("debug"),
+		const list = (pageNamed(items, "Scripts").items ?? []).find(
+			(item): item is SettingDefinitionList => "type" in item && item.type === "list",
 		);
-		expect(debugSetting).toBeDefined();
-
-		// resourcesName text control must NOT appear.
-		const resourcesSetting = settings.find(
-			(s) => !s.isHeading && s.textControls.length > 0 && s.name.toLowerCase().includes("resources"),
-		);
-		expect(resourcesSetting).toBeUndefined();
+		expect(list?.emptyState).toBe("Loading scripts…");
+		expect(walk([pageNamed(items, "Commands")]).map((node) => node.name)).toContain("Loading scripts…");
 	});
 
-	it("selecting the General segment shows resourcesName, not debugLogging", async () => {
-		const plugin = makePlugin();
-		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
-		clearCapturedSettings();
-		await tab.display();
+	it("ends with the Documentation row, which names the manifest version and opens the repository", () => {
+		const { tab } = makeTab();
+		const opened = vi.fn();
+		vi.stubGlobal("window", { open: opened });
 
-		// Navigate to Advanced first, then back to General.
-		// Drain microtasks between clicks so _rendering is cleared before the next click fires.
-		const advancedButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Advanced");
-		clearCapturedSettings();
-		advancedButton!._click();
-		await Promise.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
-
-		const generalButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("General");
-		clearCapturedSettings();
-		generalButton!._click();
-		await Promise.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
-
-		const settings = capturedSettings() as unknown as CapturedSetting[];
-
-		// resourcesName text control must appear.
-		const resourcesSetting = settings.find(
-			(s) => !s.isHeading && s.textControls.length > 0 && s.name.toLowerCase().includes("resources"),
-		);
-		expect(resourcesSetting).toBeDefined();
-
-		// debugLogging must NOT appear.
-		const debugSetting = settings.find(
-			(s) => !s.isHeading && s.toggleControls.length > 0 && s.name.toLowerCase().includes("debug"),
-		);
-		expect(debugSetting).toBeUndefined();
+		const last = walk(tab.getSettingDefinitions()).at(-1)!;
+		expect(last.name).toBe("Documentation");
+		expect(last.path).toEqual(["Advanced"]);
+		expect(last.desc).toContain(`v${TEST_MANIFEST.version}`);
+		runAction(last);
+		expect(opened).toHaveBeenCalledWith(REPO_URL, "_blank", "noopener,noreferrer");
 	});
 
-	it("selecting the Commands segment shows Commands controls and no General or Advanced controls", async () => {
-		const plugin = makePlugin();
-		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
-		clearCapturedSettings();
-		await tab.display();
+	it("performs no I/O while building", async () => {
+		const resolver = makeFakeResolver({});
+		const { tab, plugin } = makeTab({ scripts: TWO_SCRIPTS, lifecycleResolver: resolver });
 
-		const commandsButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Commands");
-		expect(commandsButton).toBeDefined();
+		tab.getSettingDefinitions();
+		tab.getSettingDefinitions();
+		await settle();
 
-		clearCapturedSettings();
-		commandsButton!._click();
-		// Commands renders asynchronously (getScripts + resolveItems).
-		await Promise.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
-
-		const settings = capturedSettings() as unknown as CapturedSetting[];
-
-		// A Commands control for the enabled script must appear (per-script toggle row).
-		const commandRow = settings.find(
-			(s) => !s.isHeading && s.name === "perplexity-auto",
-		);
-		expect(commandRow).toBeDefined();
-
-		// resourcesName must NOT appear.
-		const resourcesSetting = settings.find(
-			(s) => !s.isHeading && s.textControls.length > 0 && s.name.toLowerCase().includes("resources"),
-		);
-		expect(resourcesSetting).toBeUndefined();
-
-		// debugLogging must NOT appear.
-		const debugSetting = settings.find(
-			(s) => !s.isHeading && s.toggleControls.length > 0 && s.name.toLowerCase().includes("debug"),
-		);
-		expect(debugSetting).toBeUndefined();
+		expect(plugin.store.getScripts).not.toHaveBeenCalled();
+		expect(resolver.resolveItems).not.toHaveBeenCalled();
+		expect(plugin.saveSettings).not.toHaveBeenCalled();
 	});
 
-	it("selecting the Scripts segment shows script rows, not General or Advanced controls", async () => {
-		const plugin = makePlugin();
-		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
-		clearCapturedSettings();
-		await tab.display();
+	it("is declarative only: no display() override and no segment selection", () => {
+		const own = Object.getOwnPropertyNames(MasonSettingTab.prototype);
+		expect(own).not.toContain("display");
+		expect(own).not.toContain("selectScriptsSegment");
+		expect(own.filter((name) => name.startsWith("_render") || name === "_selectSegment")).toEqual([]);
+	});
 
-		const scriptsButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Scripts");
-		expect(scriptsButton).toBeDefined();
-
-		clearCapturedSettings();
-		// Scripts section is async — its render method awaits getScripts().
-		// The click handler must schedule or await the async render.
-		scriptsButton!._click();
-
-		// Allow async render to complete — the click handler queues a microtask.
-		await Promise.resolve();
-
-		const settings = capturedSettings() as unknown as CapturedSetting[];
-		const container = tab.containerEl as unknown as MockHTMLElement;
-
-		// Script cards must appear (rendered into the container, not as Setting rows).
-		expect(container._collectText()).toContain("perplexity-auto");
-
-		// resourcesName must NOT appear.
-		const resourcesSetting = settings.find(
-			(s) => !s.isHeading && s.textControls.length > 0 && s.name.toLowerCase().includes("resources"),
-		);
-		expect(resourcesSetting).toBeUndefined();
+	it("a setting is found by a search for its name; an unrelated term finds nothing", () => {
+		const { tab } = makeTab();
+		const items = tab.getSettingDefinitions();
+		expect(search(items, "reflow wrapped")).toEqual(["Reflow wrapped text"]);
+		expect(search(items, "zebra crossing")).toEqual([]);
 	});
 });
 
 // ---------------------------------------------------------------------------
-// ACTIVE SEGMENT INDICATION
-//
-// The active section is conveyed by the tab itself (the mason-segment-active
-// class + aria-selected), NOT by a redundant bold section heading. These tests
-// lock in that contract: no setHeading() section headers, and exactly one
-// active tab at a time.
+// READING CONTROL VALUES
 // ---------------------------------------------------------------------------
 
-describe("MasonSettingTab — active segment indication", () => {
-	it("marks the General tab active by default", async () => {
-		const plugin = makePlugin();
-		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
-		await tab.display();
+describe("MasonSettingTab — getControlValue", () => {
+	const stored: Partial<MasonSettings> = {
+		resourcesName: "### Sources",
+		debugLogging: true,
+		numericOnly: false,
+		formatSelection: { reflow: true, dewrap: false },
+	};
 
-		const container = tab.containerEl as unknown as MockHTMLElement;
-		const general = container._findButtonByText("General");
-		expect(general).toBeDefined();
-		expect(general!._hasClass("mason-segment-active")).toBe(true);
-		expect(general!._attr("aria-selected")).toBe("true");
+	it.each([...FIXED_KEYS])("reads %s through readControl", (key) => {
+		const { tab, plugin } = makeTab({ settings: stored });
+		expect(tab.getControlValue(key)).toBe(readControl(plugin.settings, key));
 	});
 
-	it("does not mark a non-active tab active", async () => {
-		const plugin = makePlugin();
-		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
-		await tab.display();
-
-		const container = tab.containerEl as unknown as MockHTMLElement;
-		const advanced = container._findButtonByText("Advanced");
-		expect(advanced).toBeDefined();
-		expect(advanced!._hasClass("mason-segment-active")).toBe(false);
-		expect(advanced!._attr("aria-selected")).toBe("false");
+	it("returns stored values", () => {
+		const { tab } = makeTab({ settings: stored });
+		expect(tab.getControlValue("resourcesName")).toBe("### Sources");
+		expect(tab.getControlValue("numericOnly")).toBe(false);
+		expect(tab.getControlValue("formatSelection.reflow")).toBe(true);
+		expect(tab.getControlValue("formatSelection.dewrap")).toBe(false);
 	});
 
-	it("renders no setHeading() section headings in any segment", async () => {
-		const plugin = makePlugin();
-		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
-		clearCapturedSettings();
-		await tab.display();
+	it("returns the default for a value that is not stored", () => {
+		const { tab } = makeTab();
+		expect(tab.getControlValue("numericOnly")).toBe(DEFAULT_SETTINGS.numericOnly);
+		expect(tab.getControlValue("showUpdateSplash")).toBe(true);
+		expect(tab.getControlValue("formatSelection.reflow")).toBe(false);
+		expect(tab.getControlValue("formatSelection.dewrap")).toBe(true);
+	});
 
-		// Visit each segment. Drain microtasks after each click so _rendering is
-		// false before the next click. Scripts and Commands have async render
-		// chains that need several ticks to fully flush; 5 ticks covers all.
-		for (const label of ["General", "Scripts", "Commands", "Advanced"]) {
-			clearCapturedSettings();
-			const btn = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText(label);
-			btn!._click();
-			await Promise.resolve();
-			await Promise.resolve();
-			await Promise.resolve();
-			await Promise.resolve();
-			await Promise.resolve();
+	it("reads the live settings object, not a snapshot", () => {
+		const { tab, plugin } = makeTab();
+		plugin.settings.resourcesName = "## Later";
+		expect(tab.getControlValue("resourcesName")).toBe("## Later");
+	});
 
-			const captured = capturedSettings() as unknown as CapturedSetting[];
-			expect(captured.filter((s) => s.isHeading)).toHaveLength(0);
-
-			// Exactly one tab is marked active — the one we just clicked.
-			const buttons = (tab.containerEl as unknown as MockHTMLElement)._findAllButtons();
-			const active = buttons.filter((b) => b._hasClass("mason-segment-active"));
-			expect(active).toHaveLength(1);
-			expect(active[0]._text).toBe(label);
-		}
+	it("returns undefined for a key that is not a fixed setting", () => {
+		const { tab } = makeTab();
+		expect(tab.getControlValue("scripts")).toBeUndefined();
+		expect(tab.getControlValue("bogus")).toBeUndefined();
 	});
 });
 
 // ---------------------------------------------------------------------------
-// SENTENCE CASE: no multi-word name has more than the first word capitalised
+// WRITING CONTROL VALUES
 // ---------------------------------------------------------------------------
 
-describe("MasonSettingTab — sentence case compliance", () => {
-	it("all setName strings follow sentence case (only first word capitalised)", async () => {
-		const plugin = makePlugin();
-		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
-
-		// Check all four segments.
-		const titleCasePattern = /^.+\s+[A-Z][a-z]/;
-		for (const label of ["General", "Scripts", "Commands", "Advanced"]) {
-			clearCapturedSettings();
-			await tab.display();
-			const btn = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText(label);
-			clearCapturedSettings();
-			if (label === "Scripts") {
-				btn!._click();
-				await Promise.resolve();
-			} else {
-				btn!._click();
-			}
-			const captured = capturedSettings() as unknown as CapturedSetting[];
-			for (const s of captured) {
-				if (s.isHeading) continue;
-				expect(
-					s.name,
-					`Setting name "${s.name}" in ${label} segment appears to be Title Case — use sentence case`,
-				).not.toMatch(titleCasePattern);
-			}
-		}
-	});
-});
-
-// ---------------------------------------------------------------------------
-// GENERAL SECTION
-// ---------------------------------------------------------------------------
-
-describe("MasonSettingTab — General section", () => {
-	it("renders a text control for resourcesName", async () => {
-		const plugin = makePlugin({ resourcesName: "My Resources" });
-		const settings = await renderTab(plugin);
-
-		const resourcesSetting = settings.find(
-			(s) => !s.isHeading && s.textControls.length > 0 && s.name.toLowerCase().includes("resources"),
-		);
-		expect(resourcesSetting).toBeDefined();
-		expect(resourcesSetting!.textControls[0].getValue()).toBe("My Resources");
+describe("MasonSettingTab — setControlValue", () => {
+	beforeEach(() => {
+		clearNoticeLog();
 	});
 
-	it("resourcesName text control onChange updates settings + calls saveSettings", async () => {
-		const plugin = makePlugin({ resourcesName: "Resources" });
-		const settings = await renderTab(plugin);
+	it("writes a flat value, then saves once", async () => {
+		const { tab, plugin } = makeTab();
+		const savedWith: string[] = [];
+		plugin.saveSettings.mockImplementation(async () => {
+			savedWith.push(plugin.settings.resourcesName);
+		});
 
-		const resourcesSetting = settings.find(
-			(s) => !s.isHeading && s.textControls.length > 0 && s.name.toLowerCase().includes("resources"),
-		);
-		expect(resourcesSetting).toBeDefined();
+		await tab.setControlValue("resourcesName", "### Sources");
 
-		const ctrl = resourcesSetting!.textControls[0];
-		// Simulate the user typing a new value; the implementation's own onChange
-		// handler (registered during display()) fires and updates settings + saveSettings.
-		ctrl.setValue("References");
+		expect(plugin.settings.resourcesName).toBe("### Sources");
+		expect(savedWith).toEqual(["### Sources"]);
+	});
 
-		// The implementation's onChange callback should have updated settings and saved.
-		expect(plugin.settings.resourcesName).toBe("References");
+	it("writes a nested Format selection value, then saves once", async () => {
+		const { tab, plugin } = makeTab({ settings: { formatSelection: { dewrap: false } } });
+
+		await tab.setControlValue("formatSelection.reflow", true);
+
+		expect(plugin.settings.formatSelection).toEqual({ dewrap: false, reflow: true });
 		expect(plugin.saveSettings).toHaveBeenCalledTimes(1);
 	});
 
-	it("renders a toggle control for numericOnly", async () => {
-		const plugin = makePlugin({ numericOnly: true });
-		const settings = await renderTab(plugin);
+	it.each(["showUpdateSplash", "numericOnly", "pasteListContext"] as const)(
+		"persists the %s toggle",
+		async (key) => {
+			const { tab, plugin } = makeTab();
 
-		const numericSetting = settings.find(
-			(s) => !s.isHeading && s.toggleControls.length > 0 && s.name.toLowerCase().includes("numeric"),
-		);
-		expect(numericSetting).toBeDefined();
-		expect(numericSetting!.toggleControls[0].getValue()).toBe(true);
-	});
+			await tab.setControlValue(key, false);
 
-	it("numericOnly toggle onChange updates settings + calls saveSettings", async () => {
-		const plugin = makePlugin({ numericOnly: true });
-		const settings = await renderTab(plugin);
+			expect(plugin.settings[key]).toBe(false);
+			expect(tab.getControlValue(key)).toBe(false);
+			expect(plugin.saveSettings).toHaveBeenCalledTimes(1);
+		},
+	);
 
-		const numericSetting = settings.find(
-			(s) => !s.isHeading && s.toggleControls.length > 0 && s.name.toLowerCase().includes("numeric"),
-		);
-		const ctrl = numericSetting!.toggleControls[0];
+	it("switches debug logging on before saving", async () => {
+		const { tab, plugin } = makeTab();
+		const loggingWhileSaving: boolean[] = [];
+		plugin.saveSettings.mockImplementation(async () => {
+			loggingWhileSaving.push(isDebugLogging());
+		});
 
-		// Simulate user toggling; the implementation's own onChange fires.
-		ctrl.setValue(false);
-
-		expect(plugin.settings.numericOnly).toBe(false);
-		expect(plugin.saveSettings).toHaveBeenCalledTimes(1);
-	});
-});
-
-// ---------------------------------------------------------------------------
-// SCRIPTS SECTION (transitional — accessible via segment click)
-// ---------------------------------------------------------------------------
-
-// T4.2: the Scripts segment now renders the card-based Scripts tab (scriptsTab.ts)
-// into the container directly — NOT via Setting rows. These integration tests
-// assert the segment heading is still a Setting heading, and that the card DOM
-// (names, pills, toolbar buttons) appears in the container. Card-level behaviour
-// (⋯ menu, toggle wiring, ops) is exhaustively covered in scriptsTab.test.ts.
-describe("MasonSettingTab — Scripts section (card tab integration)", () => {
-	async function renderScriptsSegment(
-		plugin: ReturnType<typeof makePlugin>,
-	): Promise<{ settings: CapturedSetting[]; container: MockHTMLElement }> {
-		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
-		clearCapturedSettings();
-		await tab.display();
-
-		const container = tab.containerEl as unknown as MockHTMLElement;
-		const scriptsButton = container._findButtonByText("Scripts");
-		clearCapturedSettings();
-		scriptsButton!._click();
-		await Promise.resolve();
-
-		return { settings: capturedSettings() as unknown as CapturedSetting[], container };
-	}
-
-	it("renders the Scripts card tab with no redundant Setting heading", async () => {
-		const plugin = makePlugin();
-		const { settings, container } = await renderScriptsSegment(plugin);
-		// The active tab labels the section — there is no separate bold heading.
-		expect(settings.find((s) => s.isHeading && s.name === "Scripts")).toBeUndefined();
-		// The card tab still renders into the container.
-		expect(container._collectText()).toContain("perplexity-auto");
-	});
-
-	it("lists each installed script from the store as a card", async () => {
-		const plugin = makePlugin();
-		const { container } = await renderScriptsSegment(plugin);
-		const text = container._collectText();
-		// Both injected scripts appear by id.
-		expect(text).toContain("perplexity-auto");
-		expect(text).toContain("perplexity-web");
-	});
-
-	it("each card carries a status pill label", async () => {
-		const plugin = makePlugin();
-		const { container } = await renderScriptsSegment(plugin);
-		const text = container._collectText();
-		// perplexity-web is disabled → Disabled pill. perplexity-auto is enabled +
-		// consented, but with the T4.2 P5 inputs (local:null, online:false) it
-		// resolves to Blocked(offline) until the live catalog/materializer wire in.
-		expect(text).toContain("Disabled");
-		expect(text).toContain("Blocked");
-	});
-
-	it("renders the toolbar (import / browse) and a ⋯ menu button per card", async () => {
-		const plugin = makePlugin();
-		const { container } = await renderScriptsSegment(plugin);
-		expect(container._findButtonByText("Import from vault")).toBeDefined();
-		expect(container._findButtonByText("Browse official")).toBeDefined();
-		expect(container._findButtonByText("⋯")).toBeDefined();
-	});
-});
-
-// ---------------------------------------------------------------------------
-// ADVANCED SECTION
-// ---------------------------------------------------------------------------
-
-describe("MasonSettingTab — Advanced section", () => {
-	async function renderAdvancedSegment(plugin: ReturnType<typeof makePlugin>): Promise<CapturedSetting[]> {
-		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
-		clearCapturedSettings();
-		await tab.display();
-
-		const advancedButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Advanced");
-		clearCapturedSettings();
-		advancedButton!._click();
-
-		return capturedSettings() as unknown as CapturedSetting[];
-	}
-
-	it("renders a toggle control for debugLogging", async () => {
-		const plugin = makePlugin({ debugLogging: false });
-		const settings = await renderAdvancedSegment(plugin);
-
-		const debugToggle = settings.find(
-			(s) => s.toggleControls.length > 0 && s.name.toLowerCase().includes("debug"),
-		);
-		expect(debugToggle).toBeDefined();
-		expect(debugToggle!.toggleControls[0].getValue()).toBe(false);
-	});
-
-	it("debugLogging toggle onChange updates settings + calls saveSettings", async () => {
-		const plugin = makePlugin({ debugLogging: false });
-		const settings = await renderAdvancedSegment(plugin);
-
-		const debugToggle = settings.find(
-			(s) => s.toggleControls.length > 0 && s.name.toLowerCase().includes("debug"),
-		);
-		expect(debugToggle).toBeDefined();
-
-		const ctrl = debugToggle!.toggleControls[0];
-		// Simulate user toggling; the implementation's own onChange fires.
-		ctrl.setValue(true);
+		await tab.setControlValue("debugLogging", true);
 
 		expect(plugin.settings.debugLogging).toBe(true);
+		expect(loggingWhileSaving).toEqual([true]);
+	});
+
+	it("switches debug logging off again, live", async () => {
+		const { tab, plugin } = makeTab({ settings: { debugLogging: true } });
+		setDebugLogging(true);
+
+		await tab.setControlValue("debugLogging", false);
+
+		expect(isDebugLogging()).toBe(false);
+		expect(plugin.settings.debugLogging).toBe(false);
 		expect(plugin.saveSettings).toHaveBeenCalledTimes(1);
 	});
-});
 
-// ---------------------------------------------------------------------------
-// OPERATION CONTEXT — numericOnly threads into OperationContext.settings
-// ---------------------------------------------------------------------------
+	it("leaves debug logging alone when another setting changes", async () => {
+		const { tab } = makeTab();
+		await tab.setControlValue("numericOnly", true);
+		expect(isDebugLogging()).toBe(false);
+	});
 
-describe("MasonSettings — numericOnly in OperationContext", () => {
-	it("OperationContext.settings type includes numericOnly", async () => {
-		// This is a compile-time assertion: TypeScript enforces that settings
-		// has numericOnly. We build a minimal ctx to confirm at runtime.
-		const { DEFAULT_SETTINGS } = await import("../../src/core/types");
+	it.each(["bogus", "scripts", "lastSeenVersion", "formatSelection.bogus", "__proto__"])(
+		"ignores the unknown key %s: no write, no save",
+		async (key) => {
+			const { tab, plugin } = makeTab();
+			const before = JSON.stringify(plugin.settings);
 
-		// DEFAULT_SETTINGS must contain numericOnly
-		expect("numericOnly" in DEFAULT_SETTINGS).toBe(true);
-		expect(DEFAULT_SETTINGS.numericOnly).toBe(true);
+			await tab.setControlValue(key, "hostile");
 
-		// Build a minimal OperationContext — if types.ts is wrong, tsc will catch it.
-		const ctx = {
-			doc: "",
-			cursor: 0,
-			settings: { ...DEFAULT_SETTINGS },
-		};
-		expect(ctx.settings.numericOnly).toBe(true);
+			expect(JSON.stringify(plugin.settings)).toBe(before);
+			expect(plugin.saveSettings).not.toHaveBeenCalled();
+		},
+	);
+
+	it("shows a notice and does not throw when saving fails; the value stays set", async () => {
+		const { tab, plugin } = makeTab();
+		plugin.saveSettings.mockRejectedValue(new Error("disk full"));
+
+		await expect(tab.setControlValue("resourcesName", "### Sources")).resolves.toBeUndefined();
+
+		expect(noticeLog()).toEqual(["Mason: could not save settings."]);
+		expect(plugin.settings.resourcesName).toBe("### Sources");
+	});
+
+	it("shows no notice when saving succeeds", async () => {
+		const { tab } = makeTab();
+		await tab.setControlValue("resourcesName", "### Sources");
+		expect(noticeLog()).toEqual([]);
+	});
+
+	it("never redraws the tab for a control change", async () => {
+		const { tab } = makeTab();
+		await tab.setControlValue("formatSelection.reflow", true);
+		expect(tab._updateCalls).toBe(0);
 	});
 });
 
 // ---------------------------------------------------------------------------
-// CONCURRENT RENDER GUARD — double-click on Scripts must not produce a torn tab
+// UPGRADE — a data.json written by 0.9.4, through the real plugin
 // ---------------------------------------------------------------------------
 
-describe("MasonSettingTab — concurrent render guard", () => {
-	it("two synchronous clicks on Scripts produce exactly one valid Scripts view", async () => {
-		const plugin = makePlugin();
-		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
-		clearCapturedSettings();
-		await tab.display();
-
-		const scriptsButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Scripts");
-		expect(scriptsButton).toBeDefined();
-
-		// Fire two clicks synchronously — no await between them.
-		// Without a guard, the second click calls containerEl.empty() while the
-		// first render is suspended awaiting getScripts(), leaving a blank tab.
-		clearCapturedSettings();
-		scriptsButton!._click();
-		scriptsButton!._click();
-
-		// Drain microtasks — let both async renders complete.
-		await Promise.resolve();
-		await Promise.resolve();
-
-		const container = tab.containerEl as unknown as MockHTMLElement;
-
-		// The toolbar must appear exactly once (no duplication, no torn/blank tab).
-		// One render → one "Browse official" button; a torn double-render shows two.
-		const browseButtons = container._findAllButtons().filter((b) => b._text === "Browse official");
-		expect(browseButtons).toHaveLength(1);
-
-		// The container must hold rendered script content.
-		expect(container._collectText()).toContain("perplexity-auto");
+describe("MasonSettingTab — 0.9.4 data.json", () => {
+	/** What a 0.9.4 install could have persisted: settings and the scripts namespace share the file. */
+	const blob094 = () => ({
+		resourcesName: "## Sources",
+		debugLogging: false,
+		numericOnly: false,
+		showUpdateSplash: false,
+		lastSeenVersion: "0.9.4",
+		formatSelection: { reflow: true, cascade: false },
+		scripts: {
+			"perplexity-auto": makeScriptRecord({ command: true, commandName: "Tidy Perplexity" }),
+			"my-import": makeScriptRecord({ provenance: "imported", enabled: false, okayed: null }),
+		},
 	});
 
-	it("two synchronous lifecycle op toggles re-render exactly one valid Scripts view", async () => {
-		// Use two disabled scripts so both cards render a toggle control.
-		const plugin = makePlugin();
-		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
-		clearCapturedSettings();
-		await tab.display();
-
-		// Navigate to the Scripts segment and wait for the async render to settle.
-		const scriptsButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Scripts");
-		expect(scriptsButton).toBeDefined();
-		scriptsButton!._click();
-		await Promise.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
-
-		// Find the toggle input for one of the script cards (perplexity-web is Disabled
-		// and therefore shows a toggle; find it in the rendered container).
-		const container = tab.containerEl as unknown as MockHTMLElement;
-		const toggle = container._findToggle();
-		expect(toggle).toBeDefined();
-
-		// Fire the toggle twice synchronously — simulates two rapid ops (enable/disable)
-		// before the first re-render can complete. Without the _rendering guard routing
-		// through _selectSegment, the second op calls containerEl.empty() mid-render,
-		// tearing the Scripts tab DOM.
-		clearCapturedSettings();
-		toggle!.setValue(true);
-		toggle!.setValue(false);
-
-		// Drain microtasks — Scripts async depth: getScripts() + setRecord() + rerender
-		// chain each add a microtask tick; three passes are sufficient to settle.
-		await Promise.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
-
-		const container2 = tab.containerEl as unknown as MockHTMLElement;
-
-		// The toolbar must appear exactly once (no duplication, no torn/blank tab).
-		const browseButtons = container2._findAllButtons().filter((b) => b._text === "Browse official");
-		expect(browseButtons).toHaveLength(1);
-
-		// Both script ids must still be present in the rendered container text.
-		const text = container2._collectText();
-		expect(text).toContain("perplexity-auto");
-		expect(text).toContain("perplexity-web");
-	});
-});
-
-// ---------------------------------------------------------------------------
-// DISPLAY CLEARS CONTAINER BEFORE RE-RENDER (idempotency)
-// ---------------------------------------------------------------------------
-
-describe("MasonSettingTab — display() idempotency", () => {
-	it("calling display() twice does not duplicate settings", async () => {
-		const plugin = makePlugin();
-		clearCapturedSettings();
-		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
-
-		await tab.display();
-		const firstCount = capturedSettings().length;
-
-		clearCapturedSettings();
-		await tab.display();
-		const secondCount = capturedSettings().length;
-
-		expect(secondCount).toBe(firstCount);
-	});
-});
-
-// ---------------------------------------------------------------------------
-// T6.1 — Commands tab getState backed by live resolver state map
-//
-// When a lifecycleResolver is injected into the plugin, _renderCommandsSection
-// must pre-resolve all script states and pass a sync getState backed by that
-// Map to renderCommandsTab — NOT unconditionally return {kind:"Disabled"}.
-//
-// These tests FAIL against the current stub (unconditional Disabled) and PASS
-// after the async-to-sync bridge fix lands.
-// ---------------------------------------------------------------------------
-
-describe("MasonSettingTab — T6.1 live resolver state map (Commands tab)", () => {
-	/** Build a fake LifecycleResolver whose resolveItems returns known states. */
-	function makeFakeResolver(states: Record<string, LifecycleState>): LifecycleResolver {
-		return {
-			resolveItems: vi.fn().mockImplementation((records: Record<string, unknown>) => {
-				return Promise.resolve(
-					Object.keys(records).map((id) => ({
-						id,
-						displayName: id,
-						description: "",
-						record: records[id],
-						state: states[id] ?? { kind: "Disabled" },
-						version: 1,
-						provenance: "curated",
-						catalogVersion: undefined,
-					})),
-				);
-			}),
-			// other methods are not called by _renderCommandsSection
-			getState: vi.fn(),
-			resolveInput: vi.fn(),
-			clearCache: vi.fn(),
-		} as unknown as LifecycleResolver;
+	async function loadPlugin() {
+		const { MarkdownMasonPlugin } = await import("../../src/main");
+		const plugin = new MarkdownMasonPlugin(new App() as never, { ...TEST_MANIFEST, version: "0.9.4" } as never);
+		await plugin.saveData(blob094());
+		await plugin.onload();
+		const tab = new MasonSettingTab(plugin.app, plugin);
+		return { plugin, tab };
 	}
 
-	it("getState passed to commandManager.register returns the resolver's Active state — not unconditional Disabled", async () => {
-		// perplexity-auto: resolver says Active; perplexity-web: resolver says Disabled
-		const resolver = makeFakeResolver({
-			"perplexity-auto": { kind: "Active" },
-			"perplexity-web": { kind: "Disabled" },
-		});
+	it("reports every stored value unchanged", async () => {
+		const { tab } = await loadPlugin();
 
-		const plugin = makePlugin({ lifecycleResolver: resolver });
-		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
-		clearCapturedSettings();
-		await tab.display();
-
-		// Navigate to the Commands segment
-		const commandsButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Commands");
-		expect(commandsButton).toBeDefined();
-
-		clearCapturedSettings();
-		commandsButton!._click();
-
-		// Drain microtasks: click → _selectSegment → _renderCommandsSection →
-		// store.getScripts + resolver.resolveItems + renderCommandsTab → getScripts
-		// Five ticks matches the heading test pattern for async segment renders.
-		await Promise.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
-
-		const settings = capturedSettings() as unknown as CapturedSetting[];
-
-		// Find the row for perplexity-auto (which is enabled, so it appears)
-		const autoRow = settings.find(
-			(s) => !s.isHeading && s.toggleControls.length > 0 && s.name === "perplexity-auto",
-		);
-		expect(autoRow).toBeDefined();
-
-		// Fire the toggle ON to trigger commandManager.register(id, name, fn, getState)
-		autoRow!.toggleControls[0].setValue(true);
-		await Promise.resolve();
-
-		expect(plugin.commandManager.register).toHaveBeenCalledOnce();
-		const [, , , capturedGetState] = plugin.commandManager.register.mock.calls[0] as [
-			string,
-			string,
-			unknown,
-			(id: string) => LifecycleState,
-		];
-
-		// With the fix: resolver said Active for perplexity-auto → getState returns Active
-		// With the old stub: getState always returns Disabled → this assertion FAILS
-		expect(capturedGetState("perplexity-auto")).toEqual({ kind: "Active" });
+		expect(tab.getControlValue("resourcesName")).toBe("## Sources");
+		expect(tab.getControlValue("numericOnly")).toBe(false);
+		expect(tab.getControlValue("showUpdateSplash")).toBe(false);
+		expect(tab.getControlValue("debugLogging")).toBe(false);
+		expect(tab.getControlValue("formatSelection.reflow")).toBe(true);
+		expect(tab.getControlValue("formatSelection.cascade")).toBe(false);
+		// Not stored by 0.9.4 → defaults.
+		expect(tab.getControlValue("pasteListContext")).toBe(true);
+		expect(tab.getControlValue("formatSelection.dewrap")).toBe(true);
 	});
 
-	it("W4 — renders Scripts then clicks Commands and calls clearCache before each resolveItems", async () => {
-		// This test asserts that switching from Scripts to Commands tab triggers
-		// resolver.clearCache() before each resolveItems call — preventing stale-cache
-		// state from the Scripts pass leaking into the Commands pass.
-		const resolver = makeFakeResolver({
-			"perplexity-auto": { kind: "Active" },
-			"perplexity-web": { kind: "Disabled" },
-		});
+	it("keeps the scripts namespace and the other settings after a write", async () => {
+		const { plugin, tab } = await loadPlugin();
 
-		const plugin = makePlugin({ lifecycleResolver: resolver });
-		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
-		clearCapturedSettings();
-		await tab.display();
+		await tab.setControlValue("formatSelection.dewrap", false);
+		await tab.setControlValue("resourcesName", "### Notes");
 
-		// Navigate to Scripts segment (triggers first resolveItems call via _renderScriptsSection).
-		// Use 5 ticks to ensure the async render chain completes and _rendering is cleared.
-		const scriptsButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Scripts");
-		clearCapturedSettings();
-		scriptsButton!._click();
-		await Promise.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
-
-		// At this point: clearCache called once, resolveItems called once (Scripts pass).
-		expect(resolver.clearCache).toHaveBeenCalledTimes(1);
-		expect(resolver.resolveItems).toHaveBeenCalledTimes(1);
-
-		// Navigate to Commands segment. Re-find button from the live (re-rendered) DOM.
-		const commandsButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Commands");
-		clearCapturedSettings();
-		commandsButton!._click();
-
-		// Drain microtasks for the async Commands render (5 ticks, matching heading-test pattern).
-		await Promise.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
-
-		// resolveItems must have been called twice (once for Scripts, once for Commands).
-		expect(resolver.resolveItems).toHaveBeenCalledTimes(2);
-
-		// clearCache must have been called twice — once before each resolveItems.
-		// Pre-W3-fix: clearCache is only called in _renderScriptsSection (count stays 1).
-		// Post-W3-fix: clearCache is also called in _renderCommandsSection (count reaches 2).
-		expect(resolver.clearCache).toHaveBeenCalledTimes(2);
-	});
-
-	it("getState falls back to Disabled for scripts not in the resolver's Active map", async () => {
-		const resolver = makeFakeResolver({
-			"perplexity-auto": { kind: "Active" },
-			// perplexity-web not listed → defaults to Disabled in the map
-		});
-
-		const plugin = makePlugin({ lifecycleResolver: resolver });
-		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
-		clearCapturedSettings();
-		await tab.display();
-
-		const commandsButton = (tab.containerEl as unknown as MockHTMLElement)._findButtonByText("Commands");
-		clearCapturedSettings();
-		commandsButton!._click();
-
-		await Promise.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
-
-		const settings = capturedSettings() as unknown as CapturedSetting[];
-
-		// perplexity-auto is enabled; fire toggle ON to get the getState reference
-		const autoRow = settings.find(
-			(s) => !s.isHeading && s.toggleControls.length > 0 && s.name === "perplexity-auto",
-		);
-		expect(autoRow).toBeDefined();
-		autoRow!.toggleControls[0].setValue(true);
-		await Promise.resolve();
-
-		expect(plugin.commandManager.register).toHaveBeenCalledOnce();
-		const [, , , capturedGetState] = plugin.commandManager.register.mock.calls[0] as [
-			string,
-			string,
-			unknown,
-			(id: string) => LifecycleState,
-		];
-
-		// A script id not in the resolver's output falls back to Disabled
-		expect(capturedGetState("unknown-script")).toEqual({ kind: "Disabled" });
+		const persisted = (await plugin.loadData()) as ReturnType<typeof blob094>;
+		expect(persisted.scripts).toEqual(blob094().scripts);
+		expect(persisted.formatSelection).toEqual({ reflow: true, cascade: false, dewrap: false });
+		expect(persisted.resourcesName).toBe("### Notes");
+		expect(persisted.numericOnly).toBe(false);
+		expect(persisted.showUpdateSplash).toBe(false);
+		expect(persisted.lastSeenVersion).toBe("0.9.4");
 	});
 });
 
 // ---------------------------------------------------------------------------
-// T6.2 — Scripts-tab lifecycle ops delegate to the live LifecycleController
-//
-// When a lifecycleController is injected, _buildLifecycleOps must delegate EVERY
-// op to it (no _comingSoon Notice). It must also inject the GUARDED re-render
-// path via setRerender. These tests FAIL against the old _comingSoon stubs.
+// CACHE WIRING — stale on hide, one refresh, redraw through update()
 // ---------------------------------------------------------------------------
 
-describe("MasonSettingTab — T6.2 lifecycle ops delegate to controller", () => {
-	function makeFakeController() {
-		return {
-			enable: vi.fn().mockResolvedValue(undefined),
-			disable: vi.fn().mockResolvedValue(undefined),
-			remove: vi.fn().mockResolvedValue(undefined),
-			retry: vi.fn().mockResolvedValue(undefined),
-			update: vi.fn().mockResolvedValue(undefined),
-			reReview: vi.fn().mockResolvedValue(undefined),
-			viewSource: vi.fn().mockResolvedValue(undefined),
-			importFromVault: vi.fn().mockResolvedValue(undefined),
-			listOfficial: vi.fn().mockResolvedValue([]),
-			setRerender: vi.fn(),
-		};
-	}
-
-	async function renderScriptsWithController(controller: unknown): Promise<MockHTMLElement> {
-		const plugin = makePlugin({ lifecycleController: controller });
-		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
-		clearCapturedSettings();
-		await tab.display();
-		const container = tab.containerEl as unknown as MockHTMLElement;
-		container._findButtonByText("Scripts")!._click();
-		await Promise.resolve();
-		await Promise.resolve();
-		return container;
-	}
-
-	it("injects the guarded re-render via setRerender", async () => {
-		const controller = makeFakeController();
-		await renderScriptsWithController(controller);
-		expect(controller.setRerender).toHaveBeenCalled();
+describe("MasonSettingTab — scripts cache", () => {
+	it("exposes the cache, unloaded and not stale at first", () => {
+		const { tab } = makeTab();
+		expect(tab.scripts.items).toBeNull();
+		expect(tab.scripts.stale).toBe(false);
 	});
 
-	it("toggling a card's enable drives controller.enable (not a coming-soon Notice)", async () => {
-		const { clearNoticeLog, noticeLog } = await import("../__mocks__/obsidian");
-		clearNoticeLog();
-		const controller = makeFakeController();
-		const container = await renderScriptsWithController(controller);
+	it("hide() marks the cache stale without refreshing it", async () => {
+		const { tab, plugin } = makeTab({ scripts: TWO_SCRIPTS });
 
-		const toggle = container._findToggle();
-		expect(toggle).toBeDefined();
-		toggle!.setValue(true);
-		await Promise.resolve();
+		tab.hide();
+		await settle();
 
-		expect(controller.enable).toHaveBeenCalledOnce();
-		expect(noticeLog().join(" ")).not.toContain("coming soon");
+		expect(tab.scripts.stale).toBe(true);
+		expect(plugin.store.getScripts).not.toHaveBeenCalled();
 	});
 
-	it("Import from vault button drives controller.importFromVault", async () => {
-		const controller = makeFakeController();
-		const container = await renderScriptsWithController(controller);
-		container._findButtonByText("Import from vault")!._click();
-		await Promise.resolve();
-		expect(controller.importFromVault).toHaveBeenCalledOnce();
+	it("after hide(), the next build triggers exactly one refresh and no loop", async () => {
+		const { tab, plugin } = makeTab({ scripts: TWO_SCRIPTS });
+		tab.hide();
+
+		tab.getSettingDefinitions();
+		// More builds while that refresh is running must not start another one.
+		tab.getSettingDefinitions();
+		tab.getSettingDefinitions();
+		await settle();
+
+		// The refresh redrew through update(), which built the tree once more.
+		expect(tab._updateCalls).toBe(1);
+		expect(plugin.store.getScripts).toHaveBeenCalledTimes(1);
+		expect(tab.scripts.stale).toBe(false);
+
+		tab.getSettingDefinitions();
+		await settle();
+		expect(plugin.store.getScripts).toHaveBeenCalledTimes(1);
+		expect(tab._updateCalls).toBe(1);
 	});
 
-	it("Browse official button fetches the catalog list via controller.listOfficial", async () => {
-		const controller = makeFakeController();
-		const container = await renderScriptsWithController(controller);
-		container._findButtonByText("Browse official")!._click();
-		await Promise.resolve();
-		await Promise.resolve();
-		expect(controller.listOfficial).toHaveBeenCalledOnce();
-	});
-});
+	it("a build does not refresh a cache that is not stale", async () => {
+		const { tab, plugin } = makeTab({ scripts: TWO_SCRIPTS });
+		await tab.scripts.refresh();
+		plugin.store.getScripts.mockClear();
 
-// ---------------------------------------------------------------------------
-// SCRIPTS SEGMENT UPDATE BADGE
-//
-// The Scripts segment button carries a count badge for scripts in the
-// UpdateAvailable lifecycle state. The count is read from plugin.updatableScriptCount
-// (seeded by the plugin at startup) and refreshed in place whenever the Scripts
-// section resolves its items.
-// ---------------------------------------------------------------------------
+		tab.getSettingDefinitions();
+		await settle();
 
-describe("MasonSettingTab — Scripts update badge", () => {
-	/** A fake resolver whose resolveItems yields the given per-id lifecycle states. */
-	function makeFakeResolver(states: Record<string, LifecycleState>): LifecycleResolver {
-		return {
-			resolveItems: vi.fn().mockImplementation((records: Record<string, unknown>) =>
-				Promise.resolve(
-					Object.keys(records).map((id) => ({
-						id,
-						displayName: id,
-						description: "",
-						record: records[id],
-						state: states[id] ?? { kind: "Disabled" },
-						version: 1,
-						provenance: "curated",
-						catalogVersion: undefined,
-					})),
-				),
-			),
-			clearCache: vi.fn(),
-		} as unknown as LifecycleResolver;
-	}
-
-	function scriptsButton(tab: InstanceType<typeof MasonSettingTab>): MockHTMLElement {
-		const container = tab.containerEl as unknown as MockHTMLElement;
-		return container._findButtonByText("Scripts")!;
-	}
-
-	it("renders the count on the Scripts segment when updatableScriptCount > 0", async () => {
-		const plugin = makePlugin();
-		(plugin as unknown as { updatableScriptCount: number }).updatableScriptCount = 2;
-
-		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
-		await tab.display();
-
-		// Default tab is General; the badge still renders from the cached count.
-		expect(scriptsButton(tab)._collectText()).toContain("2");
+		expect(plugin.store.getScripts).not.toHaveBeenCalled();
 	});
 
-	it("renders no count digits when updatableScriptCount is 0", async () => {
-		const plugin = makePlugin();
-		(plugin as unknown as { updatableScriptCount: number }).updatableScriptCount = 0;
+	it("a stale mark set during a running refresh is served by the next build after it", async () => {
+		const { tab, plugin } = makeTab({ scripts: TWO_SCRIPTS });
+		const running = tab.scripts.refresh();
+		tab.hide();
 
-		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
-		await tab.display();
+		tab.getSettingDefinitions();
+		await running;
+		await settle();
+		// That pass may have read the store before the mark, so the mark outlives it.
+		expect(plugin.store.getScripts).toHaveBeenCalledTimes(1);
+		expect(tab.scripts.stale).toBe(true);
 
-		expect(scriptsButton(tab)._collectText()).not.toMatch(/\d/);
+		tab.getSettingDefinitions();
+		await settle();
+		expect(plugin.store.getScripts).toHaveBeenCalledTimes(2);
+		expect(tab.scripts.stale).toBe(false);
 	});
 
-	it("refreshes the count from resolved items when the Scripts tab renders", async () => {
-		// perplexity-auto is UpdateAvailable; perplexity-web is Active → count should be 1.
+	it("a cache change calls update(), which shows the new script rows", async () => {
+		const { tab, scripts } = makeTab({ scripts: { "perplexity-auto": makeScriptRecord() } });
+
+		await tab.scripts.refresh();
+		expect(tab._updateCalls).toBe(1);
+		expect(search(tab.settingItems, "perplexity-auto")).toContain("perplexity-auto");
+
+		scripts["second-script"] = makeScriptRecord();
+		await tab.scripts.refresh();
+		expect(tab._updateCalls).toBe(2);
+		expect(search(tab.settingItems, "second-script")).toContain("second-script");
+	});
+
+	it("resolves through the live resolver and publishes the update count to the plugin", async () => {
 		const resolver = makeFakeResolver({
 			"perplexity-auto": { kind: "UpdateAvailable" },
 			"perplexity-web": { kind: "Active" },
 		});
-		const plugin = makePlugin({ lifecycleResolver: resolver });
+		const { tab, plugin } = makeTab({ scripts: TWO_SCRIPTS, lifecycleResolver: resolver });
 
-		const tab = new MasonSettingTab(plugin.app as never, plugin as never);
-		await tab.display();
+		await tab.scripts.refresh();
 
-		scriptsButton(tab)._click();
-		await Promise.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
+		expect(resolver.resolveItems).toHaveBeenCalledTimes(1);
+		expect(plugin.updatableScriptCount).toBe(1);
+		const page = pageNamed(tab.getSettingDefinitions(), "Scripts");
+		expect((page.displayValue as () => string)()).toBe("1 update available");
+		expect((page.status as () => string | null)()).toBe("warning");
+	});
 
-		expect((plugin as unknown as { updatableScriptCount: number }).updatableScriptCount).toBe(1);
-		expect(scriptsButton(tab)._collectText()).toContain("1");
+	it("shows no update indicator while nothing is waiting", async () => {
+		const { tab, plugin } = makeTab({ scripts: TWO_SCRIPTS });
+		await tab.scripts.refresh();
+
+		expect(plugin.updatableScriptCount).toBe(0);
+		const page = pageNamed(tab.getSettingDefinitions(), "Scripts");
+		expect((page.displayValue as () => string)()).toBe("");
+		expect((page.status as () => string | null)()).toBeNull();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// LIFECYCLE OPS — built once; the controller refreshes through the cache
+// ---------------------------------------------------------------------------
+
+describe("MasonSettingTab — lifecycle ops", () => {
+	it("wires the controller's rerender exactly once, in the constructor", async () => {
+		const controller = makeFakeController();
+		const { tab } = makeTab({ scripts: TWO_SCRIPTS, lifecycleController: controller });
+		expect(controller.setRerender).toHaveBeenCalledTimes(1);
+
+		tab.getSettingDefinitions();
+		await tab.scripts.refresh();
+		tab.hide();
+		tab.getSettingDefinitions();
+		await settle();
+
+		expect(controller.setRerender).toHaveBeenCalledTimes(1);
+	});
+
+	it("the controller's rerender refreshes the cache, which redraws the tab", async () => {
+		const controller = makeFakeController();
+		const { tab, plugin } = makeTab({ scripts: TWO_SCRIPTS, lifecycleController: controller });
+		const rerender = controller.setRerender.mock.calls[0]![0] as () => void;
+
+		rerender();
+		await settle();
+
+		expect(plugin.store.getScripts).toHaveBeenCalledTimes(1);
+		expect(tab._updateCalls).toBe(1);
+	});
+
+	it("a burst of rerenders redraws once per settled state", async () => {
+		const controller = makeFakeController();
+		const { tab, plugin } = makeTab({ scripts: TWO_SCRIPTS, lifecycleController: controller });
+		const rerender = controller.setRerender.mock.calls[0]![0] as () => void;
+
+		rerender();
+		rerender();
+		rerender();
+		await settle();
+		await settle();
+
+		// One running pass plus one coalesced follow-up pass.
+		expect(plugin.store.getScripts).toHaveBeenCalledTimes(2);
+		expect(tab._updateCalls).toBe(2);
+	});
+
+	it("a script row's toggle drives controller.enable", async () => {
+		const controller = makeFakeController();
+		const { tab } = makeTab({ scripts: TWO_SCRIPTS, lifecycleController: controller });
+		await tab.scripts.refresh();
+
+		const record = renderRow(rowNamed(tab.getSettingDefinitions(), "Scripts", "perplexity-web"));
+		record.toggleControls[0]!.setValue(true);
+		await settle();
+
+		expect(controller.enable).toHaveBeenCalledWith("perplexity-web");
+	});
+
+	it("the Import from vault row drives controller.importFromVault", async () => {
+		const controller = makeFakeController();
+		const { tab } = makeTab({ lifecycleController: controller });
+
+		runAction(rowNamed(tab.getSettingDefinitions(), "Scripts", "Import from vault"));
+		await settle();
+
+		expect(controller.importFromVault).toHaveBeenCalledTimes(1);
+	});
+
+	it("the Browse official row fetches the catalog list through controller.listOfficial", async () => {
+		const controller = makeFakeController();
+		const { tab } = makeTab({ lifecycleController: controller });
+
+		runAction(rowNamed(tab.getSettingDefinitions(), "Scripts", "Browse official"));
+		await settle();
+
+		expect(controller.listOfficial).toHaveBeenCalledTimes(1);
+	});
+
+	it("without a controller, a toggle writes the store and the tab redraws with the new state", async () => {
+		const { tab, plugin, scripts } = makeTab({ scripts: TWO_SCRIPTS });
+		await tab.scripts.refresh();
+
+		const record = renderRow(rowNamed(tab.getSettingDefinitions(), "Scripts", "perplexity-web"));
+		record.toggleControls[0]!.setValue(true);
+		await settle();
+		await settle();
+
+		expect(plugin.store.setRecord).toHaveBeenCalledWith("perplexity-web", expect.objectContaining({ enabled: true }));
+		expect(scripts["perplexity-web"]!.enabled).toBe(true);
+		expect(tab._updateCalls).toBe(2);
+		expect(tab.scripts.records["perplexity-web"]!.enabled).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// COMMANDS — rows register against the live script state
+// ---------------------------------------------------------------------------
+
+describe("MasonSettingTab — command rows", () => {
+	type RegisterCall = [string, string, () => unknown, (id: string) => LifecycleState];
+
+	async function toggleCommandOn(states: Record<string, LifecycleState>) {
+		const resolver = makeFakeResolver(states);
+		const made = makeTab({ scripts: TWO_SCRIPTS, lifecycleResolver: resolver });
+		await made.tab.scripts.refresh();
+
+		const record = renderRow(rowNamed(made.tab.getSettingDefinitions(), "Commands", "perplexity-auto"));
+		record.toggleControls[0]!.setValue(true);
+		await settle();
+
+		expect(made.plugin.commandManager.register).toHaveBeenCalledTimes(1);
+		const call = made.plugin.commandManager.register.mock.calls[0] as RegisterCall;
+		return { ...made, call };
+	}
+
+	it("registers the command and persists command = true", async () => {
+		const { call, plugin } = await toggleCommandOn({ "perplexity-auto": { kind: "Active" } });
+
+		expect(call[0]).toBe("perplexity-auto");
+		expect(call[1]).toBe("perplexity-auto");
+		expect(plugin.store.setRecord).toHaveBeenCalledWith("perplexity-auto", expect.objectContaining({ command: true }));
+	});
+
+	it("hands the command a getState that reports the resolver's state", async () => {
+		const { call } = await toggleCommandOn({ "perplexity-auto": { kind: "Active" } });
+		const getState = call[3];
+
+		expect(getState("perplexity-auto")).toEqual({ kind: "Active" });
+		expect(getState("perplexity-web")).toEqual({ kind: "Disabled" });
+	});
+
+	it("getState fails closed to Disabled for a script the cache does not know", async () => {
+		const { call } = await toggleCommandOn({ "perplexity-auto": { kind: "Active" } });
+		expect(call[3]("unknown-script")).toEqual({ kind: "Disabled" });
+	});
+
+	it("getState follows a later refresh instead of a snapshot", async () => {
+		const { call, tab, plugin } = await toggleCommandOn({ "perplexity-auto": { kind: "Active" } });
+		plugin.lifecycleResolver!.resolveItems.mockImplementation(async () => []);
+
+		await tab.scripts.refresh();
+
+		expect(call[3]("perplexity-auto")).toEqual({ kind: "Disabled" });
+	});
+
+	it("registers a no-op function for a script that is not Active", async () => {
+		const { call } = await toggleCommandOn({ "perplexity-auto": { kind: "Blocked", reason: "offline" } });
+		expect(call[2]()).toBeUndefined();
+	});
+
+	it("an edit on a command row does not redraw the tab", async () => {
+		const { tab } = await toggleCommandOn({ "perplexity-auto": { kind: "Active" } });
+		// One update() from the refresh that loaded the scripts, none from the toggle.
+		expect(tab._updateCalls).toBe(1);
 	});
 });

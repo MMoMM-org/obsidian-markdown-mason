@@ -33,7 +33,7 @@ import type { ScriptsCache } from "./scriptsCache";
 import { SCRIPTS_LOADING_TEXT } from "./scriptsPage";
 
 /** Minimal CommandManager surface a command row needs. */
-export interface CommandsTabCommandManager {
+export interface CommandManagerPort {
 	register(
 		id: string,
 		name: string,
@@ -62,7 +62,7 @@ export type CommandPageCache = Pick<ScriptsCache, "records" | "items">;
 /** The narrow collaborators the Commands page needs. */
 export interface CommandPageDeps {
 	store: Pick<ScriptStore, "getScripts" | "setRecord">;
-	commandManager: CommandsTabCommandManager;
+	commandManager: CommandManagerPort;
 	resolveScriptFn: ScriptFnResolver;
 	getState: StateResolver;
 }
@@ -83,7 +83,7 @@ export const COMMANDS_INTRO = {
 
 export const COMMANDS_EMPTY_STATE = {
 	name: "No enabled scripts",
-	desc: "Enable a script in the Scripts tab first, then return here to create a command for it.",
+	desc: "Enable a script on the Scripts page first, then return here to create a command for it.",
 } as const;
 
 /**

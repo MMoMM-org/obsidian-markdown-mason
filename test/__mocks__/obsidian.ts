@@ -403,10 +403,10 @@ export class Notice {
 // ---------------------------------------------------------------------------
 // Menu — minimal stub for the ⋯ action menu (T4.2)
 //
-// Obsidian API surface used by scriptsTab.ts:
+// Obsidian API surface used by scriptsPage.ts:
 //   const m = new Menu();
 //   m.addItem(item => item.setTitle("…").setIcon("…").onClick(() => {…}));
-//   m.showAtMouseEvent(evt);
+//   m.showAtPosition({ x, y });
 //
 // Test-only helpers:
 //   _items      — captured MockMenuItem list (title/icon/onClick)

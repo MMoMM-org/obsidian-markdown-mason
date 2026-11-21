@@ -68,7 +68,7 @@ export interface LifecycleControllerDeps {
 	fingerprints: FingerprintStore;
 	/** Build the materialized destination path for a script id. */
 	destPath: (id: string) => string;
-	/** Re-render the Scripts tab — the settings tab injects its GUARDED path. */
+	/** Refresh the Scripts page — the settings tab injects its coalescing refresh. */
 	rerender: () => void;
 
 	// --- Test seams (default to real implementations) ---
@@ -106,9 +106,9 @@ export class LifecycleController {
 
 	/**
 	 * Override the re-render hook. The plugin constructs the controller before the
-	 * settings tab exists; the tab calls this to inject its GUARDED re-render path
-	 * (_selectSegment) so every op refreshes the Scripts tab without reintroducing
-	 * an unguarded re-render.
+	 * settings tab exists; the tab calls this to inject its coalescing refresh
+	 * (ScriptsCache.requestRefresh) so every op refreshes the Scripts page without
+	 * two refreshes ever overlapping.
 	 */
 	setRerender(rerender: () => void): void {
 		this._d.rerender = rerender;

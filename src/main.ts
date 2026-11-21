@@ -442,12 +442,11 @@ export class MarkdownMasonPlugin extends Plugin {
 	}
 
 	/**
-	 * Open Settings → Scripts. Pre-selects the Scripts segment, then opens the
-	 * settings pane and Mason's tab via Obsidian's (semi-private) setting API,
-	 * guarded so a missing/renamed API degrades to a no-op rather than throwing.
+	 * Open the settings pane on Mason's tab via Obsidian's (semi-private) setting
+	 * API, guarded so a missing/renamed API degrades to a no-op rather than
+	 * throwing.
 	 */
 	private _openScriptsSettings(): void {
-		this._settingTab?.selectScriptsSegment();
 		const setting = (this.app as unknown as {
 			setting?: { open?: () => void; openTabById?: (id: string) => void };
 		}).setting;

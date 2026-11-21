@@ -41,7 +41,7 @@ import {
 } from "../../src/ui/commandsPage";
 
 const HINT = "Name the command, toggle to create it, then bind keys in core hotkeys.";
-const EMPTY_STATE = "Enable a script in the Scripts tab first, then return here to create a command for it.";
+const EMPTY_STATE = "Enable a script on the Scripts page first, then return here to create a command for it.";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -220,6 +220,13 @@ describe("buildCommandsPage — rows", () => {
 		expect(rows[0].desc).toBe(EMPTY_STATE);
 	});
 
+	it("the empty state points to the Scripts page, not to a tab", () => {
+		const { page } = makePage({});
+		const emptyState = rowsOf(page).find(row => row.name === "No enabled scripts");
+		expect(emptyState?.desc).toContain("on the Scripts page");
+		expect(emptyState?.desc).not.toMatch(/\btab\b/i);
+	});
+
 	it("shows the empty-state row when the cache holds no scripts", () => {
 		const { page } = makePage({});
 		expect(rowsOf(page).slice(1).map(row => row.name)).toEqual(["No enabled scripts"]);
@@ -269,6 +276,7 @@ describe("buildCommandsPage — rows", () => {
 		await cache.refresh();
 		const before = buildCommandsPage(cache, deps);
 		expect(rowsOf(before).slice(1).map(row => row.name)).toEqual(["keep-script", "gone-script"]);
+		expect(search([before], "gone-script")).toEqual(["gone-script"]);
 
 		delete persisted["gone-script"];
 		await cache.refresh();

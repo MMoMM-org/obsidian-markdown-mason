@@ -41,8 +41,9 @@ import type { ScriptRecord } from "../scripts/store";
 // ---------------------------------------------------------------------------
 
 /**
- * A single fully-resolved script row. The controller computes `state` via
- * evaluateState BEFORE calling renderScriptsTab; this module never resolves it.
+ * A single fully-resolved script row. `state` is computed upstream (the live
+ * resolver, or evaluateState offline) before the page is built; this module
+ * never resolves it.
  */
 export interface ScriptItem {
 	id: string;
@@ -50,7 +51,7 @@ export interface ScriptItem {
 	description: string;
 	record: ScriptRecord;
 	state: LifecycleState;
-	/** Consented/active version shown in the card corner (e.g. "v1"). */
+	/** Consented/active version shown on the row's name line (e.g. "v1"). */
 	version: number;
 	provenance: "curated" | "imported";
 	/** Latest catalog version — used to label "Update to v{n}" when UpdateAvailable. */
@@ -59,9 +60,8 @@ export interface ScriptItem {
 
 /**
  * The action seam the UI triggers. The render path NEVER performs I/O directly —
- * every interactive control calls through one of these. Concrete wiring lives in
- * the controller (settingsTab); see // P5: markers there for the live-catalog
- * actions (browseOfficial, and the network fetch inside update/retry).
+ * every interactive control calls through one of these. buildLifecycleOps
+ * (scriptLifecycleOps.ts) provides the concrete ops.
  */
 export interface LifecycleOps {
 	enable(id: string): void | Promise<void>;
@@ -426,7 +426,7 @@ export function menuActions(item: ScriptItem, ops: LifecycleOps): MenuAction[] {
 		case "Available":
 		case "Materializing":
 		case "Absent":
-			// Minimal: View source + Remove (when a record exists).
+			// Nothing state-specific: only View source and Remove.
 			break;
 	}
 

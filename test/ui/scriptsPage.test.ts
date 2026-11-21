@@ -7,7 +7,7 @@
  *      buttons, empty state) and the search-only action rows.
  *   2. configureScriptRow(setting, item, ops) fills one row: provenance badge,
  *      status pill and version in the name, toggle, ⋯ menu, Blocked recovery.
- *      The per-state coverage is ported from scriptsTab.test.ts.
+ *      Every lifecycle state is covered.
  *
  * HOUSE STYLE: tabs, double quotes, factory test data, no let/beforeEach.
  */
@@ -256,9 +256,11 @@ describe("Scripts page — list", () => {
 		];
 		const names = rowsOf(listOf(buildScriptsPage(makeCache(items), makeOps()))).map((row) => row.name);
 		expect(new Set(names).size).toBe(names.length);
+		// "Twin (first)" is taken by the third script, so the suffix repeats.
+		expect(names[0]).toBe("Twin (first) (first)");
+		expect(names[1]).toBe("Twin (second)");
 		// A display name no other script carries is listed as it is.
 		expect(names[2]).toBe("Twin (first)");
-		expect(names[1]).toBe("Twin (second)");
 	});
 
 	it("a row's render configures the setting for its script", async () => {
@@ -284,6 +286,13 @@ describe("Scripts page — list", () => {
 		const list = listOf(buildScriptsPage(makeCache([]), makeOps()));
 		expect(list.emptyState).toBe(EMPTY_TEXT);
 		expect(list.items).toEqual([]);
+	});
+
+	it("words the empty state as an invitation to import or browse", () => {
+		const emptyState = listOf(buildScriptsPage(makeCache([]), makeOps())).emptyState as string;
+		expect(emptyState).not.toContain("No scripts installed yet");
+		expect(emptyState.toLowerCase()).toMatch(/import/);
+		expect(emptyState.toLowerCase()).toMatch(/browse/);
 	});
 
 	it("adds an item through Import from vault", () => {
@@ -396,6 +405,7 @@ describe("Scripts page — action rows and search", () => {
 		const before = buildScriptsPage(cache, ops);
 		expect(rowsOf(listOf(before)).map((row) => row.name)).toEqual(["keep-script", "gone-script"]);
 		expect(search([before], "gone-script")).toEqual(["gone-script"]);
+		expect(search([before], "removed")).toEqual(["gone-script"]);
 
 		delete persisted["gone-script"];
 		await cache.refresh();

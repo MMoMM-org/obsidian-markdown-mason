@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
-import { setDebugLogging } from "../../src/core/debug";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { isDebugLogging } from "../../src/core/debug";
 import {
 	ScriptsCache,
 	buildOfflineScriptItems,
@@ -333,6 +333,26 @@ describe("buildOfflineScriptItems", () => {
 });
 
 describe("ScriptsCache — failures", () => {
+	beforeEach(() => {
+		vi.spyOn(console, "warn").mockImplementation(() => undefined);
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("warns on the console about a failed refresh, with debug logging off", async () => {
+		const h = makeHarness();
+		const failure = new Error("disk gone");
+
+		const done = h.cache.refresh();
+		h.storeCalls[0]?.reject(failure);
+		await done;
+
+		expect(isDebugLogging()).toBe(false);
+		expect(vi.mocked(console.warn).mock.calls.some((args) => args.includes(failure))).toBe(true);
+	});
+
 	it("stays unloaded when the first refresh fails", async () => {
 		const h = makeHarness();
 
@@ -418,20 +438,22 @@ describe("ScriptsCache — failures", () => {
 
 describe("ScriptsCache — throwing collaborators", () => {
 	afterEach(() => {
-		setDebugLogging(false);
 		vi.restoreAllMocks();
 	});
 
-	/** Turn debug logging on and tell whether the cache has logged `failure`. */
-	function captureDebugLog(): { has(failure: Error): boolean } {
-		setDebugLogging(true);
-		const logged = vi.spyOn(console, "debug").mockImplementation(() => undefined);
-		return { has: (failure) => logged.mock.calls.some((args) => args.includes(failure)) };
+	/**
+	 * Tell whether the cache has warned about `failure`. Debug logging stays off:
+	 * a genuine error must surface without it.
+	 */
+	function captureWarnings(): { has(failure: Error): boolean } {
+		expect(isDebugLogging()).toBe(false);
+		const warned = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+		return { has: (failure) => warned.mock.calls.some((args) => args.includes(failure)) };
 	}
 
 	it("still calls onChange when setUpdatableCount throws (and state is applied)", async () => {
 		const h = makeHarness();
-		const logged = captureDebugLog();
+		const warned = captureWarnings();
 		const failure = new Error("badge failed");
 		h.setUpdatableCount.mockImplementation(() => { throw failure; });
 		const records = { alpha: record() };
@@ -445,12 +467,12 @@ describe("ScriptsCache — throwing collaborators", () => {
 		expect(h.cache.records).toBe(records);
 		expect(h.cache.updatableCount).toBe(1);
 		expect(h.onChange).toHaveBeenCalledTimes(1);
-		expect(logged.has(failure)).toBe(true);
+		expect(warned.has(failure)).toBe(true);
 	});
 
-	it("a throwing onChange is logged and does not wedge the cache (next refresh runs)", async () => {
+	it("a throwing onChange is warned about and does not wedge the cache (next refresh runs)", async () => {
 		const h = makeHarness();
-		const logged = captureDebugLog();
+		const warned = captureWarnings();
 		const failure = new Error("redraw failed");
 		h.cache.onChange = () => { throw failure; };
 		const firstItems = [item("alpha", { kind: "Active" })];
@@ -461,7 +483,7 @@ describe("ScriptsCache — throwing collaborators", () => {
 
 		expect(h.cache.items).toBe(firstItems);
 		expect(h.cache.inFlight).toBe(false);
-		expect(logged.has(failure)).toBe(true);
+		expect(warned.has(failure)).toBe(true);
 
 		const recovered = vi.fn();
 		h.cache.onChange = recovered;
