@@ -4,7 +4,7 @@ import type { MasonSettings } from "../core/types";
 import type { ScriptStore } from "../scripts/store";
 import { HeaderSection } from "./HeaderSection";
 import { renderScriptsTab } from "./scriptsTab";
-import type { ScriptItem, LifecycleOps } from "./scriptsTab";
+import type { ScriptItem, LifecycleOps } from "./scriptsPage";
 import { renderCommandsTab } from "./commandsTab";
 import type { CommandsTabCommandManager, ScriptFnResolver, StateResolver } from "./commandsTab";
 import type { LifecycleResolver } from "../scripts/lifecycleResolver";

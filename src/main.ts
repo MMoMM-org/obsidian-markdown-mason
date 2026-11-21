@@ -656,7 +656,7 @@ export class MarkdownMasonPlugin extends Plugin {
 			editorCallback: async (editor: Editor): Promise<void> => {
 				const resolver = this.lifecycleResolver;
 				let getState: (id: string) => import("./scripts/lifecycle").LifecycleState;
-				let items: import("./ui/scriptsTab").ScriptItem[] = [];
+				let items: import("./ui/scriptsPage").ScriptItem[] = [];
 
 				if (resolver !== undefined) {
 					const scripts = await this.store.getScripts();

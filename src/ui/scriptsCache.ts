@@ -15,7 +15,7 @@ import { debug } from "../core/debug";
 import { evaluateState } from "../scripts/lifecycle";
 import type { LifecycleResolver } from "../scripts/lifecycleResolver";
 import type { ScriptRecord, ScriptStore } from "../scripts/store";
-import type { ScriptItem } from "./scriptsTab";
+import type { ScriptItem } from "./scriptsPage";
 
 /** The narrow collaborators ScriptsCache needs. */
 export interface ScriptsCacheDeps {

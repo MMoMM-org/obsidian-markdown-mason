@@ -3,7 +3,7 @@ import { App } from "obsidian";
 import { lastOpenedModal, clearLastOpenedModal } from "./__mocks__/obsidian";
 import { UpdateSplashModal } from "../src/ui/updateSplashModal";
 import type { LifecycleResolver } from "../src/scripts/lifecycleResolver";
-import type { ScriptItem } from "../src/ui/scriptsTab";
+import type { ScriptItem } from "../src/ui/scriptsPage";
 import type { LifecycleState } from "../src/scripts/lifecycle";
 
 // ---------------------------------------------------------------------------

@@ -48,7 +48,7 @@ import type { CatalogSource } from "./catalog/catalogSource";
 import type { VaultAdapterPort } from "./runtime";
 import type { ScriptRecord } from "./store";
 import type { FingerprintStore } from "./materializedFingerprint";
-import type { ScriptItem } from "../ui/scriptsTab";
+import type { ScriptItem } from "../ui/scriptsPage";
 
 // ---------------------------------------------------------------------------
 // Public types

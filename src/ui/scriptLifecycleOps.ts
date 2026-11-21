@@ -23,7 +23,7 @@ import type { LifecycleController } from "../scripts/lifecycleController";
 import type { ScriptStore } from "../scripts/store";
 import { BrowseOfficialModal } from "./browseOfficialModal";
 import type { BrowseEntryStatus } from "./browseOfficialModal";
-import type { LifecycleOps } from "./scriptsTab";
+import type { LifecycleOps } from "./scriptsPage";
 
 /** The slice of the script store the lifecycle ops read and write. */
 export type ScriptLifecycleStore = Pick<ScriptStore, "getScripts" | "setRecord">;

@@ -5,7 +5,7 @@ import {
 	type ScriptsCacheDeps,
 } from "../../src/ui/scriptsCache";
 import type { ScriptRecord } from "../../src/scripts/store";
-import type { ScriptItem } from "../../src/ui/scriptsTab";
+import type { ScriptItem } from "../../src/ui/scriptsPage";
 import type { LifecycleState } from "../../src/scripts/lifecycle";
 
 // ---------------------------------------------------------------------------
