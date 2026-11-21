@@ -1,4 +1,5 @@
 import type { PluginManifest } from "obsidian";
+import { parseAuthorName, REPO_URL } from "./pluginIdentity";
 
 // ---------------------------------------------------------------------------
 // HeaderSection — manifest-driven plugin identity header for the settings tab
@@ -14,9 +15,6 @@ import type { PluginManifest } from "obsidian";
 //   listing surfaces manifest.fundingUrl automatically; duplicating it in the
 //   settings UI is redundant and may look spammy.
 // ---------------------------------------------------------------------------
-
-/** Repo URL for the Documentation anchor. */
-const REPO_URL = "https://github.com/MMoMM-org/obsidian-markdown-mason";
 
 /**
  * Punchy tagline shown below the identity line.
@@ -67,7 +65,7 @@ export class HeaderSection {
 		line.createSpan().setText(" · ");
 
 		// Author — anchor when authorUrl present, plain span otherwise
-		const authorName = this._parseAuthorName(this._manifest.author);
+		const authorName = parseAuthorName(this._manifest.author);
 		if (this._manifest.authorUrl) {
 			const authorEl = line.createEl("a");
 			authorEl.setText(authorName);
@@ -89,17 +87,5 @@ export class HeaderSection {
 	private _renderTagline(parent: HTMLElement): void {
 		const p = parent.createEl("p", { cls: "mason-settings-tagline" });
 		p.setText(TAGLINE);
-	}
-
-	/**
-	 * Parse Obsidian's "Full Name <email>" convention.
-	 * Returns the part before "<", trimmed. Falls back to the whole string.
-	 */
-	private _parseAuthorName(author: string): string {
-		const bracketIdx = author.indexOf("<");
-		if (bracketIdx !== -1) {
-			return author.slice(0, bracketIdx).trim();
-		}
-		return author.trim();
 	}
 }
