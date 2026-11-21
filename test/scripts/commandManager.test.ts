@@ -21,7 +21,8 @@
 //   (i) invoking a command whose script is Blocked calls notify() with reason and does NOT execute
 //   (j) invoking a command whose script is Active DOES execute (script is called)
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
+import type { ScriptStore } from "../../src/scripts/store";
 import { clearNoticeLog, noticeLog } from "../__mocks__/obsidian";
 import type { CommandSpec } from "../__mocks__/obsidian";
 import type { Editor, EditorPosition, EditorSelection } from "obsidian";
@@ -83,8 +84,8 @@ function makePluginSurface(pluginId = "markdown-mason"): MockPluginSurface {
 // ---------------------------------------------------------------------------
 
 type FakeStore = {
-	getScripts: ReturnType<typeof vi.fn>;
-	setRecord: ReturnType<typeof vi.fn>;
+	getScripts: Mock<ScriptStore["getScripts"]>;
+	setRecord: Mock<ScriptStore["setRecord"]>;
 };
 
 function makeStore(scripts: Record<string, ScriptRecord> = {}): FakeStore {

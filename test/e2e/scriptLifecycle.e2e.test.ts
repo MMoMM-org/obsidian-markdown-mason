@@ -23,7 +23,7 @@
 //   - Disclosure is intercepted via captureModal pattern (from disclosure.test.ts)
 //   - NO production glue added — all composition happens in the test file
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, type Mock } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -196,8 +196,8 @@ function clickButton(modal: ScriptDisclosureModal, label: string): void {
 // ---------------------------------------------------------------------------
 
 type DisclosureMockStore = {
-	getScripts: ReturnType<typeof vi.fn>;
-	setRecord: ReturnType<typeof vi.fn>;
+	getScripts: Mock<ScriptStore["getScripts"]>;
+	setRecord: Mock<ScriptStore["setRecord"]>;
 };
 
 function makeDisclosureStore(scripts: Record<string, ScriptRecord> = {}): DisclosureMockStore {
