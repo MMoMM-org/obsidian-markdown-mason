@@ -28,6 +28,10 @@ export default [
 		rules: {
 			// CON-3: community submission compliance
 			"no-console": ["error", { allow: ["debug", "warn", "error"] }],
+			// Spec 010: errors (the ruleset only warns) so CI blocks a regression to the imperative settings API.
+			"obsidianmd/settings-tab/prefer-setting-definitions": "error",
+			"obsidianmd/settings-tab/prefer-update-over-display": "error",
+			"obsidianmd/settings-tab/no-deprecated-display": "error",
 			// Our UI copy intentionally uses acronyms and product/feature proper
 			// names; teach the rule about them rather than lowercasing them (which
 			// would corrupt meaning). Keeps the rule live for genuine violations.

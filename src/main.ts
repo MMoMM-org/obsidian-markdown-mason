@@ -843,10 +843,13 @@ async function runPasteCommand(
 }
 
 // ---------------------------------------------------------------------------
-// runPasteAndFormatCommand — paste + 7-step cleanup (spec 005 T2.2)
+// runPasteAndFormatCommand — paste + the Paste and format cleanup steps (spec 005 T2.2)
 //
-// Reads clipboard, applies the 7 formatPipeline cleanup steps gated by the
-// user's formatSelection recipe, and inserts the result via replaceSelection.
+// Reads clipboard, applies the Paste and format cleanup steps (the ones
+// applyTextCleanup chains: every recipe step except cascade, fromCitations,
+// identity and move, which the settings mark FORMAT_SELECTION_ONLY), each gated
+// by its toggle in the user's formatSelection recipe, and inserts the result
+// via replaceSelection.
 //
 // Does NOT run the paste-script chain (no ScriptRunner, no buildPasteChain).
 // Clipboard guards match runPasteCommand for consistent UX across both commands.
@@ -878,7 +881,7 @@ async function runPasteAndFormatCommand(
 		return;
 	}
 
-	// 3. Apply 7-step cleanup via applyTextCleanup
+	// 3. Apply the Paste and format cleanup steps via applyTextCleanup
 	const recipe = resolveFormatSelectionRecipe(settings);
 	const log = settings.debugLogging
 		? (l: string) => debug(`[MarkdownMason] ${l}`)

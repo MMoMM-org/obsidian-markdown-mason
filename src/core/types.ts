@@ -34,7 +34,7 @@ export interface MasonSettings {
 	 * the plugin runs after its version changes. Surfaces how many curated scripts
 	 * have a newer catalog version waiting (scripts ride pinned plugin releases, so
 	 * a plugin update is the only moment a script version can change). User-gated
-	 * via General settings and the in-splash toggle.
+	 * via "Show update notes" on the main settings page and the in-splash toggle.
 	 *
 	 * Optional for backward-compat with persisted data predating this field;
 	 * treated as `true` when absent.
