@@ -256,21 +256,104 @@ describe("compliance — manifest.json required fields and format", () => {
 // Suite 4b — versions.json ↔ manifest.json consistency
 // ---------------------------------------------------------------------------
 
+/** Parses a strict `major.minor.patch` version; null when it is not one. */
+function parseVersion(value: unknown): [number, number, number] | null {
+	if (typeof value !== "string") return null;
+	const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(value);
+	if (match === null) return null;
+	return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+/** Negative when a < b, zero when equal, positive when a > b. */
+function compareVersions(a: string, b: string): number {
+	const left = parseVersion(a);
+	const right = parseVersion(b);
+	if (left === null || right === null) {
+		throw new Error(`cannot compare versions "${a}" and "${b}"`);
+	}
+	for (let i = 0; i < 3; i++) {
+		const diff = (left[i] as number) - (right[i] as number);
+		if (diff !== 0) return diff;
+	}
+	return 0;
+}
+
+/**
+ * Pure check of the versions.json entry for the manifest's current version.
+ * Returns the failure message, or null when the pair is consistent.
+ *
+ * A raised minAppVersion is committed before the release that carries it:
+ * version-bump.mjs writes the new versions.json entry at release time. Until
+ * then the entry for the last released version legitimately holds the older
+ * floor. That "pending release" state is recognisable because no versions.json
+ * entry records the new floor yet. Once one does, the floor has shipped and the
+ * entry for manifest.version must match exactly.
+ */
+function versionEntryFailure(
+	manifestVersion: string,
+	minAppVersion: string,
+	versions: Record<string, unknown>,
+): string | null {
+	const entry = versions[manifestVersion];
+	if (parseVersion(minAppVersion) === null) {
+		return `manifest.minAppVersion "${minAppVersion}" is not a major.minor.patch version`;
+	}
+	if (typeof entry !== "string" || parseVersion(entry) === null) {
+		return `versions.json["${manifestVersion}"] is not a major.minor.patch version (got: ${JSON.stringify(entry)})`;
+	}
+	if (entry === minAppVersion) return null;
+
+	const floorAlreadyReleased = Object.values(versions).includes(minAppVersion);
+	if (floorAlreadyReleased) {
+		return `versions.json["${manifestVersion}"] should be "${minAppVersion}" (manifest.minAppVersion) but got "${entry}"`;
+	}
+	if (compareVersions(minAppVersion, entry) < 0) {
+		return `manifest.minAppVersion "${minAppVersion}" is lower than versions.json["${manifestVersion}"] ("${entry}"); the floor of a released version cannot drop`;
+	}
+	return null;
+}
+
 describe("compliance — versions.json ↔ manifest.json consistency", () => {
 	/**
 	 * The Obsidian plugin directory requires versions.json to map every released
-	 * version to the minimum Obsidian app version that supports it. The entry for
-	 * manifest.version MUST equal manifest.minAppVersion so that the directory
-	 * correctly gates installs.
+	 * version to the minimum Obsidian app version that supports it, so that the
+	 * directory correctly gates installs and older apps keep the newest build
+	 * they can run.
 	 *
 	 * Rules:
 	 *   - versions.json must contain an entry for manifest.version
-	 *   - that entry must equal manifest.minAppVersion
+	 *   - that entry must equal manifest.minAppVersion, except while a raised
+	 *     floor waits for its release (see versionEntryFailure)
+	 *   - manifest.minAppVersion is at least 1.13.1 (declarative settings API)
+	 *   - entries of already released versions never change
 	 *
 	 * manifest and manifestPath are hoisted to module scope (shared with Suite 4).
 	 */
 	const versionsPath = path.join(repoRoot, "versions.json");
 	const versions = JSON.parse(fs.readFileSync(versionsPath, "utf8")) as Record<string, unknown>;
+
+	/** Floors of the versions released before the 1.13.1 minimum. */
+	const RELEASED_VERSION_FLOORS: Record<string, string> = {
+		"0.0.1": "1.6.6",
+		"0.1.0": "1.7.2",
+		"0.1.1": "1.7.2",
+		"0.2.0": "1.7.2",
+		"0.3.0": "1.7.2",
+		"0.4.0": "1.7.2",
+		"0.5.0": "1.7.2",
+		"0.6.0": "1.7.2",
+		"0.6.1": "1.7.2",
+		"0.6.2": "1.7.2",
+		"0.7.0": "1.7.2",
+		"0.7.1": "1.7.2",
+		"0.8.0": "1.7.2",
+		"0.8.1": "1.7.2",
+		"0.9.0": "1.7.2",
+		"0.9.1": "1.7.2",
+		"0.9.2": "1.7.2",
+		"0.9.3": "1.7.2",
+		"0.9.4": "1.7.2",
+	};
 
 	it("versions.json contains an entry for manifest.version", () => {
 		const version = manifest.version as string;
@@ -280,13 +363,64 @@ describe("compliance — versions.json ↔ manifest.json consistency", () => {
 		).toBe(true);
 	});
 
-	it("versions.json[manifest.version] equals manifest.minAppVersion", () => {
-		const version = manifest.version as string;
+	it("manifest.minAppVersion is at least 1.13.1", () => {
 		const minAppVersion = manifest.minAppVersion as string;
 		expect(
-			versions[version],
-			`versions.json["${version}"] should be "${minAppVersion}" (manifest.minAppVersion) but got "${versions[version]}"`,
-		).toBe(minAppVersion);
+			compareVersions(minAppVersion, "1.13.1"),
+			`manifest.minAppVersion must be >= 1.13.1 (got: "${minAppVersion}")`,
+		).toBeGreaterThanOrEqual(0);
+	});
+
+	it("versions.json[manifest.version] equals manifest.minAppVersion or awaits a release that raises it", () => {
+		expect(
+			versionEntryFailure(
+				manifest.version as string,
+				manifest.minAppVersion as string,
+				versions,
+			),
+		).toBeNull();
+	});
+
+	it("versions.json keeps the entries of released versions unchanged", () => {
+		expect(versions).toMatchObject(RELEASED_VERSION_FLOORS);
+	});
+
+	describe("versionEntryFailure", () => {
+		it("accepts an entry that equals minAppVersion", () => {
+			expect(versionEntryFailure("1.0.0", "1.7.2", { "1.0.0": "1.7.2" })).toBeNull();
+		});
+
+		it("accepts a pending release: minAppVersion above the entry and not yet recorded", () => {
+			expect(versionEntryFailure("1.0.0", "1.13.1", { "1.0.0": "1.7.2" })).toBeNull();
+		});
+
+		it("compares numerically, not lexically, when judging a pending release", () => {
+			expect(versionEntryFailure("1.0.0", "1.13.1", { "1.0.0": "1.9.0" })).toBeNull();
+		});
+
+		it("rejects a minAppVersion below the entry", () => {
+			expect(versionEntryFailure("1.0.0", "1.7.2", { "1.0.0": "1.13.1" })).toMatch(
+				/cannot drop/,
+			);
+		});
+
+		it("requires an exact match once versions.json records the new floor", () => {
+			const released = { "1.0.0": "1.7.2", "1.1.0": "1.13.1" };
+			expect(versionEntryFailure("1.1.0", "1.13.1", released)).toBeNull();
+			expect(versionEntryFailure("1.0.0", "1.13.1", released)).toMatch(
+				/should be "1\.13\.1"/,
+			);
+		});
+
+		it("rejects a missing or malformed entry and a malformed minAppVersion", () => {
+			expect(versionEntryFailure("1.0.0", "1.13.1", {})).toMatch(/not a major\.minor\.patch/);
+			expect(versionEntryFailure("1.0.0", "1.13.1", { "1.0.0": "1.13" })).toMatch(
+				/not a major\.minor\.patch/,
+			);
+			expect(versionEntryFailure("1.0.0", "latest", { "1.0.0": "1.7.2" })).toMatch(
+				/not a major\.minor\.patch/,
+			);
+		});
 	});
 });
 
