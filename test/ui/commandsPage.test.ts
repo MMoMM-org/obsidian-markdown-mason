@@ -272,6 +272,37 @@ describe("buildCommandsPage — rows", () => {
 		}
 	});
 
+	it("keeps sibling names unique for script ids that equal the intro or state row names", () => {
+		const { page } = makePage({
+			"Script commands": makeRecord(),
+			"No enabled scripts": makeRecord(),
+			"Loading scripts…": makeRecord(),
+			"Script commands (script)": makeRecord(),
+			"plain-script": makeRecord(),
+		});
+		const rows = rowsOf(page);
+		const names = rows.map(row => row.name ?? "");
+
+		expect(new Set(names).size).toBe(names.length);
+		expect(rows.map(row => row.type)).toEqual(["empty", "render", "render", "render", "render", "render"]);
+		expect(names[0]).toBe("Script commands");
+		expect(names).toContain("plain-script");
+		expect(names).toContain("Script commands (script)");
+	});
+
+	it("shows a disambiguated row under its listed name and still acts on the script id", async () => {
+		const { page, commandManager } = makePage({ "Script commands": makeRecord() });
+		const [, scriptRow] = rowsOf(page);
+		expect(scriptRow.name).not.toBe("Script commands");
+
+		const row = renderRow(page, scriptRow.name ?? "");
+		expect(row.name).toBe(scriptRow.name);
+		row.toggleControls[0].setValue(true);
+		await settle();
+
+		expect(commandManager.register).toHaveBeenCalledWith("Script commands", "Script commands", scriptFn, activeState);
+	});
+
 	it("lets a script row be found by its id", () => {
 		const { page } = makePage({ "tidy-headings": makeRecord() });
 		expect(search([page], "tidy-head")).toEqual(["tidy-headings"]);

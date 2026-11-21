@@ -187,8 +187,8 @@ function buildActionRowGroup(ops: LifecycleOps): SettingDefinitionGroup {
  * script, then the controls valid for the script's state.
  *
  * `rowName` is the name the row is listed under; it differs from the display
- * name when several scripts share one, and labels the toggle so those rows
- * stay distinguishable for assistive technology.
+ * name when several scripts share one, and labels the toggle and the ⋯ button
+ * so those rows stay distinguishable for assistive technology.
  */
 export function configureScriptRow(
 	setting: Setting,
@@ -204,7 +204,7 @@ export function configureScriptRow(
 	if (showsToggle(item.state)) {
 		addEnableToggle(setting, item, ops, rowName);
 	}
-	addMenuButton(setting, item, ops);
+	addMenuButton(setting, item, ops, rowName);
 }
 
 /** Name line: name · provenance badge · status pill · version. */
@@ -244,11 +244,11 @@ function addBlockedRecovery(setting: Setting, item: ScriptItem, reason: BlockedR
 	setting.addButton((button) => button.setButtonText(label).onClick(() => void action(item.id, ops)));
 }
 
-function addMenuButton(setting: Setting, item: ScriptItem, ops: LifecycleOps): void {
+function addMenuButton(setting: Setting, item: ScriptItem, ops: LifecycleOps, rowName: string): void {
 	setting.addExtraButton((button) =>
 		button
 			.setIcon("more-horizontal")
-			.setTooltip(`More actions for ${item.displayName}`)
+			.setTooltip(`More actions for ${rowName}`)
 			// onClick provides no mouse event, so the menu is placed below the button.
 			.onClick(() => openMenu(item, ops, button.extraSettingsEl)),
 	);

@@ -90,7 +90,8 @@ export const COMMANDS_EMPTY_STATE = {
  * Build the Commands page from the cached script records.
  *
  * Row names are the script ids: stable and unique among siblings, which is what
- * the settings runtime keys rows by.
+ * the settings runtime keys rows by. Only an id that reads like one of the
+ * page's own rows is listed under another name (see commandRowName).
  */
 export function buildCommandsPage(cache: CommandPageCache, deps: CommandPageDeps): SettingDefinitionPage {
 	return {
@@ -107,19 +108,49 @@ function scriptRows(cache: CommandPageCache, deps: CommandPageDeps): SettingDefi
 	const rowDeps: CommandRowDeps = { ...deps, cache };
 	const commandRows: SettingDefinition[] = Object.entries(cache.records)
 		.filter(([, record]) => record.enabled)
-		.map(([id, record]) => ({
-			name: id,
-			render: (setting: Setting) => configureCommandRow(setting, id, record, rowDeps),
-		}));
+		.map(([id, record]) => {
+			const rowName = commandRowName(id, cache.records);
+			return {
+				name: rowName,
+				render: (setting: Setting) => configureCommandRow(setting, id, record, rowDeps, rowName),
+			};
+		});
 	return commandRows.length > 0 ? commandRows : [emptyStateRow()];
 }
 
-/** Turn `setting` into the command row of script `id`: name field plus create-command toggle. */
+/** The names of the page's own rows; no script row may be listed under one of them. */
+const PAGE_ROW_NAMES: ReadonlySet<string> = new Set([
+	COMMANDS_INTRO.name,
+	COMMANDS_EMPTY_STATE.name,
+	SCRIPTS_LOADING_TEXT,
+]);
+
+const SCRIPT_ROW_SUFFIX = " (script)";
+
+/**
+ * The name script `id` is listed under: the id itself, unless that is the name
+ * of one of the page's own rows. Such an id gets a suffix, repeated until the
+ * name is free of the page's rows and of every other script id.
+ */
+function commandRowName(id: string, records: Record<string, ScriptRecord>): string {
+	let name = id;
+	while (PAGE_ROW_NAMES.has(name) || (name !== id && name in records)) {
+		name += SCRIPT_ROW_SUFFIX;
+	}
+	return name;
+}
+
+/**
+ * Turn `setting` into the command row of script `id`: name field plus
+ * create-command toggle. `rowName` is the name the row is listed under; it
+ * differs from the id only when the id is the name of one of the page's own rows.
+ */
 export function configureCommandRow(
 	setting: Setting,
 	id: string,
 	record: ScriptRecord,
 	deps: CommandRowDeps,
+	rowName: string = id,
 ): void {
 	const { store, commandManager, resolveScriptFn, getState, cache } = deps;
 
@@ -132,7 +163,7 @@ export function configureCommandRow(
 	};
 
 	setting
-		.setName(id)
+		.setName(rowName)
 		.addText((text) => {
 			text
 				.setPlaceholder(id)

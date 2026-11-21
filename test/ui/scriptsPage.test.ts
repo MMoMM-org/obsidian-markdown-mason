@@ -486,6 +486,27 @@ describe("Script row — enable/disable toggle", () => {
 		expect(tooltips).toEqual(["Enable Twin (first)", "Enable Twin (second)", "Enable Other"]);
 	});
 
+	it("same-name scripts get distinct ⋯ button tooltips", () => {
+		const items = [
+			makeItem({ id: "first", displayName: "Twin" }),
+			makeItem({ id: "second", displayName: "Twin" }),
+			makeItem({ id: "other", displayName: "Other" }),
+		];
+		const rows = rowsOf(listOf(buildScriptsPage(makeCache(items), makeOps())));
+
+		const tooltips = rows.map((row) => {
+			const { setting, record } = makeSetting(row.name, row.desc as string);
+			row.render(setting as unknown as ObsidianSetting, new SettingGroup(null) as unknown as ObsidianSettingGroup);
+			return record.extraButtonControls[0]!._tooltip;
+		});
+
+		expect(tooltips).toEqual([
+			"More actions for Twin (first)",
+			"More actions for Twin (second)",
+			"More actions for Other",
+		]);
+	});
+
 	it("configuring a row calls no op", () => {
 		const { ops } = configureRow(makeItem({ state: { kind: "Active" } }));
 		expect(ops.enable).not.toHaveBeenCalled();
