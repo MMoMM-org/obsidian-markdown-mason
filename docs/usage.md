@@ -19,7 +19,7 @@ Out of the box, no scripts are active. Enable one, then run it:
    Run script…** lets you pick an Active script to run. (To paste plain text and just clean
    it up — no script needed — use **Markdown Mason: Paste and format**; see below.)
 
-![Markdown Mason Scripts settings tab listing official and imported scripts with their state, version, and enable toggles](../assets/settings-scripts.png)
+![Markdown Mason Scripts settings page listing official and imported scripts with their state, version, and enable toggles](../assets/settings-scripts.png)
 
 ## Common workflows
 
@@ -33,29 +33,30 @@ Out of the box, no scripts are active. Enable one, then run it:
   item you have typed) and paste: each pasted paragraph becomes its own item, the blank
   lines between them go away, and a list that came with the text nests one level under the
   paragraph introducing it. Ordered lists keep counting; task lists stay task lists.
-  Outside a list item nothing changes. Switch it off under **Settings → General → Fit
-  paste to list context**.
+  Outside a list item nothing changes. Switch it off under **Settings → Markdown Mason →
+  Fit paste to list context**.
 - **Paste and format (clean up pasted text).** Run **Markdown Mason: Paste and format** to
   paste the clipboard and immediately tidy *just the pasted text* — no script required. It
-  applies a 7-step cleanup recipe as a single undo: dewrap paragraphs, dehyphenate words,
-  decompose ligatures and punctuation, tidy whitespace, normalize bullets, normalize the
-  ordered list, and normalize headings. It does **not** run converter scripts, cascade
+  applies a 9-step cleanup recipe as a single undo: convert box-drawing tables, reflow
+  wrapped text (off by default), dewrap paragraphs, dehyphenate words, decompose ligatures
+  and punctuation, tidy whitespace, normalize bullets, normalize the ordered list, and
+  normalize headings. It does **not** run converter scripts, cascade
   headings, or the footnote steps. Use it when you just want clean Markdown from a plain
   copy-paste.
 - **Format selection (full recipe).** Already have text in the note? Select it (or nothing,
-  for the whole note) and run **Markdown Mason: Format selection** for the full 11-step
-  recipe — the same 7 cleanup steps **plus** cascade headings and the 3 footnote steps.
+  for the whole note) and run **Markdown Mason: Format selection** for the full 13-step
+  recipe — the same 9 steps **plus** cascade headings and the 3 footnote steps.
 - **Run a script on a selection (format-in-place).** Select text already in your note, run
   **Markdown Mason: Run script…**, and pick a script — the selected text is transformed *in place*.
   With nothing selected, the script runs on the whole note instead.
-- **Turn a script into its own command.** In **Settings → Commands**, toggle *Create
-  command* for a script. It then appears in the palette as its own entry, so you can run or
+- **Turn a script into its own command.** On the **Commands** page of Mason's settings, name the
+  command and switch its toggle on. It then appears in the palette as its own entry, so you can run or
   hotkey it directly without the Run script… picker.
 
 **Which paste/format command?** Pasting from the clipboard and want a converter script (e.g.
 Perplexity → Markdown) to run? → **Paste and run scripts**. Pasting plain text you just want
-cleaned up? → **Paste and format** (7 steps). Cleaning up text *already in the note*, including
-heading cascade and footnotes? → **Format selection** (11 steps).
+cleaned up? → **Paste and format** (9 steps). Cleaning up text *already in the note*, including
+heading cascade and footnotes? → **Format selection** (13 steps).
 
 ## Tips and shortcuts
 
@@ -64,11 +65,11 @@ heading cascade and footnotes? → **Format selection** (11 steps).
   selection*, *Run script…*, or any per-script command.
 - **Safe by default.** On any script error or timeout, Mason leaves your text raw — a normal
   paste, or your selection untouched. It never writes a partial edit.
-- **Manage the library from the Scripts tab.** Enable, disable (a kill-switch), update when a
-  newer catalog version is waiting (the **Scripts** badge shows how many), import your own
+- **Manage the library from the Scripts page.** Enable, disable (a kill-switch), update when a
+  newer catalog version is waiting (the **Scripts** entry shows how many), import your own
   from the vault, or remove. See [Configuration](configuration.md) for settings and
   [Writing a Markdown Mason script](SCRIPT_AUTHORING.md) to build your own.
-- **Debug logging** (Advanced segment) is for diagnosing problems only — leave it off
+- **Debug logging** (Advanced group) is for diagnosing problems only — leave it off
   otherwise.
 
 ## Examples

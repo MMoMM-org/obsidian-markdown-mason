@@ -198,7 +198,7 @@ parked.
 **Context:** The data model (`ScriptRecord`) and the `buildPasteChain` function
 both accept priority values, so the wiring already tolerates per-record
 overrides. What is missing is the UI surface (a drag-to-reorder list in the
-Commands or Scripts settings tab) and the persistence layer (storing user
+Commands or Scripts settings page) and the persistence layer (storing user
 overrides in `data.json`).
 
 **When to open:** after the Scripts/Commands settings UI (T4.2, T4.4) is

@@ -12,7 +12,7 @@ that's off, blocked, or didn't match your text, not lost data.
 - **On mobile:** Mason is desktop-only and won't appear on Obsidian mobile — use a desktop
   vault.
 - **On desktop:** enable Community plugins (Settings → Community plugins, Restricted mode
-  off) and make sure you're on Obsidian 1.6.6 or newer. After a
+  off) and make sure you're on Obsidian 1.13.1 or newer. After a
   [manual install](installation.md#install-manually), click the
   refresh icon next to *Installed plugins*, or restart Obsidian.
 
@@ -22,14 +22,14 @@ that's off, blocked, or didn't match your text, not lost data.
   on).
 - The built-in commands — including **Markdown Mason: Paste and run scripts**, **Paste and
   format**, **Format selection**, and **Run script…** — are always present. A script's own
-  command appears only after you toggle *Create command* for it in the **Commands** settings
-  tab.
+  command appears only after you switch its toggle on, on the **Commands** page of Mason's
+  settings.
 
 ### Paste and run scripts just inserts the raw text, unchanged
 
 This is the safe fallback — it happens when no enabled script transformed the clipboard:
 
-- Make sure a paste-capable script is **enabled and Active** in the Scripts tab. With no
+- Make sure a paste-capable script is **enabled and Active** on the Scripts page. With no
   active script, Mason pastes normally.
 - The script may not match how you copied the text. For Perplexity, enable the script for
   your copy surface (app / web / web download — see [Usage](usage.md)).
@@ -48,10 +48,11 @@ one you meant:
   script errors — it falls back to a plain paste, so the text lands unchanged. It does **not**
   run the cleanup recipe. To convert, enable the right script (see above); to clean up plain
   text, use *Paste and format*.
-- **Paste and format** applies the 7-step cleanup recipe to the pasted text, but a step you
-  expected may simply be **toggled off**. Check **Settings → Format selection** — the four
-  Cleanup steps, two Lists steps, and *Normalize headings* are the ones that run on a paste.
-  Note that *Cascade headings* and the three footnote steps never run on a paste (they are
+- **Paste and format** applies the 9-step cleanup recipe to the pasted text, but a step you
+  expected may simply be **toggled off**. Check the step toggles in Mason's settings — the
+  Cleanup steps, the Lists steps, and *Normalize headings* are the ones that run on a paste
+  (*Reflow wrapped text* is off unless you turn it on).
+  Note that *Cascade headings* and the 3 footnote steps never run on a paste (they are
   *Format selection* only), so their absence is by design — use **Format selection** if you
   need those.
 - **Still unsure which step ran?** Turn on Debug logging (below). Mason now logs each paste
@@ -67,7 +68,7 @@ Obsidian and try again.
 
 ### A script shows as Blocked and won't run
 
-The Scripts tab marks a script **Blocked** when it can't be trusted or found:
+The Scripts page marks a script **Blocked** when it can't be trusted or found:
 
 - **Checksum mismatch / drift** — the file on disk no longer matches its approved version.
   Mason hard-blocks rather than run changed code. Use the ⋯ menu to re-review (re-consent to
@@ -96,7 +97,7 @@ the existing script first, then import again.
   the Console tab. Mason's traces are prefixed `[MarkdownMason]`.
 - Genuine warnings and errors always appear in the console even with Debug logging off.
 - **Before asking for help, gather:** your Obsidian version and OS, the Markdown Mason
-  version, the script's id and its state in the Scripts tab, the exact text of any Notice,
+  version, the script's id and its state on the Scripts page, the exact text of any Notice,
   and the console output with Debug logging on.
 
 ## Getting help

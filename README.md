@@ -20,34 +20,37 @@ The transforms run as small **scripts** managed by the plugin — installed from
 reviewed library or imported from your own vault — not as loose files scattered through your
 notes.
 
-> **Status:** early (`v0.0.1`). Desktop-only; requires Obsidian `1.6.6` or newer.
+> **Status:** early (`v0.0.1`). Desktop-only; requires Obsidian `1.13.1` or newer.
 
 ## Features
 
 - **Paste and run scripts** — transform clipboard text with your enabled converter scripts
   and insert it at the cursor in one step, with a plain-paste fallback if anything goes wrong.
 - **Paste and format** — paste the clipboard, then apply Mason's cleanup recipe to *just the
-  pasted text* (7 steps: dewrap, dehyphenate, decompose ligatures and punctuation, tidy
-  whitespace, normalize bullets and ordered lists, normalize headings) as a single undo step.
+  pasted text* (9 steps: the six cleanup steps — box-drawing tables, the opt-in reflow,
+  dewrap, dehyphenate, decompose ligatures and punctuation, tidy whitespace — plus normalize
+  bullets, normalize ordered lists and normalize headings) as a single undo step.
 - **Fit paste to list context** — paste inside a list item and the text joins the list:
   one item per pasted paragraph, no leftover blank lines, and a pasted sub-list nested
   under the paragraph that introduces it. Outside a list, nothing changes.
-- **Format selection** — run the full 11-step recipe on a selection or the whole note (the 7
-  cleanup steps plus cascade headings and the three footnote steps).
+- **Format selection** — run the full 13-step recipe on a selection or the whole note (the
+  same 9 steps plus cascade headings and the 3 footnote steps).
 - **Run a script on a selection** — reformat text already in your note *in place*, or run a
   script across the whole note.
 - **Curated script library** — install reviewed formatters (currently three Perplexity copy
   surfaces) from the in-plugin catalog, with update notifications when newer versions ship.
 - **Bring your own scripts** — import scripts from your vault and bind any script to its own
   command and hotkey.
+- **Searchable settings** — Mason's settings show up in Obsidian's settings search, also
+  under everyday words such as "OCR", "hotkey" or "catalog".
 - **Consent-gated execution** — scripts run with full plugin permissions only after an
   explicit, per-version disclosure; a per-script kill-switch disables any of them instantly.
 
 ## Installation
 
 Open **Settings → Community plugins → Browse**, search for **Markdown Mason**, then
-**Install** and **Enable**. Markdown Mason is desktop-only and requires Obsidian 1.6.6 or
-newer. For manual installation, updating, and verification steps, see
+**Install** and **Enable**. Markdown Mason is desktop-only and requires Obsidian 1.13.1 or
+newer. On older Obsidian versions you keep the last Mason release that supports them. For manual installation, updating, and verification steps, see
 **[docs/installation.md](docs/installation.md)**.
 
 ## Quick start
@@ -68,11 +71,11 @@ Three commands cover the paste-and-format workflows. Pick by what you need:
 | Command | id | What it runs | Scope |
 |---|---|---|---|
 | **Paste and run scripts** | `mason.pasteAndRunScripts` | Runs your enabled paste-converter **scripts** on the clipboard (e.g. a Perplexity copy → structured Markdown) and inserts the result at the cursor; falls back to a plain paste if no script matches or one errors. | Clipboard → cursor |
-| **Paste and format** | `mason.pasteAndFormatText` | Pastes the clipboard, then applies the **7-step** cleanup recipe scoped to just the pasted text — 4 cleanup steps, 2 list steps, and normalize headings — as one undo. Paste inside a list item and the result joins that list: one item per paragraph, sub-lists nested. No scripts, no cascade, no footnote steps. | Clipboard → pasted text |
-| **Format selection** | `preset.formatSelection` | Runs the full **11-step** recipe on the selection (or whole note) — the same 7 cleanup steps plus cascade headings and the 3 footnote steps. | Selection + whole note |
+| **Paste and format** | `mason.pasteAndFormatText` | Pastes the clipboard, then applies the **9-step** cleanup recipe scoped to just the pasted text — 6 cleanup steps, 2 list steps, and normalize headings — as one undo. Paste inside a list item and the result joins that list: one item per paragraph, sub-lists nested. No scripts, no cascade, no footnote steps. | Clipboard → pasted text |
+| **Format selection** | `preset.formatSelection` | Runs the full **13-step** recipe on the selection (or whole note) — the same 9 steps plus cascade headings and the 3 footnote steps. | Selection + whole note |
 
 The crisp distinction: **Paste and run scripts** is about converter scripts; **Paste and
-format** (7 steps) and **Format selection** (11 steps) are about cleanup. The other built-in
+format** (9 steps) and **Format selection** (13 steps) are about cleanup. The other built-in
 commands (each footnote and heading step on its own, plus **Run script…**) are listed in the
 [Commands Reference](docs/commands-reference.md).
 

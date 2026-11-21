@@ -13,7 +13,7 @@ cursor, inline citations turned into real footnotes, and those footnotes renumbe
 deduplicated against what's already in the note. The transforms run as small, consent-gated
 **scripts** managed by the plugin — installed from a curated library or imported from your
 vault — rather than loose files scattered through your vault. It is desktop-only and requires
-Obsidian 1.6.6 or newer.
+Obsidian 1.13.1 or newer.
 
 ## Documentation map
 

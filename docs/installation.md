@@ -5,7 +5,8 @@ Plugins browser, or manually from a GitHub release.
 
 ## Prerequisites
 
-- **Obsidian 1.6.6 or newer**, on **desktop** (Windows, macOS, or Linux). Markdown Mason is
+- **Obsidian 1.13.1 or newer**, on **desktop** (Windows, macOS, or Linux). On an older
+  Obsidian you are not offered this version and keep the Mason release you have. Markdown Mason is
   desktop-only — its script runtime needs Node, so it does not run on Obsidian mobile and
   won't appear in the mobile plugin list.
 - **Community plugins enabled.** If you've never installed a community plugin, open
@@ -40,8 +41,11 @@ After enabling, confirm Mason loaded:
 
 - **Markdown Mason** appears under Settings → Community plugins → Installed plugins, toggled
   on.
-- A **Markdown Mason** entry is in the settings sidebar, showing the General / Scripts /
-  Commands / Format selection / Advanced segments.
+- A **Markdown Mason** entry is in the settings sidebar. Its page starts with *Resources
+  section heading*, has **Scripts** and **Commands** entries that open their own pages, and
+  ends with the **Advanced** group.
+- Typing "Mason" or a setting name such as "Debug logging" into the settings search finds
+  Mason's settings.
 - Opening the command palette and typing "Mason" lists **Markdown Mason: Paste and run
   scripts**, **Paste and format**, **Format selection**, and **Run script…**.
 
@@ -54,5 +58,5 @@ If any of these are missing, see [Troubleshooting](troubleshooting.md).
 - **Manual installs:** download the newer release assets and overwrite the three files in
   `.obsidian/plugins/markdown-mason/`, then reload Obsidian.
 
-Curated scripts you've installed update separately from the plugin — the **Scripts** settings
-tab shows a badge when newer script versions are waiting (see [Usage](usage.md)).
+Curated scripts you've installed update separately from the plugin — the **Scripts** entry
+on Mason's settings page shows how many newer script versions are waiting (see [Usage](usage.md)).

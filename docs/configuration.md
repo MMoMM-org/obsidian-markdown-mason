@@ -1,44 +1,106 @@
 # Configuration
 
-Markdown Mason is configured entirely from its settings tab inside Obsidian — there is no
+Markdown Mason is configured entirely from its settings page inside Obsidian — there is no
 separate config file to edit by hand. Changes you make to a control are saved immediately,
 and most take effect right away.
 
 ## Where settings live
 
 Open **Settings → Community plugins → Markdown Mason** (or click the options/gear icon next
-to the plugin). The settings are organised into five segments:
+to the plugin). Everything sits on one main page, with two sub-pages for scripts:
 
-- **General** — the everyday options: Resources section heading, Show update notes,
-  Numeric-only footnotes, and Fit paste to list context.
-- **Scripts** — install, enable, disable, update, and remove curated or imported scripts
-  (see [Usage](usage.md) for the script lifecycle).
-- **Commands** — turn individual scripts into command-palette commands and launch a script
-  on demand.
-- **Format selection** — the 12 step toggles for the *Format selection* command (one, *Reflow
-  wrapped text*, is opt-in/off by default). The cleanup/list/heading-normalize steps among
-  them also govern **Paste and format** (see below); the other four steps are *Format
-  selection* only.
-- **Advanced** — Debug logging.
+| On the main page | What it holds |
+|---|---|
+| Four everyday settings (no heading) | *Resources section heading*, *Show update notes*, *Numeric-only footnotes*, *Fit paste to list context* |
+| **Scripts** (opens a page) | Your script library — see [The Scripts page](#the-scripts-page) |
+| **Commands** (opens a page) | One command per enabled script — see [The Commands page](#the-commands-page) |
+| **Format selection** | *Which steps run*, a short reminder of which command runs which steps |
+| **Cleanup**, **Lists**, **Headings**, **Footnotes** | The step toggles — see [Format selection steps](#format-selection-steps) |
+| **Advanced** | *Debug logging*, and *Documentation*, which shows the plugin version and opens the project page |
 
-![Markdown Mason General settings tab: the Resources section heading field (default ## Resources), Show update notes, and Numeric-only footnotes](../assets/settings-general.png)
+Mason uses Obsidian's own settings layout, so its settings also show up in Obsidian's
+settings search — see [Finding a setting with search](#finding-a-setting-with-search).
 
 Your choices are stored in the plugin's `data.json` file
 (`<vault>/.obsidian/plugins/markdown-mason/data.json`), alongside the script library. You
-should not normally need to edit this file directly — use the settings tab instead.
+should not normally need to edit this file directly — use the settings page instead.
 
-![Markdown Mason Advanced settings tab showing the Debug logging toggle](../assets/settings-advanced.png)
+## Finding a setting with search
+
+Type in the search box at the top of Obsidian's settings window. Mason's settings match on
+their name and description, and on a few everyday words that appear in neither:
+
+| Search for | Finds |
+|---|---|
+| `OCR`, `TextSniper` | *Reflow wrapped text* |
+| `paste`, `paste and format` | *Fit paste to list context* and *Which steps run* |
+| `footnotes` | The footnote settings, including *Resolve footnote identity* |
+| `hotkey`, `command palette` | *Script commands* on the Commands page |
+| `import` | *Import from vault* on the Scripts page |
+| `catalog`, `official scripts` | *Browse official* on the Scripts page |
+| `console`, `debug` | *Debug logging* |
+| `help`, `version` | *Documentation* |
+
+Your scripts are searchable too: by name, by description, and by script id.
+
+## The Scripts page
+
+**Scripts** lists every script you have installed, one row each. A row shows the script's
+name, whether it is *Official* or *Imported*, its state (for example *Active*, *Disabled*,
+*Update available* or *Blocked*) and its version. On the right are a toggle to enable or
+disable the script and a **⋯** menu with the actions that apply to it: *View source*,
+*Update to v…*, *Re-review consent*, *Retry fetch* and *Remove*.
+
+A *Blocked* script says why below its description and offers one button to recover —
+*Re-import* when its vault file is missing, *Retry fetch* otherwise. See
+[Troubleshooting](troubleshooting.md#a-script-shows-as-blocked-and-wont-run).
+
+To add scripts, use the two buttons in the list header: **Import from vault** and **Browse
+official** (the store icon). Both are also rows at the bottom of the page, which is what
+lets search find them.
+
+### Update indicator
+
+When newer versions of your official scripts are waiting, the **Scripts** entry on the main
+page shows how many — *1 update available*, *2 updates available* — with a warning marker.
+Open the page and choose *Update to v…* in a script's **⋯** menu. With *Show update notes*
+on, the notes shown after a plugin update also mention waiting script updates, and their
+**Open scripts settings** button opens the Scripts page directly.
+
+See [Usage](usage.md) for the script lifecycle.
+
+## The Commands page
+
+**Commands** turns scripts into commands of their own. Below the *Script commands* intro
+there is one row per **enabled** script: type a name for the command (the script id is used
+if you leave it blank), then switch the toggle on. The command appears in the command
+palette right away; bind keys to it under **Settings → Hotkeys**. Switching the toggle off
+removes the command.
+
+With no enabled script the page shows *No enabled scripts* — enable one on the Scripts page
+first. See the [Commands Reference](commands-reference.md#per-script-commands).
 
 ## Format selection steps
 
-The **Format selection** segment has twelve toggles — eleven on by default, plus *Reflow
-wrapped text* which is **off by default** (opt-in) — arranged under four sub-groups:
-**Cleanup** (reflow wrapped text, dewrap paragraphs, dehyphenate words, decompose ligatures
-and punctuation, tidy whitespace), **Lists** (normalize bullets, normalize ordered list),
-**Headings** (cascade headings, normalize headings), and **Footnotes** (convert citations to
-footnotes, resolve footnote identity, move footnotes to resources).
+The **Cleanup**, **Lists**, **Headings** and **Footnotes** groups hold one toggle per step
+of the *Format selection* command: 13 steps in all. The *Paste and format* command runs 9
+of them on the text you paste; the other 4 steps are *Format selection* only.
 
-![Markdown Mason Format selection settings, Cleanup group: Reflow wrapped text (off by default), Dewrap paragraphs, Dehyphenate words, Decompose ligatures and punctuation, and Tidy whitespace, each with a toggle and description](../assets/settings-format-selection-cleanup.png)
+| Group | Step | Default | Runs in *Paste and format* |
+|---|---|---|---|
+| Cleanup | Convert box-drawing table | on | yes |
+| Cleanup | Reflow wrapped text | **off** | yes |
+| Cleanup | Dewrap paragraphs | on | yes |
+| Cleanup | Dehyphenate words | on | yes |
+| Cleanup | Decompose ligatures and punctuation | on | yes |
+| Cleanup | Tidy whitespace | on | yes |
+| Lists | Normalize bullets | on | yes |
+| Lists | Normalize ordered list | on | yes |
+| Headings | Cascade headings | on | no |
+| Headings | Normalize headings | on | yes |
+| Footnotes | Convert citations to footnotes | on | no |
+| Footnotes | Resolve footnote identity | on | no |
+| Footnotes | Move footnotes to resources | on | no |
 
 > **Reflow wrapped text** rebuilds screen-capture OCR text (e.g. TextSniper slide captures)
 > that has hard line breaks and no blank lines between blocks, turning it back into
@@ -49,24 +111,20 @@ footnotes, resolve footnote identity, move footnotes to resources).
 > or run the standalone **Markdown Mason: Reflow wrapped text** command on a selection. It
 > runs before the other cleanup steps.
 
-These toggles configure the *Format selection* command — and **also govern the *Paste and
-format* command**, which applies the cleanup subset to the pasted text:
+The toggles govern both commands:
 
-- **Shared by both commands:** *Reflow wrapped text* (opt-in), the other 4 Cleanup steps, the
-  2 Lists steps, and *Normalize headings*. Toggling one of these off in *Format selection*
-  also stops it from running during *Paste and format*.
-- **Format selection only (4 steps):** *Cascade headings* and the 3 footnote steps (*Convert
+- **Shared by both commands (9 steps):** the Cleanup and Lists steps and *Normalize
+  headings*. Toggling one of these off also stops it from running during *Paste and format*.
+- **Format selection only (4 steps):** *Cascade headings* and the footnote steps (*Convert
   citations to footnotes*, *Resolve footnote identity*, *Move footnotes to resources*). These
-  never run during *Paste and format*. Each is marked in the settings UI with
+  never run during *Paste and format*. Each is marked in its description with
   *ℹ️ "Format selection" only — not applied by "Paste and format".*
-
-![Markdown Mason Format selection settings, Lists group (normalize bullets, normalize ordered list) and Headings group (cascade headings — marked "Format selection" only — and normalize headings)](../assets/settings-format-selection-lists-headings.png)
-
-![Markdown Mason Format selection settings, Footnotes group: convert citations to footnotes, resolve footnote identity, and move footnotes to resources — each marked "Format selection" only, not applied by "Paste and format"](../assets/settings-format-selection-footnotes.png)
 
 So if you ran *Paste and format* and a particular cleanup step didn't happen, check whether
 that step is toggled off here. (Steps unique to *Format selection* are expected not to run on
 a paste — that is by design.)
+
+The toggles are stored in `data.json` under `formatSelection`.
 
 ## Pasting into a list
 
@@ -82,7 +140,7 @@ list instead of dropping it in as-is:
   with fresh unchecked boxes.
 
 Pasting anywhere else is unaffected — outside a list item the step does nothing at all.
-Turn it off with **General → Fit paste to list context** (`pasteListContext`).
+Turn it off with **Fit paste to list context** (`pasteListContext`) on the main page.
 
 Two deliberate boundaries: the surrounding list is never renumbered or re-indented (only
 the text you paste is shaped), and a paste that fails inside a converter script always
@@ -98,24 +156,24 @@ value, and what it controls.
 | `debugLogging` | `boolean` | `false` | Enable verbose console.debug traces. Off by default. |
 | `resourcesName` | `string` | `"## Resources"` | Heading where *Tidy / Move footnotes* collects footnote definitions. Carries an optional ATX level prefix (e.g. `## Resources`, `### Resources`) so you choose the heading level. An existing section with this name is reused at whatever level it already has. |
 | `numericOnly` | `boolean` | `true` | When true (default), only numeric footnote references are processed; alpha markers such as [^A] are excluded. Optional to preserve backward compatibility with persisted data and existing test fixtures that do not include this field. Treated as `true` when absent. KNOWN LIMITATION (v0.1): this setting persists and threads into OperationContext.settings, but numericOnly=false is not yet honoured by the core footnote logic. The core already behaves as if numericOnly is always true (ExistingRef is defined as numeric-only; see types.ts). Wiring numericOnly=false to allow alpha markers is a planned follow-up. |
-| `showUpdateSplash` | `boolean` | `true` | When true (default), a one-shot "what's new" splash is shown the first time the plugin runs after its version changes. It lists the features that release brought (taken from the release's changelog entry at build time — features only, so a bug-fix-only release shows none) and how many curated scripts have a newer catalog version waiting (scripts ride pinned plugin releases, so a plugin update is the only moment a script version can change). User-gated via General settings and the in-splash toggle. Optional for backward-compat with persisted data predating this field; treated as `true` when absent. |
+| `showUpdateSplash` | `boolean` | `true` | When true (default), a one-shot "what's new" splash is shown the first time the plugin runs after its version changes. It lists the features that release brought (taken from the release's changelog entry at build time — features only, so a bug-fix-only release shows none) and how many curated scripts have a newer catalog version waiting (scripts ride pinned plugin releases, so a plugin update is the only moment a script version can change). User-gated via the *Show update notes* setting and the in-splash toggle. Optional for backward-compat with persisted data predating this field; treated as `true` when absent. |
 | `pasteListContext` | `boolean` | `true` | When true (default), pasted content is fitted to the list item the cursor is in: each paragraph becomes its own item, the blank lines that separated them are dropped, and a pasted sub-list nests under the item that introduces it. Applies to *Paste and format* and to *Paste and run scripts* when no script recognises the clipboard. Provably a no-op when the cursor is not inside a list, hence on by default. Optional for backward-compat with persisted data predating this field; treated as `true` when absent. |
 | `lastSeenVersion` | `string` | `""` | The plugin version (manifest.version) last shown to the user. Compared against the current manifest.version on load to detect an update (mirrors Excalidraw's `previousRelease`). Empty string means "never recorded" → fresh install, which is recorded silently without a splash. Optional for backward-compat; treated as `""` when absent. |
 
-`lastSeenVersion` has no control in the settings tab — Markdown Mason manages it
+`lastSeenVersion` has no control on the settings page — Markdown Mason manages it
 automatically to decide when to show the update-notes splash. It is listed here only for
 completeness.
 
 ## Override mechanism
 
-Every General and Advanced setting maps to a control in the settings tab:
+Each of these settings maps to a control on the main settings page:
 
 | Setting | Location | Control |
 |---|---|---|
-| `resourcesName` | General → Resources section heading | text field |
-| `showUpdateSplash` | General → Show update notes | toggle |
-| `numericOnly` | General → Numeric-only footnotes | toggle |
-| `pasteListContext` | General → Fit paste to list context | toggle |
+| `resourcesName` | Top of the page → Resources section heading | text field |
+| `showUpdateSplash` | Top of the page → Show update notes | toggle |
+| `numericOnly` | Top of the page → Numeric-only footnotes | toggle |
+| `pasteListContext` | Top of the page → Fit paste to list context | toggle |
 | `debugLogging` | Advanced → Debug logging | toggle |
 
 Changing a control writes to `data.json` immediately — there is no separate Save button.

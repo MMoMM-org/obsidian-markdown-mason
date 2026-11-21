@@ -151,7 +151,7 @@ export class MockHTMLElement {
 	}
 
 	/**
-	 * Checkbox-style value (T4.2). The Scripts tab renders its enable toggle as a
+	 * Checkbox-style value (T4.2). The Scripts page renders its enable toggle as a
 	 * `<input type="checkbox">`; `checked` mirrors the DOM property. setValue() is
 	 * a test convenience that sets `checked` and fires registered "change"
 	 * listeners so onChange-style wiring is observable.
