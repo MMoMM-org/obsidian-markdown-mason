@@ -1,3 +1,9 @@
+## [0.9.3](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.9.2...0.9.3) (2026-11-21)
+
+### Bug Fixes
+
+* **release:** commit the catalog pin so releases rebuild reproducibly ([f98c0f6](https://github.com/MMoMM-org/obsidian-markdown-mason/commit/f98c0f67aa8d9a58219514cc349e22d83fc442f3))
+
 ## [0.9.2](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.9.1...0.9.2) (2026-09-07)
 
 ### Bug Fixes
