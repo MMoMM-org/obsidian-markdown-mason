@@ -265,7 +265,7 @@ Responsibilities (MECE):
 |---|---|
 | `settingsDefinitions` | Owns name, desc, aliases, key and grouping of the 18 fixed settings, plus the Format selection intro row and the group headings, and assembles the main-page items (General, Format selection groups, Advanced including the Documentation row) |
 | `settingsControlStore` | Maps a control key to a read from / write into the in-memory `MasonSettings` (flat and nested `formatSelection.*`), with defaults |
-| `scriptsCache` | Holds the last resolved script state; runs refreshes (single flight, coalescing, generation check); notifies on change |
+| `scriptsCache` | Holds the last resolved script state; runs refreshes (single flight, coalescing); notifies on change |
 | `scriptsPage` | Builds the Scripts page definition and configures one script row from a `ScriptItem` (pill, version, toggle, menu, recovery) |
 | `scriptLifecycleOps` | Builds `LifecycleOps` (controller-backed or store-only fallback) and opens BrowseOfficialModal |
 | `commandsPage` | Builds the Commands page definition and configures one command row |
@@ -279,7 +279,7 @@ Responsibilities (MECE):
 ```
 .
 ├── src/
-│   ├── main.ts                    # MODIFY: setRerender wiring once; _countUpdatableScripts → cache; _openScriptsSettings → openPagePath + fallback; drop selectScriptsSegment use
+│   ├── main.ts                    # MODIFY: tab builds LifecycleOps once (buildLifecycleOps registers the controller rerender); _countUpdatableScripts → cache; _openScriptsSettings → openPagePath + fallback; drop selectScriptsSegment use
 │   ├── commands.ts                # MODIFY: comment only (stale "Catalyst beta" note, Feature 10)
 │   ├── core/types.ts              # MODIFY: comment only ("eleven" → thirteen)
 │   ├── core/formatSelection.ts    # MODIFY: comment only
@@ -349,25 +349,52 @@ settingsDefinitions:
   # T3.1: prune fixedSetting and constants that only the old tab used
 
 scriptsCache:
+  ScriptsCacheDeps {
+    store: Pick<ScriptStore, "getScripts">
+    resolver?: Pick<LifecycleResolver, "clearCache" | "resolveItems">
+    setUpdatableCount(n: number): void
+  }
+  buildOfflineScriptItems(records): ScriptItem[]   # the single offline fallback (evaluateState); also used by the old tab until T3.1
   class ScriptsCache {
+    constructor(deps: ScriptsCacheDeps)
     items: ScriptItem[] | null          # null = not loaded yet
     records: Record<string, ScriptRecord>
     updatableCount: number
+    readonly stale: boolean             # getter; pending stays private
+    readonly inFlight: boolean          # getter
     requestRefresh(): void              # coalescing, fire-and-forget
-    refresh(): Promise<void>            # single flight; generation-checked apply
-    markStale(): void                   # from tab.hide()
+    refresh(): Promise<void>            # single flight; one coalesced follow-up pass (awaiting does not wait for that pass)
+    markStale(): void                   # from tab.hide(); a mark during a flight stays set
     onChange: () => void                # set by tab → this.update()
   }
+  # Rule: the tab treats `stale && !inFlight` as "needs refresh".
+
+scriptLifecycleOps:
+  type ScriptLifecycleStore = Pick<ScriptStore, "getScripts" | "setRecord">
+  type ScriptLifecycleController = Pick<LifecycleController, enable | disable | remove | retry | update | reReview | viewSource | importFromVault | listOfficial | enableOfficial | setRerender>
+  ScriptLifecycleOpsDeps { app: App, store: ScriptLifecycleStore, controller?: ScriptLifecycleController }   # controller absent → store-only fallback ops
+  buildLifecycleOps(deps: ScriptLifecycleOpsDeps, onChanged: () => void): LifecycleOps
+  # Calls controller.setRerender(onChanged) itself, so build it exactly once (Phase 3: onChanged = () => cache.requestRefresh()).
 
 scriptsPage:
   SCRIPTS_PAGE_NAME = "Scripts"   # page key: Obsidian falls back to name (no id in 1.13.1 typings)
-  buildScriptsPage(cache, ops): SettingDefinitionPage
-  configureScriptRow(setting: Setting, item: ScriptItem, ops: LifecycleOps): void
+  SCRIPTS_LOADING_TEXT = "Loading scripts…"   # shared with commandsPage
+  ScriptsPageState {items: ScriptItem[] | null, updatableCount: number}
+  buildScriptsPage(cache: ScriptsPageState, ops: LifecycleOps): SettingDefinitionPage
+  configureScriptRow(setting: Setting, item: ScriptItem, ops: LifecycleOps, rowName?: string): void
+    # rowName defaults to item.displayName; used for the toggle tooltip "Enable {rowName}" and the ⋯ tooltip "More actions for {rowName}"
 
 commandsPage:
   COMMANDS_PAGE_NAME = "Commands"
-  buildCommandsPage(cache, deps: CommandRowDeps): SettingDefinitionPage
-  configureCommandRow(setting: Setting, id: string, record: ScriptRecord, deps: CommandRowDeps): void
+  COMMANDS_INTRO = {name: "Script commands", desc, aliases: [hotkey, command palette]}
+  COMMANDS_EMPTY_STATE = {name, desc}
+  type CommandRecordsCache = Pick<ScriptsCache, "records">   # records only; the row narrows on purpose
+  type CommandPageCache = Pick<ScriptsCache, "records" | "items">
+  CommandPageDeps {store, commandManager, resolveScriptFn, getState}
+  type CommandRowDeps = CommandPageDeps & {cache: CommandRecordsCache}
+  buildCommandsPage(cache: CommandPageCache, deps: CommandPageDeps): SettingDefinitionPage
+  configureCommandRow(setting: Setting, id: string, record: ScriptRecord, deps: CommandRowDeps, rowName?: string): void
+  # also re-exports the types as in code (CommandsTabCommandManager, ScriptFnResolver, StateResolver)
 
 pluginIdentity:
   REPO_URL: string
@@ -399,7 +426,7 @@ ENTITY: FixedSettingSpec (NEW, in settingsDefinitions)
     control: {type: "toggle"} | {type: "text", placeholder: string}
 
 ENTITY: ScriptsCache state (NEW)
-  FIELDS: items | null, records, updatableCount, generation: number, inFlight: boolean, pending: boolean, stale: boolean
+  FIELDS: items | null, records, updatableCount; private: pending, inFlight, stale (stale and inFlight exposed read-only)
 
 ENTITY: MasonSettings (UNCHANGED) — resourcesName, showUpdateSplash, numericOnly, pasteListContext,
   debugLogging, formatSelection?: Partial<FormatSelectionRecipe>, lastSeenVersion
@@ -426,7 +453,7 @@ Bare items and the two page entries render together in the implicit untitled fir
 ```yaml
 - from: MasonSettingTab
   to: LifecycleController
-  data_flow: "controller.setRerender(() => cache.requestRefresh()), set once in the tab constructor"
+  data_flow: "tab builds LifecycleOps once; buildLifecycleOps registers controller.setRerender(() => cache.requestRefresh())"
 - from: scriptsCache
   to: LifecycleResolver + ScriptStore
   data_flow: "clearCache → getScripts → resolveItems (offline fallback evaluateState when no resolver)"
@@ -488,7 +515,9 @@ Traced walkthrough. Stored blob from 0.9.4: `{ resourcesName: "## Sources", form
 
 Edge cases: `formatSelection` absent → `{}` is created on the first write (today's behaviour). `saveSettings` rejects → Notice plus a debug trace, and the in-memory value stays set; the next save retries it, matching today.
 
-#### Example: Scripts cache refresh (single flight + coalescing + generation)
+#### Example: Scripts cache refresh (single flight + coalescing)
+
+> Deviation D-3 (T2.1, approved): the generation counter shown in the first draft of this example was dropped. `refresh()` is single-flight and the counter was bumped after the in-flight check, so the guard could never fire. Single flight plus one pending follow-up pass already guarantees that the last state wins.
 
 **Why this example**: Controller ops fire `rerender` in bursts (enable → materialize → state change). Without coalescing, overlapping resolves could apply stale state after fresh state.
 
@@ -497,17 +526,14 @@ requestRefresh(): void { void this.refresh(); }
 async refresh(): Promise<void> {
 	if (this.inFlight) { this.pending = true; return; }
 	this.inFlight = true; this.stale = false;
-	const gen = ++this.generation;
 	try {
 		this.deps.resolver?.clearCache();
 		const records = await this.deps.store.getScripts();
 		const items = await this.resolve(records);              // resolver or offline evaluateState fallback
-		if (gen === this.generation) {
-			this.records = records; this.items = items;
-			this.updatableCount = items.filter(i => i.state.kind === "UpdateAvailable").length;
-			this.deps.setUpdatableCount(this.updatableCount);    // plugin.updatableScriptCount
-			this.onChange();                                     // tab.update()
-		}
+		this.records = records; this.items = items;
+		this.updatableCount = items.filter(i => i.state.kind === "UpdateAvailable").length;
+		this.deps.setUpdatableCount(this.updatableCount);    // plugin.updatableScriptCount
+		this.onChange();                                     // tab.update()
 	} catch (err) { debug("[mason] scripts refresh failed", err); /* keep last good state */ }
 	finally {
 		this.inFlight = false;
@@ -516,7 +542,9 @@ async refresh(): Promise<void> {
 }
 ```
 
-Trace: op A fires rerender (refresh #1 starts, gen 1). Op B fires during #1 (`pending = true`). #1 applies gen 1 and calls `update()`. `finally` starts #2 (gen 2), which reads post-B state and calls `update()`. Result: exactly two passes, last state wins, never more than one in flight.
+Trace: op A fires rerender (refresh #1 starts). Op B fires during #1 (`pending = true`). #1 applies its state and calls `update()`. `finally` starts #2, which reads post-B state and calls `update()`. Result: exactly two passes, last state wins, never more than one in flight.
+
+`_apply` guards `setUpdatableCount` and `onChange` separately: `onChange` still runs if the count publish throws, and a throwing listener is logged and does not fail the pass.
 
 #### Test Examples as Interface Documentation
 
@@ -581,7 +609,7 @@ sequenceDiagram
 - **No resolver or controller** (init failure path, main.ts L217+): the store-only fallback ops from today (scriptLifecycleOps) and offline `evaluateState`; Browse shows today's "catalog not available" Notice.
 - **Private API missing** (`openPagePath` absent or renamed): fall back to `openTabById`; no throw.
 - **Unknown control key:** ignored (no write, no save).
-- **Hostile script data:** passed only as strings to `setName`/`setDesc`/`setText`, never as markup.
+- **Hostile script data:** the real sinks are definition `name`/`desc`, `createSpan`/`createDiv` with `{text}`, and `setTooltip`; never markup.
 
 ### Complex Logic (if applicable)
 
@@ -592,17 +620,31 @@ OUTPUT: SettingDefinitionPage {name:"Scripts", ...}
 1. displayValue = count>0 ? `${count} update${count===1?"":"s"} available` : ""; status = count>0 ? "warning" : null
 2. list.emptyState = items===null ? "Loading scripts…" : "No scripts yet. Import one from your vault, or browse the official catalog to get started."
 3. list.addItem = {name:"Import from vault", action: ops.importFromVault}; list.extraButtons = [Browse official (icon "store", tooltip)]
-4. FOR each item (store order): row {name: displayName, desc: description, aliases: [id],
-     render: s => configureScriptRow(s, item, ops)}
-5. A separate group after the list holds search-only action rows: "Import from vault" and "Browse official",
-   with aliases [catalog, official scripts, import], so search can reach them (addItem/extraButtons are not indexed)
+4. FOR each item (store order): row {name: rowName, desc: description, aliases: [id],
+     render: s => configureScriptRow(s, item, ops, rowName)}
+   rowName is displayName, disambiguated to "Name (id)" when display names collide; the disambiguation loops
+   until the name is free of all sibling names (T2.6)
+5. A separate group after the list holds search-only action rows (addItem/extraButtons are not indexed):
+   "Import from vault" with aliases [import], "Browse official" with aliases [catalog, official scripts]
+   (no alias on two targets)
 ```
 
 `configureScriptRow` reuses today's helpers unchanged: `pillLabel`, `pillIcon`, `toggleValue`, `showsToggle`, `blockedReasonText`, `blockedRecovery`, `menuActions`, `reReviewAction`, `provenanceBadge`.
-- Badge, pill and version spans are appended to `setting.nameEl` via `createSpan` + `setText`.
+- Badge, pill and version spans are appended to `setting.nameEl` via `createSpan({text})`.
 - The toggle is `addToggle`, only if `showsToggle`.
 - The ⋯ menu is `addExtraButton("more-horizontal")`, shown with `menu.showAtPosition` from `extraSettingsEl.getBoundingClientRect()`.
-- Blocked rows get the reason via `setDesc` plus `addButton(recovery)`.
+- Blocked rows keep the description and add the reason as a separate `div.mason-script-blocked-reason` under `descEl`, plus `addButton(recovery)` (not `setDesc`).
+
+```
+ALGORITHM: Build Commands page
+INPUT: cache.records, cache.items (ScriptItem[] | null), deps
+OUTPUT: SettingDefinitionPage {name:"Commands", ...}
+1. Intro row COMMANDS_INTRO ("Script commands", today's hint, aliases hotkey / command palette) is always first
+2. IF items === null: a "Loading scripts…" row (SCRIPTS_LOADING_TEXT)
+   ELSE one render row per enabled script, named by its id, or the COMMANDS_EMPTY_STATE row when none are enabled
+3. An id equal to one of the page's own row names gets " (script)" appended until free (D-1 sibling-unique keys)
+4. Row edits (toggle, rename) patch cache.records and never call update()
+```
 
 ## Deployment View
 
@@ -702,7 +744,7 @@ N/A: single plugin process.
   - Trade-offs: a small adapter to maintain. The test mock's base setter throws to catch a missing override.
   - User confirmed: **Yes (2026-11-21)**
 
-- [x] **ADR-6 Async script data:** a `ScriptsCache` (single flight, coalescing, generation check) feeds `update()`.
+- [x] **ADR-6 Async script data:** a `ScriptsCache` (single flight, coalescing; generation check dropped per D-3) feeds `update()`.
   - Rationale: definitions must be synchronous (CON-2), and the runtime's keyed diff makes "rebuild + `update()`" safe, which replaces today's `_rendering` guard.
   - Seeded at layout-ready (also replaces the splash's separate catalog fetch), refreshed on every controller `rerender`, marked stale on `hide()`.
   - Trade-offs: script rows join search only after the first refresh, shortly after startup.
@@ -749,13 +791,13 @@ N/A: single plugin process.
 - [ ] WHEN a 0.9.4 `data.json` is loaded, THE SYSTEM SHALL report every stored value unchanged and keep the `scripts` namespace after any write.
 
 **Scripts page (PRD Feature 4)**
-- [ ] THE SYSTEM SHALL render one list row per script, in store order, keyed by its unique display name, showing provenance, pill, version, toggle (only for states where `showsToggle` is true) and the ⋯ menu with `menuActions(state)`.
+- [ ] THE SYSTEM SHALL render one list row per script, in store order, keyed by a name unique among siblings (its display name, or "Name (id)" when display names collide), showing provenance, pill, version, toggle (only for states where `showsToggle` is true) and the ⋯ menu with `menuActions(state)`.
 - [ ] WHEN a lifecycle op calls `rerender`, THE SYSTEM SHALL refresh the cache and call `update()` once per settled state; WHILE a refresh is in flight, THE SYSTEM SHALL coalesce further requests into one follow-up pass.
 - [ ] IF a script is Blocked, THEN THE SYSTEM SHALL show `blockedReasonText` and the `blockedRecovery` button.
 - [ ] WHILE the cache is unloaded, THE SYSTEM SHALL show the "Loading scripts…" empty state; WHEN loaded with 0 scripts, THE SYSTEM SHALL show today's empty-state text.
 
 **Commands page (PRD Feature 5)**
-- [ ] THE SYSTEM SHALL start the Commands page with an intro row (hint text, aliases hotkey and command palette) that is present even with no enabled scripts.
+- [ ] THE SYSTEM SHALL start the Commands page with an intro row named "Script commands" (hint text, aliases hotkey and command palette) that is present even with no enabled scripts, and WHILE the cache is unloaded, THE SYSTEM SHALL show a "Loading scripts…" row after it.
 - [ ] THE SYSTEM SHALL render one row per script with `enabled === true`, otherwise the empty-state message; toggle and rename behave as `commandsTab.ts` today, and edits SHALL NOT trigger `update()`.
 
 **Indicator and deep link (PRD Feature 6)**
@@ -781,7 +823,8 @@ N/A: single plugin process.
 
 ### Implementation Gotchas
 - **Never rely on the base `setControlValue`** (data loss, CON-3).
-- **Never call `update()` from inside `getSettingDefinitions()`** (loop). The stale-triggered refresh is fire-and-forget and clears `stale` before awaiting.
+- **Never call `update()` from inside `getSettingDefinitions()`** (loop). The stale-triggered refresh is fire-and-forget and clears `stale` before awaiting. A `markStale()` during a flight stays set, so the tab refreshes only when `stale && !inFlight`.
+- **Build LifecycleOps once.** `buildLifecycleOps` registers the controller rerender (`setRerender`); a second build would replace it.
 - **Commands text field:** patch `cache.records`, don't `update()`. Focus is preserved for control rows only; a `render` row is rebuilt.
 - **List `extraButtons`/`addItem` are wired once.** Their callbacks must read current state at click time (ops via closure over the cache, not a snapshot).
 - **Keep page and row names stable and unique among siblings.** The 1.13.1 typings have no `id`, so the runtime keys the diff (and openPagePath) by control key → name → index (deviation D-1). Never put changing text such as counts into a name; use `displayValue`.

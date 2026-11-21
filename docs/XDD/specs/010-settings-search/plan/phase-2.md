@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: Scripts and Commands pages"
-status: pending
+status: completed
 version: "1.0"
 phase: 2
 ---
@@ -12,7 +12,7 @@ phase: 2
 **GATE**: Read all referenced files before starting this phase.
 
 **Specification References**:
-- `[ref: SDD/Implementation Examples/Scripts cache refresh (single flight + coalescing + generation)]`
+- `[ref: SDD/Implementation Examples/Scripts cache refresh (single flight + coalescing)]`
 - `[ref: SDD/Complex Logic]`: Build Scripts page algorithm
 - `[ref: SDD/Interface Specifications/Internal API Changes]`: scriptsCache, scriptsPage, commandsPage
 - `[ref: SDD/Error Handling]`
@@ -33,14 +33,14 @@ phase: 2
 
 Enables the two dynamic sub-pages: async script state that refreshes safely, script rows with every state-dependent control, and command rows.
 
-- [ ] **T2.1 Async script state: scriptsCache** `[activity: domain-modeling]` `[parallel: true]`
+- [x] **T2.1 Async script state: scriptsCache** `[activity: domain-modeling]` `[parallel: true]`
 
-  1. Prime: `[ref: SDD/Implementation Examples/Scripts cache refresh (single flight + coalescing + generation)]`; today's I/O in src/ui/settingsTab.ts L313-331, L340-362 (offline `evaluateState` fallback), L472-484
+  1. Prime: `[ref: SDD/Implementation Examples/Scripts cache refresh (single flight + coalescing)]`; today's I/O in src/ui/settingsTab.ts L313-331, L340-362 (offline `evaluateState` fallback), L472-484
   2. Test (with fake store and resolver using deferred promises):
      - before the first refresh, `items` is `null`;
      - a refresh calls `clearCache → getScripts → resolveItems` and applies items, records and `updatableCount`, calls `setUpdatableCount` and `onChange` once;
      - two `requestRefresh()` during an in-flight refresh produce exactly one follow-up pass (two `onChange` calls total, last state wins);
-     - an older generation never overwrites a newer one;
+     - ~~an older generation never overwrites a newer one~~ (deviation D-3: no generation guard; single flight makes it unreachable);
      - never more than one refresh in flight;
      - with no resolver, the offline fallback states are used;
      - a throwing store or resolver keeps the last good state and still clears `inFlight`;
@@ -53,7 +53,7 @@ Enables the two dynamic sub-pages: async script state that refreshes safely, scr
      - [ ] SDD criterion on coalescing refresh `[ref: SDD/Acceptance Criteria/Scripts page]`
      - [ ] Offline edge case `[ref: PRD/Detailed Feature Specifications/Edge Cases]`
 
-- [ ] **T2.2 LifecycleOps builder: scriptLifecycleOps** `[activity: refactoring]` `[parallel: true]`
+- [x] **T2.2 LifecycleOps builder: scriptLifecycleOps** `[activity: refactoring]` `[parallel: true]`
 
   1. Prime: src/ui/settingsTab.ts L377-448 (controller-backed ops, store-only fallback, BrowseOfficialModal wiring, "catalog not available" Notice) `[ref: SDD/Building Block View/Components]`
   2. Test: Port the existing controller-delegation and fallback tests (settingsTab.test.ts ~L932-1005 and fallback behaviour):
@@ -65,7 +65,7 @@ Enables the two dynamic sub-pages: async script state that refreshes safely, scr
   4. Validate: Old settings tab tests still green; new tests pass; lint and types clean.
   5. Success: Every script action behaves as today `[ref: PRD/F4.2]` `[ref: PRD/F4.3]`; fallback error handling `[ref: SDD/Error Handling]`
 
-- [ ] **T2.3 Scripts page: scriptsPage** `[activity: frontend-ui]`
+- [x] **T2.3 Scripts page: scriptsPage** `[activity: frontend-ui]`
 
   Depends on T2.1, T2.2, T1.1.
 
@@ -97,7 +97,7 @@ Enables the two dynamic sub-pages: async script state that refreshes safely, scr
      - [ ] "catalog" / "official scripts" aliases `[ref: PRD/F8.1]`
      - [ ] Rule 6 literal text `[ref: PRD/Detailed Feature Specifications/Business Rules]`
 
-- [ ] **T2.4 Commands page: commandsPage** `[activity: frontend-ui]` `[parallel: true]`
+- [x] **T2.4 Commands page: commandsPage** `[activity: frontend-ui]` `[parallel: true]`
 
   Depends on T2.1, T1.1. Can run alongside T2.3.
 
@@ -116,7 +116,26 @@ Enables the two dynamic sub-pages: async script state that refreshes safely, scr
   4. Validate: New and old commands tests pass; lint and types clean.
   5. Success: PRD Feature 5 criteria `[ref: PRD/F5.1]` `[ref: PRD/F5.2]` `[ref: PRD/F5.3]` `[ref: PRD/F5.4]` `[ref: PRD/F5.5]`; hotkey aliases `[ref: PRD/F8.1]`
 
-- [ ] **T2.5 Phase validation** `[activity: validate]`
+- [x] **T2.6 Row-name uniqueness and search/removal coverage** `[activity: frontend-ui]`
+
+  Added by the Phase 2 drift check (2026-11-21).
+
+  1. Prime: src/ui/scriptsPage.ts (duplicate display-name handling, "Name (id)"); src/ui/commandsPage.ts `commandRowName` (iterative suffix until free); PRD Feature 4 Business Rules 1, 5 and edge case "script removed while its row is visible" `[ref: PRD/Detailed Feature Specifications]`; deviation D-1 (sibling-unique names) `[ref: SDD/Implementation Gotchas]`
+  2. Test:
+     - row names on the Scripts page stay unique even when a script's display name already equals a generated "Name (id)" form (e.g. scripts "Twin"/id first, "Twin"/id second, and a third whose display name is "Twin (first)");
+     - searching a word that appears only in a script's description finds its row (Rule 5);
+     - after a refresh that drops a script, its row is gone from the Scripts page and the Commands page (edge case).
+  3. Implement: make the Scripts page disambiguation loop until the name is free of all sibling names (same idea as `commandRowName`; share a helper if it stays simple). Keep unique display names untouched.
+  4. Validate: tests pass; tsc and lint clean.
+  5. Success: Rule 1 and D-1 hold under all collisions `[ref: PRD/Detailed Feature Specifications/Business Rules]`; Rule 5 description search `[ref: PRD/Detailed Feature Specifications/Business Rules]`; removed-row edge case `[ref: PRD/Detailed Feature Specifications/Edge Cases]`
+
+- [x] **T2.5 Phase validation** `[activity: validate]`
+
+  Adopted from the T2.1 code-quality review (test-first): `ScriptsCache._apply` must call `onChange` even if `setUpdatableCount` throws (state is already applied, so the page must still redraw); add tests for a throwing `setUpdatableCount` and a throwing `onChange`; document on the `stale` getter that a mark during a flight stays set (T3.1 treats `stale && !inFlight` as "needs refresh"), and on `refresh()` that awaiting it does not wait for a coalesced follow-up pass; drop the needless `async` on `_resolve`.
+
+  Adopted from the T2.4 code-quality review: in test/ui/commandsPage.test.ts drop the `onChange` stub in "never calls the tab's update()" (it can never fail; keep the update spy as a guard); in src/ui/commandsPage.ts either collapse `CommandRecordsCache` into `CommandPageCache` or add a one-line comment that the row narrows the cache on purpose.
+
+  Adopted from the T2.3 code-quality review: the toggle tooltip uses the row name (the "Name (id)" form when display names collide), so same-name scripts get distinct accessible labels.
 
   Run `npx tsc -noEmit -skipLibCheck && npm run lint && npm test`. Confirm:
   - every helper exists once (no copies between scriptsTab.ts and scriptsPage.ts, or between commandsTab.ts and commandsPage.ts);

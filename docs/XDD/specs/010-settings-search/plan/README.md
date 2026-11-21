@@ -78,6 +78,7 @@ When implementation requires changes from the specification:
 Recorded deviations:
 - **D-1 (2026-11-21, approved):** no `id` on pages or rows. The Obsidian 1.13.1 typings declare none, and the 1.15.1 runtime falls back to `id ?? name`. Pages and rows are keyed by stable names; the splash deep link uses `openPagePath(pluginId, ["Scripts"])`. SDD and phases 2-3 updated. Found by T1.1.
 - **D-2 (2026-11-21, approved via drift resolution):** T1.4 switched the old settings tab to read its strings from `settingsDefinitions.ts`, although T1.4 step 4 said "not yet switched". The same step demanded no duplicated strings, so single-source won. Behaviour unchanged (old tab tests green).
+- **D-3 (2026-11-21, approved):** `ScriptsCache` has no generation guard. `refresh()` is single-flight and the counter was bumped after the in-flight check, so the guard could never fire; single flight plus one pending follow-up pass already guarantees last state wins. Found in T2.1. SDD example, interface, data model, ADR-6 and plan updated.
 
 ## Metadata Reference
 
@@ -123,7 +124,7 @@ Reference conventions in this plan:
 
 - **ADR-1**: minAppVersion 1.13.1, because page `displayValue`/`status` are `@since 1.13.1`. `versions.json` history stays untouched.
 - **ADR-5**: override `getControlValue`/`setControlValue` and always persist via `plugin.saveSettings()`. The base implementation's `saveData(plugin.settings)` would erase the `scripts` namespace in `data.json`.
-- **ADR-6**: `ScriptsCache` (single flight, coalescing, generation check) feeds `update()`. `getSettingDefinitions()` stays synchronous and never returns `[]`.
+- **ADR-6**: `ScriptsCache` (single flight, coalescing; no generation check, D-3) feeds `update()`. `getSettingDefinitions()` stays synchronous and never returns `[]`.
 - **ADR-2/3/7**: main page = 4 bare General controls, Scripts and Commands pages, Format selection umbrella group (intro), then Cleanup / Lists / Headings / Footnotes groups, then Advanced ending with a Documentation row. Scripts actions get header icons plus searchable action rows.
 - **ADR-8**: pure builders; tests assert on the returned definition tree; `render` rows are tested via `render(mockSetting, mockGroup)`.
 
@@ -157,7 +158,7 @@ Each phase is defined in a separate file. Tasks follow red-green-refactor: **Pri
 > **Tracking Principle**: Track logical units that produce verifiable outcomes. The TDD cycle is the method, not separate tracked items.
 
 - [x] [Phase 1: Foundations: test harness, storage adapter, fixed definitions](phase-1.md)
-- [ ] [Phase 2: Scripts and Commands pages](phase-2.md)
+- [x] [Phase 2: Scripts and Commands pages](phase-2.md)
 - [ ] [Phase 3: Tab swap and plugin wiring](phase-3.md)
 - [ ] [Phase 4: Release hygiene and end-to-end validation](phase-4.md)
 

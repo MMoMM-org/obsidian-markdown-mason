@@ -49,6 +49,12 @@ Swaps the segmented tab for the declarative one, wires it into the plugin lifecy
      - delete `display`, `Segment`/`SEGMENTS`, all `_render*`, `_selectSegment`, `_rendering`, the badge, `selectScriptsSegment`;
      - delete `src/ui/HeaderSection.ts`; delete the old renderers in scriptsTab.ts and commandsTab.ts, then rename them to their page modules (git mv, so history follows);
      - update xss.test.ts XSS-2 to render hostile data through `configureScriptRow` (the static sink scan is unchanged).
+     - reword the Commands empty-state text from "in the Scripts tab" to "on the Scripts page" (PRD F5 wording; flagged in T2.4, deferred until the old tab is gone).
+     - rename leftover "tab" names in the page modules (e.g. `CommandsTabCommandManager` in commandsPage.ts) once commandsTab.ts is deleted (T2.4 review).
+     - reword the comments moved verbatim into scriptsPage.ts that still mention renderScriptsTab, settingsTab P5 markers and "Minimal" menu (T2.3 review).
+     - when deleting the old renderers, confirm the leftovers they still carry are gone with them: scriptsTab.ts's own `openMenu` (showAtMouseEvent) and its copies of the "No scripts yet…", "Import from vault" and "Browse official" strings (T2.5 check 1).
+     - ScriptsCache logs a throwing `setUpdatableCount`/`onChange` and refresh failures via `debug()`, which is silent unless debug logging is on; per src/core/debug.ts genuine errors use console.warn — switch those catches to console.warn (T2.5 review).
+     - strengthen two T2.6 tests (T2.6 review): pin `names[0]` ("Twin (first) (first)") in the collision test, and assert the search hits before removal in both removal tests.
   4. Validate:
      - `npx tsc -noEmit -skipLibCheck && npm run lint && npm test` green;
      - no references to `selectScriptsSegment`/`HeaderSection`/`renderScriptsTab` remain (`rg`);
