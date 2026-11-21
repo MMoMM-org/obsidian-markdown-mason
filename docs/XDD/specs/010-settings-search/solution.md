@@ -777,39 +777,39 @@ N/A: single plugin process.
 ## Acceptance Criteria
 
 **Fixed settings and search (PRD Features 1, 8)**
-- [ ] THE SYSTEM SHALL return, from `getSettingDefinitions()`, exactly 18 control definitions whose `name`/`desc` match today's strings verbatim.
-- [ ] THE SYSTEM SHALL attach these aliases: OCR and TextSniper to reflow; footnotes to Resolve footnote identity (T1.6, its wording is singular); paste and paste and format to the Format selection intro; console and debug to Debug logging; hotkey and command palette to the Commands page's always-present intro row (today's hint "Name the command, toggle to create it, then bind keys in core hotkeys.", which no longer repeats on every row); catalog, official scripts and import to the Scripts action rows. No alias appears on more than one target. A script row's own id alias is user data and is exempt (T3.5).
-- [ ] THE SYSTEM SHALL never return an empty definitions array.
+- [x] THE SYSTEM SHALL return, from `getSettingDefinitions()`, exactly 18 control definitions whose `name`/`desc` match today's strings verbatim.
+- [x] THE SYSTEM SHALL attach these aliases: OCR and TextSniper to reflow; footnotes to Resolve footnote identity (T1.6, its wording is singular); paste and paste and format to the Format selection intro; console and debug to Debug logging; hotkey and command palette to the Commands page's always-present intro row (today's hint "Name the command, toggle to create it, then bind keys in core hotkeys.", which no longer repeats on every row); catalog, official scripts and import to the Scripts action rows. No alias appears on more than one target. A script row's own id alias is user data and is exempt (T3.5).
+- [x] THE SYSTEM SHALL never return an empty definitions array.
 
 **Layout (PRD Feature 2)**
-- [ ] THE SYSTEM SHALL order main-page items as: 4 bare General controls, Scripts page, Commands page, Format selection group (intro), Cleanup, Lists, Headings, Footnotes, Advanced.
-- [ ] THE SYSTEM SHALL keep the "Format selection only" suffix on exactly the cascade, fromCitations, identity and move toggles.
+- [x] THE SYSTEM SHALL order main-page items as: 4 bare General controls, Scripts page, Commands page, Format selection group (intro), Cleanup, Lists, Headings, Footnotes, Advanced.
+- [x] THE SYSTEM SHALL keep the "Format selection only" suffix on exactly the cascade, fromCitations, identity and move toggles.
 
 **Behaviour parity (PRD Feature 3)**
-- [ ] WHEN `getControlValue(key)` is called for a missing key, THE SYSTEM SHALL return the value from `DEFAULT_SETTINGS` / `resolveFormatSelectionRecipe`.
-- [ ] WHEN `setControlValue(key, value)` is called, THE SYSTEM SHALL update the in-memory settings and persist via `saveSettings()`; IF key is `debugLogging`, THEN THE SYSTEM SHALL call `setDebugLogging(value)` before persisting.
-- [ ] IF the key is not a FixedKey, THEN THE SYSTEM SHALL neither mutate nor persist anything.
-- [ ] WHEN a 0.9.4 `data.json` is loaded, THE SYSTEM SHALL report every stored value unchanged and keep the `scripts` namespace after any write.
+- [x] WHEN `getControlValue(key)` is called for a missing key, THE SYSTEM SHALL return the value from `DEFAULT_SETTINGS` / `resolveFormatSelectionRecipe`.
+- [x] WHEN `setControlValue(key, value)` is called, THE SYSTEM SHALL update the in-memory settings and persist via `saveSettings()`; IF key is `debugLogging`, THEN THE SYSTEM SHALL call `setDebugLogging(value)` before persisting.
+- [x] IF the key is not a FixedKey, THEN THE SYSTEM SHALL neither mutate nor persist anything.
+- [x] WHEN a 0.9.4 `data.json` is loaded, THE SYSTEM SHALL report every stored value unchanged and keep the `scripts` namespace after any write.
 
 **Scripts page (PRD Feature 4)**
-- [ ] THE SYSTEM SHALL render one list row per script, in store order, keyed by a name unique among siblings (its display name, or "Name (id)" when display names collide), showing provenance, pill, version, toggle (only for states where `showsToggle` is true) and the ⋯ menu with `menuActions(state)`.
-- [ ] WHEN a lifecycle op calls `rerender`, THE SYSTEM SHALL refresh the cache and call `update()` once per settled state; WHILE a refresh is in flight, THE SYSTEM SHALL coalesce further requests into one follow-up pass.
-- [ ] IF a script is Blocked, THEN THE SYSTEM SHALL show `blockedReasonText` and the `blockedRecovery` button.
-- [ ] WHILE the cache is unloaded, THE SYSTEM SHALL show the "Loading scripts…" empty state; WHEN loaded with 0 scripts, THE SYSTEM SHALL show today's empty-state text.
+- [x] THE SYSTEM SHALL render one list row per script, in store order, keyed by a name unique among siblings (its display name, or "Name (id)" when display names collide), showing provenance, pill, version, toggle (only for states where `showsToggle` is true) and the ⋯ menu with `menuActions(state)`.
+- [x] WHEN a lifecycle op calls `rerender`, THE SYSTEM SHALL refresh the cache and call `update()` once per settled state; WHILE a refresh is in flight, THE SYSTEM SHALL coalesce further requests into one follow-up pass.
+- [x] IF a script is Blocked, THEN THE SYSTEM SHALL show `blockedReasonText` and the `blockedRecovery` button.
+- [x] WHILE the cache is unloaded, THE SYSTEM SHALL show the "Loading scripts…" empty state; WHEN loaded with 0 scripts, THE SYSTEM SHALL show today's empty-state text.
 
 **Commands page (PRD Feature 5)**
-- [ ] THE SYSTEM SHALL start the Commands page with an intro row named "Script commands" (hint text, aliases hotkey and command palette) that is present even with no enabled scripts, and WHILE the cache is unloaded, THE SYSTEM SHALL show a "Loading scripts…" row after it.
-- [ ] THE SYSTEM SHALL render one row per script with `enabled === true`, otherwise the empty-state message; toggle and rename behave as `commandsTab.ts` today, and edits SHALL NOT trigger `update()`.
+- [x] THE SYSTEM SHALL start the Commands page with an intro row named "Script commands" (hint text, aliases hotkey and command palette) that is present even with no enabled scripts, and WHILE the cache is unloaded, THE SYSTEM SHALL show a "Loading scripts…" row after it.
+- [x] THE SYSTEM SHALL render one row per script with `enabled === true`, otherwise the empty-state message; toggle and rename behave as `commandsTab.ts` today, and edits SHALL NOT trigger `update()`.
 
 **Indicator and deep link (PRD Feature 6)**
-- [ ] WHILE `updatableCount > 0`, THE SYSTEM SHALL set the Scripts page `status` to `"warning"` and `displayValue` to "N update(s) available"; otherwise neither.
-- [ ] WHEN the splash requests Scripts, THE SYSTEM SHALL call `openPagePath(manifest.id, ["Scripts"])` if available, else `openTabById(manifest.id)`.
+- [x] WHILE `updatableCount > 0`, THE SYSTEM SHALL set the Scripts page `status` to `"warning"` and `displayValue` to "N update(s) available"; otherwise neither.
+- [x] WHEN the splash requests Scripts, THE SYSTEM SHALL call `openPagePath(manifest.id, ["Scripts"])` if available, else `openTabById(manifest.id)`.
 
 **Version and tooling (PRD Features 7, 10)**
 - [ ] THE SYSTEM SHALL declare `minAppVersion` 1.13.1, keep existing `versions.json` entries, and pass lint with `obsidianmd/prefer-setting-definitions` enabled.
 
 **Identity (PRD Feature 9)**
-- [ ] THE SYSTEM SHALL end the Advanced group with a "Documentation" action row whose desc contains the manifest version, and which opens REPO_URL.
+- [x] THE SYSTEM SHALL end the Advanced group with a "Documentation" action row whose desc contains the manifest version, and which opens REPO_URL.
 
 ## Risks and Technical Debt
 

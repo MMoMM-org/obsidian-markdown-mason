@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Tab swap and plugin wiring"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 3
 ---
@@ -95,7 +95,7 @@ Swaps the segmented tab for the declarative one, wires it into the plugin lifecy
   4. Validate: Static test passes; full suite green.
   5. Success: No dead CSS for removed UI `[ref: SDD/Implementation Gotchas]`; rows keep readable status styling `[ref: PRD/Detailed Feature Specifications/Business Rules]`
 
-- [ ] **T3.5 Phase 3 gap fixes** `[activity: frontend-ui]`
+- [x] **T3.5 Phase 3 gap fixes** `[activity: frontend-ui]`
 
   Added by the Phase 3 checkpoint (2026-11-21): T3.4 validation and the T3.2/T3.3 code reviews.
 
@@ -110,7 +110,7 @@ Swaps the segmented tab for the declarative one, wires it into the plugin lifecy
   4. Validate: `npx tsc -noEmit -skipLibCheck && npm run lint && npm test` green.
   5. Success: no alias on two targets across the whole tree `[ref: SDD/Acceptance Criteria]`; one copy of the Active-or-no-op rule `[ref: SDD/Components]`
 
-- [ ] **T3.4 Phase validation** `[activity: validate]`
+- [x] **T3.4 Phase validation** `[activity: validate]`
 
   Run `npx tsc -noEmit -skipLibCheck && npm run lint && npm test`. Then:
   - walk the SDD responsibility table and confirm each component's file exists with exactly that responsibility;
