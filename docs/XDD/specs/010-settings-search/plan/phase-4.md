@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: Release hygiene and end-to-end validation"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 4
 ---
@@ -41,7 +41,9 @@ Makes the release correct and honest (version floor, lint, docs) and proves the 
   4. Validate: `npm run check:manifest`, compliance and full suite pass.
   5. Success: Listing states the new minimum `[ref: PRD/F7.1]`; users below 1.13.1 keep 0.9.4 `[ref: PRD/F7.2]`
 
-- [ ] **T4.2 Lint rule and stale comments** `[activity: build-config]` `[parallel: true]`
+- [x] **T4.2 Lint rule and stale comments** `[activity: build-config]` `[parallel: true]`
+
+  Done in fd2780c. Follow-up T4.2a (5fc8195, user decision 2026-11-21): the three settings-tab rules are errors in eslint.config.mjs so CI blocks a regression; pinned by test/lint/settingsTabRules.test.ts.
 
   1. Prime: eslint.config.mjs L42-44; stale comments at src/ui/settingsTab.ts (removed in T3.1, so verify), src/core/types.ts (~L52 "eleven"), src/core/formatSelection.ts (~L5), src/commands.ts (~L340 "Catalyst beta" / "force minAppVersion past stable") `[ref: PRD/F10.2]` `[ref: PRD/F10.3]`
   2. Test: Lint itself is the test: with the `prefer-setting-definitions` override removed, `npm run lint` passes, and `no-deprecated-display` / `prefer-update-over-display` report nothing.
@@ -52,7 +54,9 @@ Makes the release correct and honest (version floor, lint, docs) and proves the 
   4. Validate: Lint, types and tests green; `rg -i "eleven toggles|four-segment|run-script launcher|not yet generally available"` returns nothing in src/ and the config.
   5. Success: Lint enforces the declarative API `[ref: PRD/F10.3]`; comments match the code `[ref: PRD/F10.2]`
 
-- [ ] **T4.3 User documentation** `[activity: documentation]` `[parallel: true]`
+- [x] **T4.3 User documentation** `[activity: documentation]` `[parallel: true]`
+
+  Done in ada8c04 + 66f22b9 (review fix: all 18 built-in commands listed, no stated count, leftover tab wording). Follow-up T4.3a (a025070, 21d3e26): stale settings-tab and step-count comments in src, guarded by test/lint/staleComments.test.ts. Screenshots in assets/settings-*.png still show the old UI: retake during T4.4.
 
   1. Prime: README.md (L23/L49 version, step counts), docs/configuration.md (five segments, twelve toggles), docs/installation.md (L8, L43) `[ref: PRD/F10.1]`
   2. Test: A doc check (rg-based, in the validation step):
