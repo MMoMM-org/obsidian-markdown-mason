@@ -258,6 +258,25 @@ describe("buildCommandsPage — rows", () => {
 		expect(rows.slice(1).map(row => row.name)).toEqual(["my-script"]);
 	});
 
+	it("a refresh that drops a script removes its row from Commands", async () => {
+		const persisted: Record<string, ScriptRecord> = {
+			"keep-script": makeRecord(),
+			"gone-script": makeRecord(),
+		};
+		const cache = makeUnloadedCache(persisted);
+		const { deps } = makePage({});
+
+		await cache.refresh();
+		const before = buildCommandsPage(cache, deps);
+		expect(rowsOf(before).slice(1).map(row => row.name)).toEqual(["keep-script", "gone-script"]);
+
+		delete persisted["gone-script"];
+		await cache.refresh();
+		const after = buildCommandsPage(cache, deps);
+		expect(rowsOf(after).slice(1).map(row => row.name)).toEqual(["keep-script"]);
+		expect(search([after], "gone-script")).toEqual([]);
+	});
+
 	it("leaves the empty-state row out once a script is enabled", () => {
 		const { page } = makePage({ "my-script": makeRecord() });
 		expect(rowsOf(page).map(row => row.name)).not.toContain("No enabled scripts");

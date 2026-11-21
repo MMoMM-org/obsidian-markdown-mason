@@ -27,6 +27,7 @@ import { search, walk } from "./helpers/definitionTree";
 import type { ScriptRecord } from "../../src/scripts/store";
 import type { LifecycleState } from "../../src/scripts/lifecycle";
 import type { ScriptItem, LifecycleOps, ScriptsPageState } from "../../src/ui/scriptsPage";
+import { ScriptsCache } from "../../src/ui/scriptsCache";
 
 const { SCRIPTS_PAGE_NAME, buildScriptsPage, configureScriptRow } = await import("../../src/ui/scriptsPage");
 
@@ -247,6 +248,19 @@ describe("Scripts page — list", () => {
 		expect(names).toEqual(["Twin (first)", "Twin (second)", "Other"]);
 	});
 
+	it("keeps row names unique when a display name equals a generated Name (id)", () => {
+		const items = [
+			makeItem({ id: "first", displayName: "Twin" }),
+			makeItem({ id: "second", displayName: "Twin" }),
+			makeItem({ id: "third", displayName: "Twin (first)" }),
+		];
+		const names = rowsOf(listOf(buildScriptsPage(makeCache(items), makeOps()))).map((row) => row.name);
+		expect(new Set(names).size).toBe(names.length);
+		// A display name no other script carries is listed as it is.
+		expect(names[2]).toBe("Twin (first)");
+		expect(names[1]).toBe("Twin (second)");
+	});
+
 	it("a row's render configures the setting for its script", async () => {
 		const ops = makeOps();
 		const item = makeItem({ id: "x", state: { kind: "Active" } });
@@ -356,6 +370,39 @@ describe("Scripts page — action rows and search", () => {
 			makeOps(),
 		);
 		expect(search([page], "zq-reflow")).toEqual(["Slide text"]);
+	});
+
+	it("searching a description word finds the script's row", () => {
+		const items = [
+			makeItem({ id: "zq-reflow", displayName: "Slide text", description: "Joins hardwrapped lines." }),
+			makeItem({ id: "other", displayName: "Table tidy", description: "Tidies tables." }),
+		];
+		const page = buildScriptsPage(makeCache(items), makeOps());
+		expect(search([page], "hardwrapped")).toEqual(["Slide text"]);
+	});
+
+	it("a refresh that drops a script removes its row from Scripts", async () => {
+		const persisted: Record<string, ScriptRecord> = {
+			"keep-script": makeRecord(),
+			"gone-script": makeRecord({ description: "Soon removed." }),
+		};
+		const cache = new ScriptsCache({
+			store: { getScripts: async () => ({ ...persisted }) },
+			setUpdatableCount: () => undefined,
+		});
+		const ops = makeOps();
+
+		await cache.refresh();
+		const before = buildScriptsPage(cache, ops);
+		expect(rowsOf(listOf(before)).map((row) => row.name)).toEqual(["keep-script", "gone-script"]);
+		expect(search([before], "gone-script")).toEqual(["gone-script"]);
+
+		delete persisted["gone-script"];
+		await cache.refresh();
+		const after = buildScriptsPage(cache, ops);
+		expect(rowsOf(listOf(after)).map((row) => row.name)).toEqual(["keep-script"]);
+		expect(search([after], "gone-script")).toEqual([]);
+		expect(search([after], "removed")).toEqual([]);
 	});
 
 	it("'catalog' and 'official scripts' find Browse official; 'import' finds Import from vault", () => {

@@ -135,10 +135,9 @@ function buildScriptList(items: ScriptItem[] | null, ops: LifecycleOps): Setting
 }
 
 function buildScriptRows(items: ScriptItem[], ops: LifecycleOps): SettingDefinitionRender[] {
-	const sharedNames = sharedDisplayNames(items);
+	const rowNameOf = scriptRowNamer(items);
 	return items.map((item) => {
-		// The name is the row's key, so two scripts must never share one.
-		const rowName = sharedNames.has(item.displayName) ? `${item.displayName} (${item.id})` : item.displayName;
+		const rowName = rowNameOf(item);
 		return {
 			name: rowName,
 			desc: item.description,
@@ -146,6 +145,29 @@ function buildScriptRows(items: ScriptItem[], ops: LifecycleOps): SettingDefinit
 			render: (setting: Setting) => configureScriptRow(setting, item, ops, rowName),
 		};
 	});
+}
+
+/**
+ * Returns the function that names the row of each of `items`; call it once per
+ * item. The name is the row's key, so two scripts must never share one.
+ *
+ * A display name only one script carries is used as it is. Scripts that share
+ * a display name get " (id)" appended, repeated until the name is free of every
+ * other row name.
+ */
+function scriptRowNamer(items: ScriptItem[]): (item: ScriptItem) => string {
+	const sharedNames = sharedDisplayNames(items);
+	const taken = new Set(items.map((item) => item.displayName));
+	return (item) => {
+		if (!sharedNames.has(item.displayName)) return item.displayName;
+		const suffix = ` (${item.id})`;
+		let name = item.displayName + suffix;
+		while (taken.has(name)) {
+			name += suffix;
+		}
+		taken.add(name);
+		return name;
+	};
 }
 
 /** The display names that more than one script carries. */
