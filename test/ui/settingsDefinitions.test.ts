@@ -28,7 +28,7 @@ import {
 } from "../../src/ui/settingsDefinitions";
 import { FIXED_KEYS, type FixedKey } from "../../src/ui/settingsControlStore";
 import { buildDocumentationRow } from "../../src/ui/pluginIdentity";
-import { controls, walk, type DefinitionNode } from "./helpers/definitionTree";
+import { controls, search, walk, type DefinitionNode } from "./helpers/definitionTree";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -401,6 +401,92 @@ describe("buildMainPageItems — search aliases", () => {
 			}
 		}
 		expect(targetByAlias.size).toBeGreaterThan(0);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Search reach and noise (PRD F1.2, F8.1, F8.2) — spec 010 T1.6
+// ---------------------------------------------------------------------------
+
+/** The four steps whose desc ends with the "Format selection only" suffix, which names "Paste and format". */
+const FORMAT_SELECTION_ONLY_ROWS = [
+	"Cascade headings",
+	"Convert citations to footnotes",
+	"Resolve footnote identity",
+	"Move footnotes to resources",
+];
+
+/**
+ * Every search word of the fixed settings with the exact rows it lists, in
+ * render order. A row beyond the word's target is a known, related overlap;
+ * a text change that adds or drops a match fails here and has to be judged.
+ *
+ * "hotkey" / "command palette" and "catalog" / "official scripts" target the
+ * Commands and Scripts pages and are pinned with those pages (T2.4, T2.3).
+ */
+const PINNED_SEARCH_RESULTS: Record<string, string[]> = {
+	// PRD F8.1 words
+	"OCR": ["Reflow wrapped text", "Dehyphenate words"],
+	"TextSniper": ["Reflow wrapped text"],
+	"paste": ["Fit paste to list context", "Which steps run", ...FORMAT_SELECTION_ONLY_ROWS],
+	"footnotes": [
+		"Resources section heading",
+		"Numeric-only footnotes",
+		"Convert citations to footnotes",
+		"Move footnotes to resources",
+	],
+	"console": ["Debug logging"],
+	"debug": ["Debug logging"],
+	// PRD F1.2 description word
+	"ligature": ["Decompose ligatures and punctuation"],
+	// Remaining aliases of the fixed tree
+	"paste and format": ["Which steps run", ...FORMAT_SELECTION_ONLY_ROWS],
+	"help": ["Documentation"],
+	"version": ["Show update notes", "Documentation"],
+};
+
+describe("buildMainPageItems — search reach and noise", () => {
+	function results(term: string): string[] {
+		return search(buildTree(), term);
+	}
+
+	it.each(Object.entries(PINNED_SEARCH_RESULTS))('"%s" lists exactly its pinned rows', (term, expected) => {
+		expect(results(term)).toEqual(expected);
+	});
+
+	it("pins every alias of the fixed tree, so a new search word cannot go unjudged", () => {
+		const pinned = Object.keys(PINNED_SEARCH_RESULTS).map((term) => term.toLowerCase());
+		const aliases = flatTree().flatMap((entry) => entry.aliases ?? []);
+		expect(aliases.length).toBeGreaterThan(0);
+		for (const alias of aliases) {
+			expect(pinned, `alias "${alias}" has no pinned result`).toContain(alias.toLowerCase());
+		}
+	});
+
+	it("reaches a setting through a word that only its description carries (F1.2)", () => {
+		const withoutAliases = FIXED_SETTINGS.map(({ name, desc }) => ({ name, desc }));
+		expect(search(withoutAliases, "ligature")).toEqual(["Decompose ligatures and punctuation"]);
+		expect(search(withoutAliases, "OCR")).toContain("Reflow wrapped text");
+	});
+
+	it('keeps the "OCR" overlap to Dehyphenate words, which removes OCR artifacts', () => {
+		const overlap = results("OCR").filter((name) => name !== "Reflow wrapped text");
+		expect(overlap).toEqual(["Dehyphenate words"]);
+		expect(flatTree().find((entry) => entry.name === "Dehyphenate words")?.desc).toContain("OCR and PDF artifacts");
+	});
+
+	it('keeps the "paste" overlap to the four "Format selection" only steps, matched through their suffix', () => {
+		const targets = ["Fit paste to list context", "Which steps run"];
+		const overlap = results("paste").filter((name) => !targets.includes(name));
+		expect(overlap).toEqual(FORMAT_SELECTION_ONLY_ROWS);
+		for (const name of overlap) {
+			const desc = flatTree().find((entry) => entry.name === name)?.desc ?? "";
+			expect(desc.endsWith(SUFFIX), `"${name}" matches through the suffix`).toBe(true);
+			expect(desc.slice(0, -SUFFIX.length).toLowerCase(), `"${name}" matches only through the suffix`).not.toContain(
+				"paste",
+			);
+			expect(name.toLowerCase()).not.toContain("paste");
+		}
 	});
 });
 

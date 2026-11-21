@@ -11,6 +11,7 @@
  *      tooltip builders that render rows use.
  *   3. A SettingGroup stub is constructible (second argument of a render callback).
  *   4. walk() flattens a definition tree in render order.
+ *   5. search() approximates Obsidian's settings search over a definition tree.
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
@@ -24,7 +25,7 @@ import {
 	capturedSettings,
 	clearCapturedSettings,
 } from "../__mocks__/obsidian";
-import { controls, walk } from "./helpers/definitionTree";
+import { controls, search, walk } from "./helpers/definitionTree";
 
 const noop = (): void => {};
 
@@ -355,5 +356,87 @@ describe("walk()", () => {
 			"numericOnly",
 			"debugLogging",
 		]);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// search()
+// ---------------------------------------------------------------------------
+
+function searchTree(): SettingDefinitionItem[] {
+	return [
+		{ name: "Reflow wrapped text", desc: "Rebuild hard-wrapped captures.", aliases: ["OCR", "TextSniper"] },
+		{ name: "Dehyphenate words", desc: "Remove end-of-line hyphens (OCR artifacts)." },
+		{
+			type: "group",
+			heading: "Reflow options",
+			items: [{ name: "Grouped row", desc: "Lives in a group that mentions reflow only in its heading." }],
+		},
+		{
+			type: "page",
+			name: "Scripts",
+			desc: "Manage hyphens and more.",
+			items: [
+				{
+					type: "list",
+					heading: "Installed",
+					items: [{ name: "Alpha", desc: "Fixes hyphens.", render: noop }],
+				},
+			],
+		},
+		{ name: "Hidden row", desc: "Hyphens, but not visible.", visible: false },
+		{ name: "Unsearchable row", desc: "Hyphens, but not searchable.", searchable: () => false },
+	];
+}
+
+describe("search()", () => {
+	it("returns nothing for an empty tree or a term that matches no row", () => {
+		expect(search([], "reflow")).toEqual([]);
+		expect(search(searchTree(), "ligature")).toEqual([]);
+	});
+
+	it("matches a term in the name", () => {
+		expect(search(searchTree(), "Dehyphenate")).toEqual(["Dehyphenate words"]);
+	});
+
+	it("matches a term in the description", () => {
+		expect(search(searchTree(), "captures")).toEqual(["Reflow wrapped text"]);
+	});
+
+	it("matches a term in an alias", () => {
+		expect(search(searchTree(), "TextSniper")).toEqual(["Reflow wrapped text"]);
+	});
+
+	it("matches a fragment description by its text content", () => {
+		const fragment = { textContent: "See the documentation." } as DocumentFragment;
+		expect(search([{ name: "Help", desc: fragment, action: noop }], "documentation")).toEqual(["Help"]);
+	});
+
+	it("ignores case in both the term and the text", () => {
+		expect(search(searchTree(), "ocr")).toEqual(["Reflow wrapped text", "Dehyphenate words"]);
+		expect(search(searchTree(), "TEXTSNIPER")).toEqual(["Reflow wrapped text"]);
+	});
+
+	it("reports a row once, in render order, however many of its fields match", () => {
+		expect(search(searchTree(), "re")).toEqual(["Reflow wrapped text", "Dehyphenate words", "Grouped row"]);
+	});
+
+	it("finds rows nested in a group, a page and a list", () => {
+		expect(search(searchTree(), "grouped")).toEqual(["Grouped row"]);
+		expect(search(searchTree(), "alpha")).toEqual(["Alpha"]);
+	});
+
+	it("matches a page by its name only, never by its description", () => {
+		expect(search(searchTree(), "scripts")).toEqual(["Scripts"]);
+		expect(search(searchTree(), "manage")).toEqual([]);
+	});
+
+	it("never matches a group or list heading", () => {
+		expect(search(searchTree(), "options")).toEqual([]);
+		expect(search(searchTree(), "installed")).toEqual([]);
+	});
+
+	it("leaves out rows that are hidden or not searchable", () => {
+		expect(search(searchTree(), "hyphens")).toEqual(["Dehyphenate words", "Alpha"]);
 	});
 });
