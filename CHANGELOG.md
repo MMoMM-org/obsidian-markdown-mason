@@ -1,3 +1,9 @@
+## [0.9.4](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.9.3...0.9.4) (2026-11-21)
+
+### Bug Fixes
+
+* **scripts:** drop dead FsScriptLoader so main.js no longer imports node:fs ([d41483f](https://github.com/MMoMM-org/obsidian-markdown-mason/commit/d41483ffc7a9dd0f4e37f17488750342e5ff1218))
+
 ## [0.9.3](https://github.com/MMoMM-org/obsidian-markdown-mason/compare/0.9.2...0.9.3) (2026-11-21)
 
 ### Bug Fixes
