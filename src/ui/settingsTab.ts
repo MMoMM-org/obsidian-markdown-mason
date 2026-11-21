@@ -1,8 +1,7 @@
 import { App, Plugin, PluginSettingTab, Setting } from "obsidian";
 import type { PluginManifest } from "obsidian";
 import type { MasonSettings } from "../core/types";
-import type { ScriptRecord, ScriptStore } from "../scripts/store";
-import { evaluateState } from "../scripts/lifecycle";
+import type { ScriptStore } from "../scripts/store";
 import { HeaderSection } from "./HeaderSection";
 import { renderScriptsTab } from "./scriptsTab";
 import type { ScriptItem, LifecycleOps } from "./scriptsTab";
@@ -11,6 +10,7 @@ import type { CommandsTabCommandManager, ScriptFnResolver, StateResolver } from 
 import type { LifecycleResolver } from "../scripts/lifecycleResolver";
 import type { LifecycleController } from "../scripts/lifecycleController";
 import { buildLifecycleOps } from "./scriptLifecycleOps";
+import { buildOfflineScriptItems } from "./scriptsCache";
 import { buildRequireFn, loadRunFnSafe, resolveScriptsDir } from "../scripts/loader";
 import { debug, setDebugLogging } from "../core/debug";
 import { resolveFormatSelectionRecipe } from "../core/formatSelection";
@@ -298,7 +298,7 @@ export class MasonSettingTab extends PluginSettingTab {
 	 * All async I/O lives here; the render path stays pure and unit-testable.
 	 *
 	 * T6.1: uses the live LifecycleResolver when wired (plugin.lifecycleResolver);
-	 * falls back to safe offline stubs (_buildScriptItemsFallback) when absent.
+	 * falls back to safe offline stubs (buildOfflineScriptItems) when absent.
 	 * renderScriptsTab itself remains synchronous.
 	 */
 	private async _renderScriptsSection(containerEl: HTMLElement): Promise<void> {
@@ -309,7 +309,7 @@ export class MasonSettingTab extends PluginSettingTab {
 			this._plugin.lifecycleResolver.clearCache();
 			items = await this._plugin.lifecycleResolver.resolveItems(scripts);
 		} else {
-			items = this._buildScriptItemsFallback(scripts);
+			items = buildOfflineScriptItems(scripts);
 		}
 		// Refresh the cached updatable count from the just-resolved items (zero extra
 		// fetch) and patch the segment badge in place — so an in-tab update op that
@@ -319,37 +319,6 @@ export class MasonSettingTab extends PluginSettingTab {
 		).length;
 		this._renderScriptsBadge();
 		renderScriptsTab(containerEl, items, this._buildLifecycleOps(containerEl));
-	}
-
-	/**
-	 * Offline fallback: resolve persisted records into ScriptItems with safe defaults.
-	 *
-	 * Used when the live resolver is not available (tests that don't wire it, or
-	 * when _initLifecycleResolver failed). evaluateState fails closed: online=false,
-	 * local=null → no false Active state.
-	 */
-	private _buildScriptItemsFallback(scripts: Record<string, ScriptRecord>): ScriptItem[] {
-		return Object.entries(scripts).map(([id, record]) => {
-			const state = evaluateState({
-				record,
-				inCatalog: record.provenance === "curated",
-				local: null,
-				catalogVersion: undefined,
-				online: false,
-			});
-			return {
-				id,
-				displayName: id,
-				description: record.description !== undefined && record.description.length > 0
-					? record.description
-					: `Source: ${record.source}`,
-				record,
-				state,
-				version: record.okayed?.version ?? 0,
-				provenance: record.provenance,
-				catalogVersion: undefined,
-			};
-		});
 	}
 
 	/**

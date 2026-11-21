@@ -68,7 +68,6 @@ export class ScriptsCache {
 	private _inFlight = false;
 	private _pending = false;
 	private _stale = false;
-	private _generation = 0;
 
 	constructor(deps: ScriptsCacheDeps) {
 		this._deps = deps;
@@ -107,17 +106,11 @@ export class ScriptsCache {
 		}
 		this._inFlight = true;
 		this._stale = false;
-		const generation = ++this._generation;
 		try {
 			this._deps.resolver?.clearCache();
 			const records = await this._deps.store.getScripts();
 			const items = await this._resolve(records);
-			// Single flight already rules out a newer pass having started; the
-			// check keeps "an older pass never overwrites a newer one" true even
-			// if that ever changes.
-			if (generation === this._generation) {
-				this._apply(records, items);
-			}
+			this._apply(records, items);
 		} catch (err) {
 			debug("[mason] scripts refresh failed", err);
 		} finally {
