@@ -1,5 +1,6 @@
 import type {
 	SettingDefinition,
+	SettingDefinitionAction,
 	SettingDefinitionEmpty,
 	SettingDefinitionGroup,
 	SettingDefinitionItem,
@@ -229,10 +230,10 @@ function introRow(): SettingDefinitionEmpty {
 	return { ...FORMAT_SELECTION_INTRO, aliases: [...FORMAT_SELECTION_INTRO.aliases] };
 }
 
-function group(
-	heading: string,
-	items: (SettingDefinition<FixedKey> | SettingDefinitionPage<FixedKey>)[],
-): SettingDefinitionGroup<FixedKey> {
+/** What a group of the main page may hold: rows only, the pages sit on the page itself. */
+export type FixedGroupRow = SettingDefinition<FixedKey>;
+
+function group(heading: string, items: FixedGroupRow[]): SettingDefinitionGroup<FixedKey> {
 	return { type: "group", heading, items };
 }
 
@@ -240,7 +241,7 @@ export interface MainPageParts {
 	scriptsPage: SettingDefinitionPage;
 	commandsPage: SettingDefinitionPage;
 	/** The "Documentation" action row that closes the Advanced group. */
-	identityRow: SettingDefinition;
+	identityRow: SettingDefinitionAction;
 }
 
 /** The main settings page in render order. Never empty: the fixed settings are always there. */
@@ -254,6 +255,6 @@ export function buildMainPageItems(parts: MainPageParts): SettingDefinitionItem<
 		group(SECTION_HEADINGS.lists, controlRows("lists")),
 		group(SECTION_HEADINGS.headings, controlRows("headings")),
 		group(SECTION_HEADINGS.footnotes, controlRows("footnotes")),
-		group(SECTION_HEADINGS.advanced, [...controlRows("advanced"), parts.identityRow as SettingDefinition<FixedKey>]),
+		group(SECTION_HEADINGS.advanced, [...controlRows("advanced"), parts.identityRow]),
 	];
 }

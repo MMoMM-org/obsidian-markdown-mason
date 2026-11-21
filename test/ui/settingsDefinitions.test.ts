@@ -11,13 +11,20 @@
  * HOUSE STYLE: tabs, double quotes, no default exports.
  */
 
-import { describe, it, expect } from "vitest";
-import type { PluginManifest, SettingDefinitionItem, SettingDefinitionPage } from "obsidian";
+import { describe, it, expect, expectTypeOf } from "vitest";
+import type {
+	PluginManifest,
+	SettingDefinitionAction,
+	SettingDefinitionItem,
+	SettingDefinitionPage,
+} from "obsidian";
 import {
 	FIXED_SETTINGS,
 	FORMAT_SELECTION_INTRO,
 	FORMAT_SELECTION_ONLY,
 	buildMainPageItems,
+	type FixedGroupRow,
+	type MainPageParts,
 } from "../../src/ui/settingsDefinitions";
 import { FIXED_KEYS, type FixedKey } from "../../src/ui/settingsControlStore";
 import { buildDocumentationRow } from "../../src/ui/pluginIdentity";
@@ -261,7 +268,7 @@ describe("buildMainPageItems — controls", () => {
 
 	it("carries no id on any item (deviation D-1)", () => {
 		for (const entry of flatTree()) {
-			expect(entry.id, `item "${entry.name}"`).toBeUndefined();
+			expect(entry.definition, `item "${entry.name}"`).not.toHaveProperty("id");
 		}
 	});
 });
@@ -334,6 +341,22 @@ describe("buildMainPageItems — main-page order", () => {
 			expect(seen.has(identity), `duplicate sibling "${identity}"`).toBe(false);
 			seen.add(identity);
 		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Type contracts — enforced by tsc, which also checks test/
+// ---------------------------------------------------------------------------
+
+describe("settingsDefinitions — type contracts", () => {
+	it("takes the identity row as the action definition buildDocumentationRow returns", () => {
+		expectTypeOf<MainPageParts["identityRow"]>().toEqualTypeOf<SettingDefinitionAction>();
+	});
+
+	it("accepts only rows inside a group, never a page", () => {
+		// @ts-expect-error — the pages sit on the main page itself, not inside a group.
+		const row: FixedGroupRow = { type: "page", name: "Nested", items: [] };
+		expect(row.name).toBe("Nested");
 	});
 });
 

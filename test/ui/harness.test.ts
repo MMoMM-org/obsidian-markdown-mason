@@ -28,15 +28,6 @@ import { controls, walk } from "./helpers/definitionTree";
 
 const noop = (): void => {};
 
-/**
- * The public 1.13.1 typings do not declare `id` on definitions, although the
- * runtime uses it as the first diff key. Attach it without tripping the
- * excess-property check.
- */
-function withId<T extends SettingDefinitionItem>(id: string, item: T): T {
-	return Object.assign(item, { id });
-}
-
 // ---------------------------------------------------------------------------
 // PluginSettingTab
 // ---------------------------------------------------------------------------
@@ -228,7 +219,7 @@ function sampleTree(): SettingDefinitionItem[] {
 			control: { type: "text", key: "resourcesName", placeholder: "Resources" },
 		},
 		{ name: "Numeric-only footnotes", control: { type: "toggle", key: "numericOnly" } },
-		withId("scripts", {
+		{
 			type: "page",
 			name: "Scripts",
 			desc: "Manage scripts.",
@@ -238,21 +229,14 @@ function sampleTree(): SettingDefinitionItem[] {
 					heading: "Installed",
 					emptyState: "No scripts yet.",
 					addItem: { name: "Import from vault", action: noop },
-					items: [
-						withId("script:alpha", {
-							name: "Alpha",
-							desc: "First script.",
-							aliases: ["alpha"],
-							render: noop,
-						}),
-					],
+					items: [{ name: "Alpha", desc: "First script.", aliases: ["alpha"], render: noop }],
 				},
 				{
 					type: "group",
 					items: [{ name: "Browse official", aliases: ["catalog"], action: noop }],
 				},
 			],
-		}),
+		},
 		{
 			type: "group",
 			heading: "Format selection",
@@ -308,14 +292,29 @@ describe("walk()", () => {
 		});
 	});
 
-	it("carries id, key, desc and aliases", () => {
+	it("carries key, desc and aliases", () => {
 		const flat = walk(sampleTree());
 		const named = (name: string) => flat.find(node => node.name === name);
 
 		expect(named("Resources section heading")).toMatchObject({ key: "resourcesName", desc: "Heading text." });
-		expect(named("Scripts")).toMatchObject({ id: "scripts", desc: "Manage scripts." });
-		expect(named("Alpha")).toMatchObject({ id: "script:alpha", desc: "First script.", aliases: ["alpha"] });
+		expect(named("Scripts")).toMatchObject({ desc: "Manage scripts." });
+		expect(named("Alpha")).toMatchObject({ desc: "First script.", aliases: ["alpha"] });
 		expect(named("Which steps run")).toMatchObject({ aliases: ["paste"] });
+	});
+
+	it("walk() nodes carry no id field", () => {
+		const tree: SettingDefinitionItem[] = [
+			Object.assign({ name: "Row" }, { id: "row" }),
+			Object.assign(
+				{ type: "page" as const, name: "Page", items: [Object.assign({ name: "Inner" }, { id: "inner" })] },
+				{ id: "page" },
+			),
+		];
+		const flat = walk(tree);
+		expect(flat).toHaveLength(3);
+		for (const node of flat) {
+			expect("id" in node, `node "${node.name}"`).toBe(false);
+		}
 	});
 
 	it("omits fields a definition does not have", () => {

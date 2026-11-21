@@ -22,8 +22,6 @@ export interface DefinitionNode {
 	/** Names of the ancestor pages and headings of the ancestor groups/lists, outermost first. */
 	path: string[];
 	type: DefinitionNodeType;
-	/** Stable diff id, where the definition carries one. */
-	id?: string;
 	/** Row or page name; the heading for a group or list. */
 	name?: string;
 	/** Storage key of a control row. */
@@ -61,15 +59,6 @@ function descText(desc: string | DocumentFragment | undefined): string | undefin
 	return desc.textContent ?? "";
 }
 
-/**
- * `id` is the runtime's first diff key but is absent from the public 1.13.1
- * typings, so it is read structurally.
- */
-function idOf(item: SettingDefinitionItem): string | undefined {
-	const id = (item as { id?: unknown }).id;
-	return typeof id === "string" ? id : undefined;
-}
-
 /** Builds a node, leaving out the fields the definition does not have. */
 function node(
 	definition: SettingDefinitionItem,
@@ -78,8 +67,7 @@ function node(
 	fields: Pick<DefinitionNode, "name" | "key" | "desc" | "aliases">,
 ): DefinitionNode {
 	const result: DefinitionNode = { path: [...path], type, definition };
-	const optional = { id: idOf(definition), ...fields };
-	for (const [field, value] of Object.entries(optional)) {
+	for (const [field, value] of Object.entries(fields)) {
 		if (value !== undefined) {
 			Object.assign(result, { [field]: value });
 		}
