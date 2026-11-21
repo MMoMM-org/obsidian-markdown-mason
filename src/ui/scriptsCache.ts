@@ -78,7 +78,13 @@ export class ScriptsCache {
 		return this._inFlight;
 	}
 
-	/** True when the state may be outdated and no refresh has started since. */
+	/**
+	 * True when the state may be outdated and no refresh has started since.
+	 *
+	 * A mark set while a refresh is running stays set: that pass may have read
+	 * the store before the change. The tab treats `stale && !inFlight` as
+	 * "needs refresh".
+	 */
 	get stale(): boolean {
 		return this._stale;
 	}
@@ -98,6 +104,9 @@ export class ScriptsCache {
 	 *
 	 * While a refresh is running, further calls only note that another pass is
 	 * wanted and return at once. A failed pass keeps the last good state.
+	 *
+	 * Awaiting the returned promise waits for this pass only, not for a
+	 * coalesced follow-up pass. Rely on onChange to learn about the final state.
 	 */
 	async refresh(): Promise<void> {
 		if (this._inFlight) {
@@ -122,7 +131,7 @@ export class ScriptsCache {
 		}
 	}
 
-	private async _resolve(records: Record<string, ScriptRecord>): Promise<ScriptItem[]> {
+	private _resolve(records: Record<string, ScriptRecord>): ScriptItem[] | Promise<ScriptItem[]> {
 		const resolver = this._deps.resolver;
 		return resolver !== undefined
 			? resolver.resolveItems(records)
@@ -133,7 +142,17 @@ export class ScriptsCache {
 		this.records = records;
 		this.items = items;
 		this.updatableCount = items.filter((it) => it.state.kind === "UpdateAvailable").length;
-		this._deps.setUpdatableCount(this.updatableCount);
-		this.onChange();
+		// The state above is already applied, so the listener must hear of it even
+		// when publishing the count fails; a failing listener must not fail the pass.
+		try {
+			this._deps.setUpdatableCount(this.updatableCount);
+		} catch (err) {
+			debug("[mason] publishing the scripts update count failed", err);
+		}
+		try {
+			this.onChange();
+		} catch (err) {
+			debug("[mason] scripts change listener failed", err);
+		}
 	}
 }

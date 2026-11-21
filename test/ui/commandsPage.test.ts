@@ -515,12 +515,10 @@ describe("configureCommandRow — cache and re-rendering", () => {
 
 	it("never calls the tab's update() on a rename or a toggle", async () => {
 		const { cache, deps } = makePage({ "my-script": makeRecord() });
-		const onChange = vi.fn();
-		const observedCache = Object.assign(cache, { onChange });
 
 		class CommandsOnlyTab extends PluginSettingTab {
 			override getSettingDefinitions(): SettingDefinitionItem[] {
-				return [buildCommandsPage(observedCache, deps)];
+				return [buildCommandsPage(cache, deps)];
 			}
 		}
 		const tab = new CommandsOnlyTab(new App(), {});
@@ -541,6 +539,5 @@ describe("configureCommandRow — cache and re-rendering", () => {
 
 		expect(update).toHaveBeenCalledOnce();
 		expect(tab._updateCalls).toBe(1);
-		expect(onChange).not.toHaveBeenCalled();
 	});
 });

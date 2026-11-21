@@ -136,13 +136,16 @@ function buildScriptList(items: ScriptItem[] | null, ops: LifecycleOps): Setting
 
 function buildScriptRows(items: ScriptItem[], ops: LifecycleOps): SettingDefinitionRender[] {
 	const sharedNames = sharedDisplayNames(items);
-	return items.map((item) => ({
+	return items.map((item) => {
 		// The name is the row's key, so two scripts must never share one.
-		name: sharedNames.has(item.displayName) ? `${item.displayName} (${item.id})` : item.displayName,
-		desc: item.description,
-		aliases: [item.id],
-		render: (setting: Setting) => configureScriptRow(setting, item, ops),
-	}));
+		const rowName = sharedNames.has(item.displayName) ? `${item.displayName} (${item.id})` : item.displayName;
+		return {
+			name: rowName,
+			desc: item.description,
+			aliases: [item.id],
+			render: (setting: Setting) => configureScriptRow(setting, item, ops, rowName),
+		};
+	});
 }
 
 /** The display names that more than one script carries. */
@@ -182,15 +185,24 @@ function buildActionRowGroup(ops: LifecycleOps): SettingDefinitionGroup {
  * description from its definition; this adds the provenance badge, status pill
  * and version to the name line, the reason below the description of a Blocked
  * script, then the controls valid for the script's state.
+ *
+ * `rowName` is the name the row is listed under; it differs from the display
+ * name when several scripts share one, and labels the toggle so those rows
+ * stay distinguishable for assistive technology.
  */
-export function configureScriptRow(setting: Setting, item: ScriptItem, ops: LifecycleOps): void {
+export function configureScriptRow(
+	setting: Setting,
+	item: ScriptItem,
+	ops: LifecycleOps,
+	rowName: string = item.displayName,
+): void {
 	addNameLineDetails(setting.nameEl, item);
 
 	if (item.state.kind === "Blocked") {
 		addBlockedRecovery(setting, item, item.state.reason, ops);
 	}
 	if (showsToggle(item.state)) {
-		addEnableToggle(setting, item, ops);
+		addEnableToggle(setting, item, ops, rowName);
 	}
 	addMenuButton(setting, item, ops);
 }
@@ -208,11 +220,11 @@ function addNameLineDetails(nameEl: HTMLElement, item: ScriptItem): void {
 	nameEl.createSpan({ text: `v${item.version}`, cls: "mason-script-version" });
 }
 
-function addEnableToggle(setting: Setting, item: ScriptItem, ops: LifecycleOps): void {
+function addEnableToggle(setting: Setting, item: ScriptItem, ops: LifecycleOps, rowName: string): void {
 	setting.addToggle((toggle) =>
 		toggle
 			// The tooltip doubles as the toggle's accessible name.
-			.setTooltip(`Enable ${item.displayName}`)
+			.setTooltip(`Enable ${rowName}`)
 			.setValue(toggleValue(item.state))
 			.onChange((enabled) => {
 				if (enabled) {

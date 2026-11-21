@@ -49,7 +49,11 @@ export type ScriptFnResolver = (id: string) => ScriptFunction;
 /** Returns the current LifecycleState for a script id. */
 export type StateResolver = (id: string) => LifecycleState;
 
-/** The part of ScriptsCache a command row reads and patches. */
+/**
+ * The part of ScriptsCache a command row reads and patches. Narrower than
+ * CommandPageCache on purpose: a row never needs `items`, so a caller can hand
+ * it a bare records holder.
+ */
 export type CommandRecordsCache = Pick<ScriptsCache, "records">;
 
 /** The part of ScriptsCache the Commands page builds from; `items === null` means not loaded yet. */

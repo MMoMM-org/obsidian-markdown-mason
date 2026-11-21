@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { setDebugLogging } from "../../src/core/debug";
 import {
 	ScriptsCache,
 	buildOfflineScriptItems,
@@ -412,6 +413,66 @@ describe("ScriptsCache — failures", () => {
 		await retried;
 
 		expect(h.cache.items).toBe(items);
+	});
+});
+
+describe("ScriptsCache — throwing collaborators", () => {
+	afterEach(() => {
+		setDebugLogging(false);
+		vi.restoreAllMocks();
+	});
+
+	/** Turn debug logging on and tell whether the cache has logged `failure`. */
+	function captureDebugLog(): { has(failure: Error): boolean } {
+		setDebugLogging(true);
+		const logged = vi.spyOn(console, "debug").mockImplementation(() => undefined);
+		return { has: (failure) => logged.mock.calls.some((args) => args.includes(failure)) };
+	}
+
+	it("still calls onChange when setUpdatableCount throws (and state is applied)", async () => {
+		const h = makeHarness();
+		const logged = captureDebugLog();
+		const failure = new Error("badge failed");
+		h.setUpdatableCount.mockImplementation(() => { throw failure; });
+		const records = { alpha: record() };
+		const items = [item("alpha", { kind: "UpdateAvailable" })];
+
+		const done = h.cache.refresh();
+		await completePass(h, records, items);
+		await done;
+
+		expect(h.cache.items).toBe(items);
+		expect(h.cache.records).toBe(records);
+		expect(h.cache.updatableCount).toBe(1);
+		expect(h.onChange).toHaveBeenCalledTimes(1);
+		expect(logged.has(failure)).toBe(true);
+	});
+
+	it("a throwing onChange is logged and does not wedge the cache (next refresh runs)", async () => {
+		const h = makeHarness();
+		const logged = captureDebugLog();
+		const failure = new Error("redraw failed");
+		h.cache.onChange = () => { throw failure; };
+		const firstItems = [item("alpha", { kind: "Active" })];
+
+		const first = h.cache.refresh();
+		await completePass(h, { alpha: record() }, firstItems);
+		await expect(first).resolves.toBeUndefined();
+
+		expect(h.cache.items).toBe(firstItems);
+		expect(h.cache.inFlight).toBe(false);
+		expect(logged.has(failure)).toBe(true);
+
+		const recovered = vi.fn();
+		h.cache.onChange = recovered;
+		const nextItems = [item("alpha", { kind: "Disabled" })];
+		const next = h.cache.refresh();
+		await completePass(h, { alpha: record() }, nextItems);
+		await next;
+
+		expect(h.storeCalls).toHaveLength(2);
+		expect(h.cache.items).toBe(nextItems);
+		expect(recovered).toHaveBeenCalledTimes(1);
 	});
 });
 

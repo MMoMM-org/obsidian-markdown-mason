@@ -469,6 +469,23 @@ describe("Script row — enable/disable toggle", () => {
 		expect(record.toggleControls[0]!._tooltip).toBe("Enable Perplexity app");
 	});
 
+	it("same-name scripts get distinct toggle tooltips", () => {
+		const items = [
+			makeItem({ id: "first", displayName: "Twin", state: { kind: "Disabled" } }),
+			makeItem({ id: "second", displayName: "Twin", state: { kind: "Disabled" } }),
+			makeItem({ id: "other", displayName: "Other", state: { kind: "Disabled" } }),
+		];
+		const rows = rowsOf(listOf(buildScriptsPage(makeCache(items), makeOps())));
+
+		const tooltips = rows.map((row) => {
+			const { setting, record } = makeSetting(row.name, row.desc as string);
+			row.render(setting as unknown as ObsidianSetting, new SettingGroup(null) as unknown as ObsidianSettingGroup);
+			return record.toggleControls[0]!._tooltip;
+		});
+
+		expect(tooltips).toEqual(["Enable Twin (first)", "Enable Twin (second)", "Enable Other"]);
+	});
+
 	it("configuring a row calls no op", () => {
 		const { ops } = configureRow(makeItem({ state: { kind: "Active" } }));
 		expect(ops.enable).not.toHaveBeenCalled();
