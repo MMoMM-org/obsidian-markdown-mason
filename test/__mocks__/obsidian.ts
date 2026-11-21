@@ -687,7 +687,13 @@ class MockTextControl {
 
 class MockToggleControl {
 	_value: boolean = false;
+	_tooltip: string = "";
 	private _onChangeCbs: Array<(v: boolean) => void> = [];
+
+	setTooltip(tooltip: string): this {
+		this._tooltip = tooltip;
+		return this;
+	}
 
 	setValue(v: boolean): this {
 		this._value = v;

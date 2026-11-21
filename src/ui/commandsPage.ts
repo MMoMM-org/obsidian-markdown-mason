@@ -30,6 +30,7 @@ import type { ScriptFunction } from "../scripts/context";
 import type { LifecycleState } from "../scripts/lifecycle";
 import type { ScriptRecord, ScriptStore } from "../scripts/store";
 import type { ScriptsCache } from "./scriptsCache";
+import { SCRIPTS_LOADING_TEXT } from "./scriptsPage";
 
 /** Minimal CommandManager surface a command row needs. */
 export interface CommandsTabCommandManager {
@@ -80,9 +81,6 @@ export const COMMANDS_EMPTY_STATE = {
 	name: "No enabled scripts",
 	desc: "Enable a script in the Scripts tab first, then return here to create a command for it.",
 } as const;
-
-/** Shown instead of the script rows until the cache has loaded. */
-export const COMMANDS_LOADING_TEXT = "Loading scripts…";
 
 /**
  * Build the Commands page from the cached script records.
@@ -161,7 +159,7 @@ function introRow(): SettingDefinitionEmpty {
 }
 
 function loadingRow(): SettingDefinitionEmpty {
-	return { name: COMMANDS_LOADING_TEXT };
+	return { name: SCRIPTS_LOADING_TEXT };
 }
 
 function emptyStateRow(): SettingDefinitionEmpty {

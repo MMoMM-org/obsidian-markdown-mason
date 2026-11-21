@@ -147,6 +147,11 @@ function childWithClass(el: MockHTMLElement, cls: string): MockHTMLElement | und
 	return childrenOf(el).find((child) => child._hasClass(cls));
 }
 
+/** The blocked-reason element a Blocked row appends below its description. */
+function blockedReasonOf(setting: Setting): MockHTMLElement | undefined {
+	return childWithClass(setting.descEl, "mason-script-blocked-reason");
+}
+
 // The row opens `new Menu()` from its ⋯ button and positions it with
 // showAtPosition. Capture the last shown instance and where it was shown.
 const shown: { menu?: Menu; position?: unknown } = {};
@@ -459,6 +464,11 @@ describe("Script row — enable/disable toggle", () => {
 		expect(record.toggleControls[0]!.getValue()).toBe(false);
 	});
 
+	it("names the toggle 'Enable {name}' for assistive technology", () => {
+		const { record } = configureRow(makeItem({ displayName: "Perplexity app", state: { kind: "Disabled" } }));
+		expect(record.toggleControls[0]!._tooltip).toBe("Enable Perplexity app");
+	});
+
 	it("configuring a row calls no op", () => {
 		const { ops } = configureRow(makeItem({ state: { kind: "Active" } }));
 		expect(ops.enable).not.toHaveBeenCalled();
@@ -493,8 +503,7 @@ describe("Script row — Blocked", () => {
 				state: { kind: "Blocked", reason: "source-missing" },
 			}),
 		);
-		expect(record.desc).toBe("Vault source not found: scripts/old.cjs");
-		expect(setting.descEl._hasClass("mason-script-blocked-reason")).toBe(true);
+		expect(blockedReasonOf(setting)?._text).toBe("Vault source not found: scripts/old.cjs");
 		expect(record.buttonControls.map((button) => button._text)).toEqual(["Re-import"]);
 		await record.buttonControls[0]!._simulateClick();
 		expect(ops.importFromVault).toHaveBeenCalledTimes(1);
@@ -509,8 +518,8 @@ describe("Script row — Blocked", () => {
 
 	for (const { reason, text } of retryCases) {
 		it(`${reason} shows its reason and Retry fetch drives ops.retry`, async () => {
-			const { record, ops } = configureRow(makeItem({ id: "blocked", state: { kind: "Blocked", reason } }));
-			expect(record.desc).toBe(text);
+			const { setting, record, ops } = configureRow(makeItem({ id: "blocked", state: { kind: "Blocked", reason } }));
+			expect(blockedReasonOf(setting)?._text).toBe(text);
 			expect(record.buttonControls.map((button) => button._text)).toEqual(["Retry fetch"]);
 			await record.buttonControls[0]!._simulateClick();
 			expect(ops.retry).toHaveBeenCalledWith("blocked");
@@ -518,11 +527,21 @@ describe("Script row — Blocked", () => {
 		});
 	}
 
-	it("a row that is not Blocked keeps its description and has no recovery button", () => {
+	it("a Blocked row keeps the script description and shows the reason below it", () => {
+		const { setting, record } = configureRow(makeItem({ state: { kind: "Blocked", reason: "drift" } }));
+		expect(record.desc).toBe("Formats Perplexity desktop-app copies into footnotes.");
+		expect(setting.descEl._text).toBe("Formats Perplexity desktop-app copies into footnotes.");
+		expect(childrenOf(setting.descEl)).toHaveLength(1);
+		expect(setting.descEl._collectText()).toBe(
+			"Formats Perplexity desktop-app copies into footnotes. Script bytes changed since you approved them",
+		);
+	});
+
+	it("a row that is not Blocked keeps its description and has no reason or recovery button", () => {
 		const { setting, record } = configureRow(makeItem({ state: { kind: "Active" } }));
 		expect(record.desc).toBe("Formats Perplexity desktop-app copies into footnotes.");
 		expect(record.buttonControls).toHaveLength(0);
-		expect(setting.descEl._hasClass("mason-script-blocked-reason")).toBe(false);
+		expect(childrenOf(setting.descEl)).toHaveLength(0);
 	});
 });
 
@@ -647,13 +666,19 @@ describe("Scripts page — hostile script data", () => {
 		expect(definition.aliases).toEqual([HOSTILE_ID]);
 	});
 
-	it("the row shows a hostile name and source as literal text, with no markup elements", () => {
+	it("the row shows a hostile name, description and source as literal text, with no markup elements", () => {
 		const { setting, record } = configureRow(hostileItem({ kind: "Blocked", reason: "source-missing" }));
 		expect(setting.nameEl._text).toBe(HOSTILE_ID);
-		expect(record.desc).toBe(`Vault source not found: ${HOSTILE_SOURCE}`);
+		expect(setting.descEl._text).toBe(HOSTILE_DESC);
+		expect(blockedReasonOf(setting)?._text).toBe(`Vault source not found: ${HOSTILE_SOURCE}`);
 		expect(record.extraButtonControls[0]!._tooltip).toBe(`More actions for ${HOSTILE_ID}`);
 
 		const tags = (el: MockHTMLElement): string[] => childrenOf(el).flatMap((child) => [child.tagName, ...tags(child)]);
 		expect(tags(setting.settingEl).every((tag) => tag === "div" || tag === "span")).toBe(true);
+	});
+
+	it("the toggle's accessible name carries a hostile name as literal text", () => {
+		const { record } = configureRow(hostileItem({ kind: "Active" }));
+		expect(record.toggleControls[0]!._tooltip).toBe(`Enable ${HOSTILE_ID}`);
 	});
 });

@@ -15,7 +15,7 @@
 //
 // COMMUNITY COMPLIANCE (CON-3)
 // - Script data reaches the DOM only as text (definition `name`/`desc`,
-//   createSpan, setDesc, setTooltip) — never innerHTML / outerHTML /
+//   createSpan, createDiv, setTooltip) — never innerHTML / outerHTML /
 //   insertAdjacentHTML.
 // - All UI text is SENTENCE CASE: pills, menu titles, buttons, row names.
 // - Status is conveyed by a text LABEL + icon, never colour alone.
@@ -92,7 +92,8 @@ export const SCRIPTS_PAGE_NAME = "Scripts";
 
 const IMPORT_FROM_VAULT = "Import from vault";
 const BROWSE_OFFICIAL = "Browse official";
-const LOADING_TEXT = "Loading scripts…";
+/** Shown wherever script rows belong while the scripts are not loaded yet. */
+export const SCRIPTS_LOADING_TEXT = "Loading scripts…";
 const NO_SCRIPTS_TEXT = "No scripts yet. Import one from your vault, or browse the official catalog to get started.";
 
 /**
@@ -120,7 +121,7 @@ function updatesAvailableText(count: number): string {
 function buildScriptList(items: ScriptItem[] | null, ops: LifecycleOps): SettingDefinitionList {
 	return {
 		type: "list",
-		emptyState: items === null ? LOADING_TEXT : NO_SCRIPTS_TEXT,
+		emptyState: items === null ? SCRIPTS_LOADING_TEXT : NO_SCRIPTS_TEXT,
 		addItem: { name: IMPORT_FROM_VAULT, action: () => void ops.importFromVault() },
 		extraButtons: [
 			(button: ExtraButtonComponent) =>
@@ -179,7 +180,8 @@ function buildActionRowGroup(ops: LifecycleOps): SettingDefinitionGroup {
 /**
  * Fill one script row. Obsidian has already set the row's name and
  * description from its definition; this adds the provenance badge, status pill
- * and version to the name line, then the controls valid for the script's state.
+ * and version to the name line, the reason below the description of a Blocked
+ * script, then the controls valid for the script's state.
  */
 export function configureScriptRow(setting: Setting, item: ScriptItem, ops: LifecycleOps): void {
 	addNameLineDetails(setting.nameEl, item);
@@ -208,20 +210,23 @@ function addNameLineDetails(nameEl: HTMLElement, item: ScriptItem): void {
 
 function addEnableToggle(setting: Setting, item: ScriptItem, ops: LifecycleOps): void {
 	setting.addToggle((toggle) =>
-		toggle.setValue(toggleValue(item.state)).onChange((enabled) => {
-			if (enabled) {
-				void ops.enable(item.id);
-			} else {
-				void ops.disable(item.id);
-			}
-		}),
+		toggle
+			// The tooltip doubles as the toggle's accessible name.
+			.setTooltip(`Enable ${item.displayName}`)
+			.setValue(toggleValue(item.state))
+			.onChange((enabled) => {
+				if (enabled) {
+					void ops.enable(item.id);
+				} else {
+					void ops.disable(item.id);
+				}
+			}),
 	);
 }
 
-/** The reason replaces the description; one button offers the recovery. */
+/** The reason follows the description; one button offers the recovery. */
 function addBlockedRecovery(setting: Setting, item: ScriptItem, reason: BlockedReason, ops: LifecycleOps): void {
-	setting.setDesc(blockedReasonText(item, reason));
-	setting.descEl.addClass("mason-script-blocked-reason");
+	setting.descEl.createDiv({ text: blockedReasonText(item, reason), cls: "mason-script-blocked-reason" });
 
 	const { label, action } = blockedRecovery(reason);
 	setting.addButton((button) => button.setButtonText(label).onClick(() => void action(item.id, ops)));
