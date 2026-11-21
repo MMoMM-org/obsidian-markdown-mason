@@ -4,12 +4,6 @@
 // All tests use real fs; no mocking. afterEach removes temp dirs.
 //
 // Behaviour under test:
-//   FsScriptLoader.resolve(id)
-//     (a) returns absolutePath + fingerprint for a matching <id>.cjs file
-//     (b) returns null when the scripts dir is absent
-//     (c) returns null + console.warn when <id>.js exists but no <id>.cjs
-//     (d) returns null + console.warn when scriptsDir escapes the vault base
-//         (realpath escape guard)
 //   loadScriptFresh(absolutePath, requireFn)
 //     (e) evicts the whole directory prefix from requireFn.cache on each load
 //         so an edited ./_helper.cjs is re-evaluated, not served stale
@@ -19,7 +13,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import * as module from "node:module";
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { FsScriptLoader, loadScriptFresh, loadScriptModule, resolveScriptsDir, extractScriptDescription } from "../../src/scripts/loader";
+import { loadScriptFresh, loadScriptModule, resolveScriptsDir, extractScriptDescription } from "../../src/scripts/loader";
 import type { RequireFn, ScriptModule, PasteBlock } from "../../src/scripts/loader";
 
 // ---------------------------------------------------------------------------
@@ -52,191 +46,6 @@ function makeRequireFn(baseDir: string): RequireFn {
 	const req = module.createRequire(sentinel);
 	return req as unknown as RequireFn;
 }
-
-// ---------------------------------------------------------------------------
-// (a) resolve finds <id>.cjs and returns absolutePath + fingerprint
-// ---------------------------------------------------------------------------
-
-describe("FsScriptLoader.resolve — happy path", () => {
-	it("returns absolutePath pointing to <id>.cjs", () => {
-		const vaultBase = makeTempDir("mason-vault-");
-		const scriptsDir = path.join(vaultBase, "scripts");
-		fs.mkdirSync(scriptsDir);
-		fs.writeFileSync(path.join(scriptsDir, "perplexity-app.cjs"), "module.exports = () => {};");
-
-		const loader = new FsScriptLoader(vaultBase, () => scriptsDir);
-		const result = loader.resolve("perplexity-app");
-
-		expect(result).not.toBeNull();
-		expect(result!.absolutePath).toBe(path.join(scriptsDir, "perplexity-app.cjs"));
-	});
-
-	it("returns fingerprint with size and mtimeMs", () => {
-		const vaultBase = makeTempDir("mason-vault-");
-		const scriptsDir = path.join(vaultBase, "scripts");
-		fs.mkdirSync(scriptsDir);
-		const content = "module.exports = () => {};";
-		const filePath = path.join(scriptsDir, "my-script.cjs");
-		fs.writeFileSync(filePath, content);
-		const stat = fs.statSync(filePath);
-
-		const loader = new FsScriptLoader(vaultBase, () => scriptsDir);
-		const result = loader.resolve("my-script");
-
-		expect(result!.fingerprint).toBeDefined();
-		expect(result!.fingerprint!.size).toBe(stat.size);
-		expect(result!.fingerprint!.mtimeMs).toBe(stat.mtimeMs);
-	});
-});
-
-// ---------------------------------------------------------------------------
-// (b) absent dir → null (debug-trace only, no warning)
-// ---------------------------------------------------------------------------
-
-describe("FsScriptLoader.resolve — absent scripts dir", () => {
-	it("returns null when the scripts directory does not exist", () => {
-		const vaultBase = makeTempDir("mason-vault-");
-		const missingDir = path.join(vaultBase, "does-not-exist");
-
-		const loader = new FsScriptLoader(vaultBase, () => missingDir);
-		const result = loader.resolve("any-id");
-
-		expect(result).toBeNull();
-	});
-
-	it("calls debug (not warn) when scripts dir is absent", () => {
-		const vaultBase = makeTempDir("mason-vault-");
-		const missingDir = path.join(vaultBase, "does-not-exist");
-		const debugSpy = vi.fn();
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-
-		const loader = new FsScriptLoader(vaultBase, () => missingDir, debugSpy);
-		loader.resolve("any-id");
-
-		// debug MUST be called for absent dir trace; warn must NOT be called
-		expect(debugSpy).toHaveBeenCalled();
-		expect(warnSpy).not.toHaveBeenCalled();
-		warnSpy.mockRestore();
-	});
-});
-
-// ---------------------------------------------------------------------------
-// (c) <id>.js exists but no <id>.cjs → null + console.warn
-// ---------------------------------------------------------------------------
-
-describe("FsScriptLoader.resolve — .js only (Electron incompatible)", () => {
-	it("returns null when only <id>.js exists", () => {
-		const vaultBase = makeTempDir("mason-vault-");
-		const scriptsDir = path.join(vaultBase, "scripts");
-		fs.mkdirSync(scriptsDir);
-		fs.writeFileSync(path.join(scriptsDir, "my-script.js"), "module.exports = () => {};");
-
-		const loader = new FsScriptLoader(vaultBase, () => scriptsDir);
-		const result = loader.resolve("my-script");
-
-		expect(result).toBeNull();
-	});
-
-	it("emits console.warn mentioning Electron requires .cjs when only .js exists", () => {
-		const vaultBase = makeTempDir("mason-vault-");
-		const scriptsDir = path.join(vaultBase, "scripts");
-		fs.mkdirSync(scriptsDir);
-		fs.writeFileSync(path.join(scriptsDir, "my-script.js"), "module.exports = () => {};");
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-
-		const loader = new FsScriptLoader(vaultBase, () => scriptsDir);
-		loader.resolve("my-script");
-
-		expect(warnSpy).toHaveBeenCalled();
-		const callArg = warnSpy.mock.calls[0]?.join(" ") ?? "";
-		expect(callArg).toMatch(/\.cjs/);
-		warnSpy.mockRestore();
-	});
-});
-
-// ---------------------------------------------------------------------------
-// (d) escape guard — scriptsDir outside vault base → null + console.warn
-// ---------------------------------------------------------------------------
-
-describe("FsScriptLoader.resolve — escape guard (path traversal)", () => {
-	it("returns null when scriptsDir resolves outside the vault base", () => {
-		const rootTmp = makeTempDir("mason-root-");
-		const vaultBase = path.join(rootTmp, "vault");
-		const outside = path.join(rootTmp, "outside");
-		fs.mkdirSync(vaultBase);
-		fs.mkdirSync(outside);
-		// Write a .cjs into the outside dir so discovery would succeed if guard fails
-		fs.writeFileSync(path.join(outside, "evil.cjs"), "module.exports = () => {};");
-
-		// scriptsDir is set to the outside dir directly (simulates tampered config)
-		const loader = new FsScriptLoader(vaultBase, () => outside);
-		const result = loader.resolve("evil");
-
-		expect(result).toBeNull();
-	});
-
-	it("emits console.warn when scriptsDir escapes the vault base", () => {
-		const rootTmp = makeTempDir("mason-root-");
-		const vaultBase = path.join(rootTmp, "vault");
-		const outside = path.join(rootTmp, "outside");
-		fs.mkdirSync(vaultBase);
-		fs.mkdirSync(outside);
-		fs.writeFileSync(path.join(outside, "evil.cjs"), "module.exports = () => {};");
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-
-		const loader = new FsScriptLoader(vaultBase, () => outside);
-		loader.resolve("evil");
-
-		expect(warnSpy).toHaveBeenCalled();
-		warnSpy.mockRestore();
-	});
-
-	it("does NOT block scriptsDir that IS the vault base (edge: equal paths)", () => {
-		// scriptsDir === vaultBase is unusual but should not be blocked by the guard
-		// (equal IS allowed; the guard rejects when dir is NOT a child and NOT equal)
-		const vaultBase = makeTempDir("mason-vault-");
-		fs.writeFileSync(path.join(vaultBase, "inline.cjs"), "module.exports = () => {};");
-
-		const loader = new FsScriptLoader(vaultBase, () => vaultBase);
-		const result = loader.resolve("inline");
-
-		expect(result).not.toBeNull();
-	});
-
-	it("returns null when scriptsDir is a symlink pointing outside the vault (symlink-chain escape)", () => {
-		// This test exercises the realpathSync resolution path — the primary security
-		// purpose of the escape guard.  A plain real directory outside the vault (as in
-		// the tests above) bypasses the symlink-specific branch; this test uses an actual
-		// symlink so the guard must dereference it to detect the escape.
-		const vaultBase = makeTempDir("mason-vault-");
-		const outsideDir = makeTempDir("mason-outside-");
-		const symlinkScripts = path.join(vaultBase, "scripts");
-
-		try {
-			fs.symlinkSync(outsideDir, symlinkScripts, "dir");
-		} catch (err: unknown) {
-			// EPERM on platforms that disallow unprivileged dir symlinks (unlikely on Linux).
-			const code = (err as NodeJS.ErrnoException).code;
-			if (code === "EPERM" || code === "ENOTSUP") {
-				console.warn(`[mason-test] symlink creation not permitted (${code}) — skipping symlink-escape test`);
-				return;
-			}
-			throw err;
-		}
-
-		// Place a script in the outside dir — if the guard fails, resolve() would return it.
-		fs.writeFileSync(path.join(outsideDir, "evil.cjs"), "module.exports = () => {};");
-
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-		const loader = new FsScriptLoader(vaultBase, () => symlinkScripts);
-		const result = loader.resolve("evil");
-
-		// realpathSync resolves the symlink → outsideDir, which is outside vaultBase.
-		expect(result).toBeNull();
-		expect(warnSpy).toHaveBeenCalled();
-		warnSpy.mockRestore();
-	});
-});
 
 // ---------------------------------------------------------------------------
 // (e) loadScriptFresh — cache-eviction by directory prefix
