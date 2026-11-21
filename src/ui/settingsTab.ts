@@ -15,6 +15,12 @@ import type { BrowseEntryStatus } from "./browseOfficialModal";
 import { buildRequireFn, loadRunFnSafe, resolveScriptsDir } from "../scripts/loader";
 import { debug, setDebugLogging } from "../core/debug";
 import { resolveFormatSelectionRecipe } from "../core/formatSelection";
+import {
+	FORMAT_SELECTION_INTRO,
+	RESOURCES_NAME_PLACEHOLDER,
+	SECTION_HEADINGS,
+	fixedSetting,
+} from "./settingsDefinitions";
 
 // ---------------------------------------------------------------------------
 // Minimal plugin interface — avoids a hard import cycle with main.ts
@@ -231,14 +237,12 @@ export class MasonSettingTab extends PluginSettingTab {
 	/** Render the General section controls. The active tab labels the section. */
 	private _renderGeneralSection(containerEl: HTMLElement): void {
 		new Setting(containerEl)
-			.setName("Resources section heading")
-			.setDesc(
-				"Heading where Tidy footnotes collects footnote definitions. Set the level with leading #'s — e.g. ### Resources for a level-3 section. An existing section with this name is reused at its current level.",
-			)
+			.setName(fixedSetting("resourcesName").name)
+			.setDesc(fixedSetting("resourcesName").desc)
 			.addText((text) => {
 				text
 					.setValue(this._plugin.settings.resourcesName)
-					.setPlaceholder("## Resources")
+					.setPlaceholder(RESOURCES_NAME_PLACEHOLDER)
 					.onChange(async (value) => {
 						this._plugin.settings.resourcesName = value;
 						await this._plugin.saveSettings();
@@ -246,11 +250,8 @@ export class MasonSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName("Show update notes")
-			.setDesc(
-				"Show a summary of waiting script updates the first time you run a new " +
-				"version of Markdown Mason.",
-			)
+			.setName(fixedSetting("showUpdateSplash").name)
+			.setDesc(fixedSetting("showUpdateSplash").desc)
 			.addToggle((toggle) => {
 				toggle
 					.setValue(this._plugin.settings.showUpdateSplash ?? true)
@@ -261,13 +262,8 @@ export class MasonSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName("Numeric-only footnotes")
-			.setDesc(
-				"Process only numeric footnote references (e.g. [^1]). " +
-				"Alpha markers such as [^A] are excluded. " +
-				"Note: disabling this is a planned feature — the setting persists " +
-				"but alpha-marker support is not yet wired into the core.",
-			)
+			.setName(fixedSetting("numericOnly").name)
+			.setDesc(fixedSetting("numericOnly").desc)
 			.addToggle((toggle) => {
 				toggle
 					.setValue(this._plugin.settings.numericOnly ?? true)
@@ -278,12 +274,8 @@ export class MasonSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName("Fit paste to list context")
-			.setDesc(
-				"When pasting inside a list item, turn each pasted paragraph into its own " +
-				"item, drop the blank lines between them, and nest a pasted sub-list under " +
-				"the item that introduces it. Has no effect outside a list.",
-			)
+			.setName(fixedSetting("pasteListContext").name)
+			.setDesc(fixedSetting("pasteListContext").desc)
 			.addToggle((toggle) => {
 				toggle
 					.setValue(this._plugin.settings.pasteListContext ?? true)
@@ -518,19 +510,17 @@ export class MasonSettingTab extends PluginSettingTab {
 	 * All default to true (resolved via resolveFormatSelectionRecipe).
 	 */
 	private _renderFormatSelectionSection(containerEl: HTMLElement): void {
-		const FORMAT_SELECTION_ONLY = ' ℹ️ "Format selection" only — not applied by "Paste and format".';
-
 		new Setting(containerEl)
-			.setDesc('Choose which steps run. "Format selection" runs all of these; "Paste and format" runs the cleanup, lists, and the Normalize headings step only.');
+			.setDesc(FORMAT_SELECTION_INTRO.desc);
 
 		const recipe = resolveFormatSelectionRecipe(this._plugin.settings);
 
 		// --- Cleanup ---
-		new Setting(containerEl).setName("Cleanup").setHeading();
+		new Setting(containerEl).setName(SECTION_HEADINGS.cleanup).setHeading();
 
 		new Setting(containerEl)
-			.setName("Convert box-drawing table")
-			.setDesc("Turn terminal/CLI tables drawn with box characters (┌─┬─┐ … │ … or ASCII +--+) into proper Markdown tables. On by default; detection is unambiguous and runs before reflow and dewrap.")
+			.setName(fixedSetting("formatSelection.boxTable").name)
+			.setDesc(fixedSetting("formatSelection.boxTable").desc)
 			.addToggle((t) => {
 				t.setValue(recipe.boxTable).onChange(async (v) => {
 					if (!this._plugin.settings.formatSelection) {
@@ -542,8 +532,8 @@ export class MasonSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName("Reflow wrapped text")
-			.setDesc("Rebuild hard-wrapped OCR/slide captures (no blank lines between blocks) into paragraphs and bullet lists, keeping any sub-bullet nesting. Off by default; enable for screen-capture text. Runs before dehyphenate and dewrap.")
+			.setName(fixedSetting("formatSelection.reflow").name)
+			.setDesc(fixedSetting("formatSelection.reflow").desc)
 			.addToggle((t) => {
 				t.setValue(recipe.reflow).onChange(async (v) => {
 					if (!this._plugin.settings.formatSelection) {
@@ -555,8 +545,8 @@ export class MasonSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName("Dewrap paragraphs")
-			.setDesc("Re-join hard-wrapped lines into full paragraphs, skipping code, headings, lists, blockquotes, and tables.")
+			.setName(fixedSetting("formatSelection.dewrap").name)
+			.setDesc(fixedSetting("formatSelection.dewrap").desc)
 			.addToggle((t) => {
 				t.setValue(recipe.dewrap).onChange(async (v) => {
 					if (!this._plugin.settings.formatSelection) {
@@ -568,8 +558,8 @@ export class MasonSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName("Dehyphenate words")
-			.setDesc("Remove end-of-line hyphens that split words across lines (OCR and PDF artifacts), for lowercase-to-lowercase splits only. Runs before dewrap.")
+			.setName(fixedSetting("formatSelection.dehyphenate").name)
+			.setDesc(fixedSetting("formatSelection.dehyphenate").desc)
 			.addToggle((t) => {
 				t.setValue(recipe.dehyphenate).onChange(async (v) => {
 					if (!this._plugin.settings.formatSelection) {
@@ -581,8 +571,8 @@ export class MasonSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName("Decompose ligatures and punctuation")
-			.setDesc("Replace Unicode ligature glyphs (ﬁ, æ, œ…) and typographic punctuation (curly quotes, em dash, ellipsis) with plain ASCII equivalents.")
+			.setName(fixedSetting("formatSelection.decomposeLigatures").name)
+			.setDesc(fixedSetting("formatSelection.decomposeLigatures").desc)
 			.addToggle((t) => {
 				t.setValue(recipe.decomposeLigatures).onChange(async (v) => {
 					if (!this._plugin.settings.formatSelection) {
@@ -594,8 +584,8 @@ export class MasonSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName("Tidy whitespace")
-			.setDesc("Collapse double spaces, remove trailing whitespace, and squeeze three or more blank lines to one.")
+			.setName(fixedSetting("formatSelection.tidyWhitespace").name)
+			.setDesc(fixedSetting("formatSelection.tidyWhitespace").desc)
 			.addToggle((t) => {
 				t.setValue(recipe.tidyWhitespace).onChange(async (v) => {
 					if (!this._plugin.settings.formatSelection) {
@@ -607,11 +597,11 @@ export class MasonSettingTab extends PluginSettingTab {
 			});
 
 		// --- Lists ---
-		new Setting(containerEl).setName("Lists").setHeading();
+		new Setting(containerEl).setName(SECTION_HEADINGS.lists).setHeading();
 
 		new Setting(containerEl)
-			.setName("Normalize bullets")
-			.setDesc("Replace all unordered bullet markers (*, +, •, –, ·) with a canonical dash (-), preserving nesting and checkbox syntax.")
+			.setName(fixedSetting("formatSelection.normalizeBullets").name)
+			.setDesc(fixedSetting("formatSelection.normalizeBullets").desc)
 			.addToggle((t) => {
 				t.setValue(recipe.normalizeBullets).onChange(async (v) => {
 					if (!this._plugin.settings.formatSelection) {
@@ -623,8 +613,8 @@ export class MasonSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName("Normalize ordered list")
-			.setDesc("Renumber ordered lists sequentially (1. 2. 3.) per nesting level.")
+			.setName(fixedSetting("formatSelection.normalizeOrdered").name)
+			.setDesc(fixedSetting("formatSelection.normalizeOrdered").desc)
 			.addToggle((t) => {
 				t.setValue(recipe.normalizeOrdered).onChange(async (v) => {
 					if (!this._plugin.settings.formatSelection) {
@@ -636,11 +626,11 @@ export class MasonSettingTab extends PluginSettingTab {
 			});
 
 		// --- Headings ---
-		new Setting(containerEl).setName("Headings").setHeading();
+		new Setting(containerEl).setName(SECTION_HEADINGS.headings).setHeading();
 
 		new Setting(containerEl)
-			.setName("Cascade headings")
-			.setDesc("Promote or demote headings to maintain a consistent hierarchy." + FORMAT_SELECTION_ONLY)
+			.setName(fixedSetting("formatSelection.cascade").name)
+			.setDesc(fixedSetting("formatSelection.cascade").desc)
 			.addToggle((t) => {
 				t.setValue(recipe.cascade).onChange(async (v) => {
 					if (!this._plugin.settings.formatSelection) {
@@ -652,8 +642,8 @@ export class MasonSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName("Normalize headings")
-			.setDesc("Standardize heading levels throughout the selection.")
+			.setName(fixedSetting("formatSelection.normalize").name)
+			.setDesc(fixedSetting("formatSelection.normalize").desc)
 			.addToggle((t) => {
 				t.setValue(recipe.normalize).onChange(async (v) => {
 					if (!this._plugin.settings.formatSelection) {
@@ -665,11 +655,11 @@ export class MasonSettingTab extends PluginSettingTab {
 			});
 
 		// --- Footnotes ---
-		new Setting(containerEl).setName("Footnotes").setHeading();
+		new Setting(containerEl).setName(SECTION_HEADINGS.footnotes).setHeading();
 
 		new Setting(containerEl)
-			.setName("Convert citations to footnotes")
-			.setDesc("Rewrite inline citation markers as numbered footnote references." + FORMAT_SELECTION_ONLY)
+			.setName(fixedSetting("formatSelection.fromCitations").name)
+			.setDesc(fixedSetting("formatSelection.fromCitations").desc)
 			.addToggle((t) => {
 				t.setValue(recipe.fromCitations).onChange(async (v) => {
 					if (!this._plugin.settings.formatSelection) {
@@ -681,8 +671,8 @@ export class MasonSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName("Resolve footnote identity")
-			.setDesc("Renumber footnote references to remove gaps and duplicates." + FORMAT_SELECTION_ONLY)
+			.setName(fixedSetting("formatSelection.identity").name)
+			.setDesc(fixedSetting("formatSelection.identity").desc)
 			.addToggle((t) => {
 				t.setValue(recipe.identity).onChange(async (v) => {
 					if (!this._plugin.settings.formatSelection) {
@@ -694,8 +684,8 @@ export class MasonSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName("Move footnotes to resources")
-			.setDesc("Move footnote definitions into your Resources section." + FORMAT_SELECTION_ONLY)
+			.setName(fixedSetting("formatSelection.move").name)
+			.setDesc(fixedSetting("formatSelection.move").desc)
 			.addToggle((t) => {
 				t.setValue(recipe.move).onChange(async (v) => {
 					if (!this._plugin.settings.formatSelection) {
@@ -714,8 +704,8 @@ export class MasonSettingTab extends PluginSettingTab {
 	/** Render the Advanced section controls. The active tab labels the section. */
 	private _renderAdvancedSection(containerEl: HTMLElement): void {
 		new Setting(containerEl)
-			.setName("Debug logging")
-			.setDesc("Write verbose Mason traces to the developer console. Takes effect immediately.")
+			.setName(fixedSetting("debugLogging").name)
+			.setDesc(fixedSetting("debugLogging").desc)
 			.addToggle((toggle) => {
 				toggle
 					.setValue(this._plugin.settings.debugLogging)
