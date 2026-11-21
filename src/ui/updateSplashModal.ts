@@ -11,7 +11,7 @@
 //
 // Content is DERIVED, never hand-maintained (spec 009): the "### Features" and
 // "### Bug Fixes" bullets of this version's CHANGELOG.md section, baked in at
-// build time, plus the updatable-script count and a route into the Scripts tab. Detection +
+// build time, plus the updatable-script count and a route into the Scripts page. Detection +
 // version persistence live in main.ts (_maybeShowUpdateSplash); this modal is
 // presentation only.
 //

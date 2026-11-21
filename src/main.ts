@@ -15,6 +15,7 @@ import { ScriptStore } from "./scripts/store";
 import { buildPasteChain } from "./scripts/paste/buildPasteChain";
 import type { LoadedScript, PasteHandler } from "./scripts/paste/buildPasteChain";
 import { MasonSettingTab } from "./ui/settingsTab";
+import { SCRIPTS_PAGE_NAME } from "./ui/scriptsPage";
 import { UpdateSplashModal } from "./ui/updateSplashModal";
 import { RELEASE_NOTES } from "./core/releaseNotes";
 import { CommandManager } from "./scripts/commandManager";
@@ -159,16 +160,17 @@ export class MarkdownMasonPlugin extends Plugin {
 	_commandInjection?: CommandInjection;
 
 	/**
-	 * Retained settings-tab instance — used by the post-update splash to pre-select
-	 * the Scripts segment before opening the settings pane.
+	 * Retained settings-tab instance — owns the ScriptsCache that is seeded at
+	 * layout-ready.
 	 */
 	private _settingTab?: MasonSettingTab;
 
 	/**
 	 * Count of curated scripts whose catalog version now exceeds the consented one
-	 * (lifecycle state UpdateAvailable). Computed once at layout-ready and refreshed
-	 * by the Scripts settings section; read by MasonSettingTab to render the Scripts
-	 * segment badge. Undefined until first computed (offline/no-resolver → stays 0).
+	 * (lifecycle state UpdateAvailable). Published by the settings tab's ScriptsCache
+	 * after every refresh — first by the seed at layout-ready — and read by the
+	 * post-update splash. Undefined until the first refresh landed (offline or no
+	 * resolver → 0).
 	 */
 	updatableScriptCount?: number;
 
@@ -251,8 +253,8 @@ export class MarkdownMasonPlugin extends Plugin {
 			});
 
 			// T6.2: live lifecycle controller — reuses the SAME catalog/vault/
-			// scriptsDir/fingerprint wiring. rerender is overridden by the settings
-			// tab's guarded _selectSegment path when it builds its lifecycle ops.
+			// scriptsDir/fingerprint wiring. rerender is replaced by the settings tab
+			// (ScriptsCache.requestRefresh) when it builds its lifecycle ops.
 			this.lifecycleController = new LifecycleController({
 				app: this.app,
 				store: this.store,
@@ -260,7 +262,7 @@ export class MarkdownMasonPlugin extends Plugin {
 				vault: this._buildControllerVault(vaultAdapter),
 				fingerprints: fingerprintStore,
 				destPath,
-				rerender: () => { /* overridden by settings tab via setRerender() */ },
+				rerender: () => undefined,
 				listCjsFiles: () => this._listVaultCjsFiles(),
 				pickCjsFile: (paths) => this._pickVaultCjsFile(paths),
 				unregisterCommand: (id) => this.commandManager.unregister(id),
@@ -357,9 +359,22 @@ export class MarkdownMasonPlugin extends Plugin {
 		// Obsidian drops dynamically-added commands on reload, so without this the
 		// commands — and any hotkeys bound to them — vanish until the user re-toggles.
 		void this._restoreScriptCommands();
-		// Detect a plugin-version change and, if so, surface waiting script updates.
-		// Also seeds updatableScriptCount for the Scripts segment badge.
-		void this._maybeShowUpdateSplash();
+		// Seed the settings tab's script state, then detect a plugin-version change
+		// and, if so, surface waiting script updates.
+		void this._seedScriptsThenMaybeShowSplash();
+	}
+
+	/**
+	 * Resolve the scripts once per startup, through the settings tab's cache.
+	 *
+	 * The seed makes the script rows searchable and the Scripts page indicator
+	 * accurate before the user opens the settings, and it publishes
+	 * updatableScriptCount, which the splash reads. ScriptsCache.refresh never
+	 * rejects: a failed pass is reported there and leaves the count unset.
+	 */
+	private async _seedScriptsThenMaybeShowSplash(): Promise<void> {
+		await this._settingTab?.scripts.refresh();
+		await this._maybeShowUpdateSplash();
 	}
 
 	// -------------------------------------------------------------------------
@@ -376,26 +391,22 @@ export class MarkdownMasonPlugin extends Plugin {
 	 *
 	 * Fresh install (no recorded lastSeenVersion) is recorded silently — no splash.
 	 * A genuine version change always advances lastSeenVersion (so we never nag on
-	 * the next load) and, when the gate is on, computes the updatable-script count
-	 * and presents UpdateSplashModal. Best-effort: never throws into onLayoutReady.
+	 * the next load) and, when the gate is on, presents UpdateSplashModal with the
+	 * updatable-script count the scripts cache published (0 when none was).
+	 * Best-effort: never throws into onLayoutReady.
 	 */
 	private async _maybeShowUpdateSplash(): Promise<void> {
 		try {
 			const current = this.manifest.version ?? "";
 			const last = this.settings.lastSeenVersion ?? "";
 
-			// Already current → nothing changed; still refresh the badge count so the
-			// Scripts segment badge is accurate without waiting for the user to visit.
-			if (current === "" || current === last) {
-				this.updatableScriptCount = await this._countUpdatableScripts();
-				return;
-			}
+			// Already current → nothing changed.
+			if (current === "" || current === last) return;
 
 			// Fresh install: record the version silently, no splash.
 			if (last === "") {
 				this.settings.lastSeenVersion = current;
 				await this.saveSettings();
-				this.updatableScriptCount = await this._countUpdatableScripts();
 				return;
 			}
 
@@ -404,14 +415,11 @@ export class MarkdownMasonPlugin extends Plugin {
 			this.settings.lastSeenVersion = current;
 			await this.saveSettings();
 
-			const count = await this._countUpdatableScripts();
-			this.updatableScriptCount = count;
-
 			if (this.settings.showUpdateSplash === false) return;
 
 			new UpdateSplashModal(this.app, {
 				version: current,
-				updatableCount: count,
+				updatableCount: this.updatableScriptCount ?? 0,
 				notes: RELEASE_NOTES,
 				showSplash: this.settings.showUpdateSplash ?? true,
 				onToggleSplash: async (value) => {
@@ -426,32 +434,32 @@ export class MarkdownMasonPlugin extends Plugin {
 	}
 
 	/**
-	 * Count curated scripts currently in the UpdateAvailable lifecycle state.
-	 * Returns 0 when the resolver is absent (offline stubs / tests) or on error.
-	 */
-	private async _countUpdatableScripts(): Promise<number> {
-		const resolver = this.lifecycleResolver;
-		if (resolver === undefined) return 0;
-		try {
-			const records = await this.store.getScripts();
-			const items = await resolver.resolveItems(records);
-			return items.filter((it) => it.state.kind === "UpdateAvailable").length;
-		} catch {
-			return 0;
-		}
-	}
-
-	/**
-	 * Open the settings pane on Mason's tab via Obsidian's (semi-private) setting
-	 * API, guarded so a missing/renamed API degrades to a no-op rather than
-	 * throwing.
+	 * Open the settings pane on Mason's Scripts page (SDD ADR-4).
+	 *
+	 * app.setting is private Obsidian API, so every step is feature-detected:
+	 * openPagePath lands on the Scripts page; without it openTabById lands on
+	 * Mason's main page, where the Scripts row still shows the update indicator.
+	 * A missing app.setting degrades to a no-op rather than throwing.
 	 */
 	private _openScriptsSettings(): void {
 		const setting = (this.app as unknown as {
-			setting?: { open?: () => void; openTabById?: (id: string) => void };
+			setting?: {
+				open?: () => void;
+				openPagePath?: unknown;
+				openTabById?: (id: string) => void;
+			};
 		}).setting;
-		setting?.open?.();
-		setting?.openTabById?.(this.manifest.id);
+		if (setting === undefined) return;
+		setting.open?.();
+		if (typeof setting.openPagePath === "function") {
+			(setting.openPagePath as (id: string, path: string[]) => void).call(
+				setting,
+				this.manifest.id,
+				[SCRIPTS_PAGE_NAME],
+			);
+			return;
+		}
+		setting.openTabById?.(this.manifest.id);
 	}
 
 	/**

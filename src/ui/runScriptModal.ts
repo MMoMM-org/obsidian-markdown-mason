@@ -49,7 +49,7 @@ export class RunScriptModal extends FuzzySuggestModal<RunScriptEntry> {
 		this._entries = entries;
 		this._onChoose = onChoose;
 		this.setPlaceholder("Search scripts to run…");
-		this.emptyStateText = "No active scripts. Enable and consent to a script in the Scripts tab first.";
+		this.emptyStateText = "No active scripts. Enable and consent to a script on the Scripts page first.";
 	}
 
 	getItems(): RunScriptEntry[] {

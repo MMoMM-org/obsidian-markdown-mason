@@ -87,4 +87,10 @@ describe("RunScriptModal — copy", () => {
 		const modal = new RunScriptModal(new App() as never, [], vi.fn());
 		expect(modal.emptyStateText.toLowerCase()).toContain("no active scripts");
 	});
+
+	it("points to the Scripts page, not to a tab, in the empty state", () => {
+		const modal = new RunScriptModal(new App() as never, [], vi.fn());
+		expect(modal.emptyStateText).toContain("on the Scripts page");
+		expect(modal.emptyStateText).not.toContain("Scripts tab");
+	});
 });

@@ -1,9 +1,11 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { App } from "obsidian";
 import { lastOpenedModal, clearLastOpenedModal } from "./__mocks__/obsidian";
 import { UpdateSplashModal } from "../src/ui/updateSplashModal";
 import type { LifecycleResolver } from "../src/scripts/lifecycleResolver";
 import type { ScriptItem } from "../src/ui/scriptsPage";
+import type { ScriptsCache } from "../src/ui/scriptsCache";
+import type { ScriptRecord } from "../src/scripts/store";
 import type { LifecycleState } from "../src/scripts/lifecycle";
 
 // ---------------------------------------------------------------------------
@@ -173,39 +175,20 @@ describe("MarkdownMasonPlugin", () => {
 			clearLastOpenedModal();
 		});
 
-		/** A fake resolver whose resolveItems yields the given lifecycle states. */
-		function fakeResolver(states: Record<string, LifecycleState>): LifecycleResolver {
-			return {
-				resolveItems: (records: Record<string, unknown>): Promise<ScriptItem[]> =>
-					Promise.resolve(
-						Object.keys(records).map((id) => ({
-							id,
-							displayName: id,
-							description: "",
-							record: records[id] as never,
-							state: states[id] ?? { kind: "Disabled" },
-							version: 1,
-							provenance: "curated",
-							catalogVersion: undefined,
-						})),
-					),
-				clearCache: (): void => undefined,
-			} as unknown as LifecycleResolver;
-		}
-
 		/** onload, then set version + persisted last-seen, then run detection directly. */
 		async function runDetection(opts: {
 			version: string;
 			lastSeen?: string;
 			showSplash?: boolean;
-			resolver?: LifecycleResolver;
+			/** What the scripts cache has published before detection runs. */
+			updatableCount?: number;
 		}): Promise<{ plugin: InstanceType<typeof MarkdownMasonPlugin> }> {
 			const plugin = makePlugin();
 			await plugin.onload();
 			plugin.manifest.version = opts.version;
 			plugin.settings.lastSeenVersion = opts.lastSeen ?? "";
 			if (opts.showSplash !== undefined) plugin.settings.showUpdateSplash = opts.showSplash;
-			if (opts.resolver !== undefined) plugin.lifecycleResolver = opts.resolver;
+			if (opts.updatableCount !== undefined) plugin.updatableScriptCount = opts.updatableCount;
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			await (plugin as any)._maybeShowUpdateSplash();
 			return { plugin };
@@ -243,35 +226,188 @@ describe("MarkdownMasonPlugin", () => {
 			expect(plugin.settings.lastSeenVersion).toBe("0.3.0");
 		});
 
-		it("seeds updatableScriptCount from the resolver's UpdateAvailable states", async () => {
+		it("passes the count the scripts cache published to the splash", async () => {
+			const { plugin } = await runDetection({ version: "0.3.0", lastSeen: "0.2.0", updatableCount: 2 });
+
+			const modal = lastOpenedModal() as unknown as { _opts: { updatableCount: number } };
+			expect(modal._opts.updatableCount).toBe(2);
+			expect(plugin.updatableScriptCount).toBe(2);
+		});
+	});
+
+	// -----------------------------------------------------------------------
+	// Scripts cache seed at layout-ready (spec 010 T3.2, SDD ADR-6)
+	// -----------------------------------------------------------------------
+
+	describe("scripts cache seed at layout-ready", () => {
+		beforeEach(() => {
+			clearLastOpenedModal();
+		});
+
+		const CURATED: ScriptRecord = {
+			provenance: "curated",
+			enabled: true,
+			okayed: { version: 1, checksum: "x" },
+			source: "official",
+			command: false,
+		};
+
+		interface SeededPlugin {
+			plugin: InstanceType<typeof MarkdownMasonPlugin>;
+			cache: ScriptsCache;
+			resolveItems: ReturnType<typeof vi.fn>;
+			tab: { settingItems: unknown[] };
+		}
+
+		/**
+		 * onload with a counting fake resolver in place of the live one, and two
+		 * curated records in the store: one UpdateAvailable, one Active.
+		 */
+		async function loadSeedablePlugin(opts: { version: string; lastSeen: string }): Promise<SeededPlugin> {
+			const plugin = makePlugin();
+			const states: Record<string, LifecycleState> = {
+				"perplexity-app": { kind: "UpdateAvailable" } as LifecycleState,
+				"perplexity-web": { kind: "Active" } as LifecycleState,
+			};
+			const resolveItems = vi.fn((records: Record<string, ScriptRecord>): Promise<ScriptItem[]> =>
+				Promise.resolve(
+					Object.keys(records).map((id) => ({
+						id,
+						displayName: id,
+						description: "",
+						record: records[id],
+						state: states[id] ?? ({ kind: "Disabled" } as LifecycleState),
+						version: 1,
+						provenance: "curated" as const,
+						catalogVersion: undefined,
+					})),
+				),
+			);
+			// The tab's cache captures the resolver at construction, so the fake must
+			// be in place before onload builds the tab.
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			(plugin as any)._initLifecycleResolver = (): Promise<void> => {
+				plugin.lifecycleResolver = { resolveItems, clearCache: (): void => undefined } as unknown as LifecycleResolver;
+				return Promise.resolve();
+			};
+			await plugin.onload();
+			await plugin.store.setRecord("perplexity-app", CURATED);
+			await plugin.store.setRecord("perplexity-web", CURATED);
+			plugin.manifest.version = opts.version;
+			plugin.settings.lastSeenVersion = opts.lastSeen;
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const tab = (plugin as any)._settingTab as { scripts: ScriptsCache; settingItems: unknown[] };
+			return { plugin, cache: tab.scripts, resolveItems, tab };
+		}
+
+		function fireLayoutReady(plugin: InstanceType<typeof MarkdownMasonPlugin>): void {
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			(plugin.app as any).workspace._fireLayoutReady();
+		}
+
+		it("refreshes the tab's scripts cache exactly once at layout-ready", async () => {
+			const { plugin, cache } = await loadSeedablePlugin({ version: "0.3.0", lastSeen: "0.3.0" });
+			const refresh = vi.spyOn(cache, "refresh");
+
+			fireLayoutReady(plugin);
+
+			await vi.waitFor(() => expect(cache.items).not.toBeNull());
+			expect(refresh).toHaveBeenCalledTimes(1);
+		});
+
+		it("takes updatableScriptCount from the cache", async () => {
+			const { plugin, cache } = await loadSeedablePlugin({ version: "0.3.0", lastSeen: "0.3.0" });
+			expect(plugin.updatableScriptCount).toBeUndefined();
+
+			fireLayoutReady(plugin);
+
+			await vi.waitFor(() => expect(plugin.updatableScriptCount).toBe(1));
+			expect(cache.updatableCount).toBe(1);
+		});
+
+		it("resolves the scripts once per startup, also when the splash shows", async () => {
+			const { plugin, resolveItems } = await loadSeedablePlugin({ version: "0.3.0", lastSeen: "0.2.0" });
+
+			fireLayoutReady(plugin);
+
+			await vi.waitFor(() => expect(lastOpenedModal()).toBeInstanceOf(UpdateSplashModal));
+			expect(resolveItems).toHaveBeenCalledTimes(1);
+			const modal = lastOpenedModal() as unknown as { _opts: { updatableCount: number } };
+			expect(modal._opts.updatableCount).toBe(1);
+		});
+
+		it("makes the script rows part of settingItems after the seed (searchable after startup)", async () => {
+			const { plugin, tab } = await loadSeedablePlugin({ version: "0.3.0", lastSeen: "0.3.0" });
+
+			fireLayoutReady(plugin);
+
+			await vi.waitFor(() => expect(JSON.stringify(tab.settingItems)).toContain("perplexity-app"));
+			expect(JSON.stringify(tab.settingItems)).toContain("perplexity-web");
+		});
+	});
+
+	// -----------------------------------------------------------------------
+	// Splash deep link into the Scripts page (spec 010 T3.2, SDD ADR-4)
+	// -----------------------------------------------------------------------
+
+	describe("_openScriptsSettings()", () => {
+		interface SettingApi {
+			open?: () => void;
+			openPagePath?: unknown;
+			openTabById?: (id: string) => void;
+		}
+
+		async function pluginWithSetting(setting: SettingApi | undefined): Promise<{ open(): void }> {
 			const plugin = makePlugin();
 			await plugin.onload();
-			// Seed two curated records so the resolver has ids to map over.
-			const rec = {
-				provenance: "curated" as const,
-				enabled: true,
-				okayed: { version: 1, checksum: "x" },
-				source: "official",
-				command: false,
-			};
-			await plugin.store.setRecord("perplexity-app", rec);
-			await plugin.store.setRecord("perplexity-web", rec);
+			if (setting !== undefined) {
+				(plugin.app as unknown as { setting: SettingApi }).setting = setting;
+			}
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			return { open: () => (plugin as any)._openScriptsSettings() };
+		}
 
-			// Unchanged-version path: refreshes updatableScriptCount WITHOUT calling
-			// saveSettings (whose saveData(this.settings) would, in this isolated test
-			// harness, overwrite the records just written via the store).
-			plugin.manifest.version = "0.3.0";
-			plugin.settings.lastSeenVersion = "0.3.0";
-			plugin.lifecycleResolver = fakeResolver({
-				"perplexity-app": { kind: "UpdateAvailable" },
-				"perplexity-web": { kind: "Active" },
+		it("opens the settings, then the Scripts page through openPagePath", async () => {
+			const calls: string[] = [];
+			const openPagePath = vi.fn(() => { calls.push("openPagePath"); });
+			const openTabById = vi.fn();
+			const plugin = await pluginWithSetting({
+				open: () => { calls.push("open"); },
+				openPagePath,
+				openTabById,
 			});
 
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			await (plugin as any)._maybeShowUpdateSplash();
+			plugin.open();
 
-			// Two scripts resolved; only one is UpdateAvailable.
-			expect(plugin.updatableScriptCount).toBe(1);
+			expect(calls).toEqual(["open", "openPagePath"]);
+			expect(openPagePath).toHaveBeenCalledWith("markdown-mason", ["Scripts"]);
+			expect(openTabById).not.toHaveBeenCalled();
+		});
+
+		it("falls back to openTabById when openPagePath is absent", async () => {
+			const open = vi.fn();
+			const openTabById = vi.fn();
+			const plugin = await pluginWithSetting({ open, openTabById });
+
+			plugin.open();
+
+			expect(open).toHaveBeenCalledTimes(1);
+			expect(openTabById).toHaveBeenCalledWith("markdown-mason");
+		});
+
+		it("falls back to openTabById when openPagePath is not a function", async () => {
+			const openTabById = vi.fn();
+			const plugin = await pluginWithSetting({ open: vi.fn(), openPagePath: "renamed", openTabById });
+
+			plugin.open();
+
+			expect(openTabById).toHaveBeenCalledWith("markdown-mason");
+		});
+
+		it("does nothing and does not throw when app.setting is missing", async () => {
+			const plugin = await pluginWithSetting(undefined);
+
+			expect(() => plugin.open()).not.toThrow();
 		});
 	});
 });
