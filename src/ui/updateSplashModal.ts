@@ -97,7 +97,8 @@ export class UpdateSplashModal extends Modal {
 		});
 
 		// Preference toggle — mirrors settings.showUpdateSplash. onChange persists
-		// via the injected callback; the General settings tab carries the same gate.
+		// via the injected callback; "Show update notes" on the main settings page
+		// carries the same gate.
 		new Setting(contentEl)
 			.setName("Show update notes on new versions")
 			.addToggle((toggle) => {

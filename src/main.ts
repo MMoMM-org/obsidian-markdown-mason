@@ -128,7 +128,7 @@ export class MarkdownMasonPlugin extends Plugin {
 
 	/**
 	 * Command manager — owns per-script Obsidian command registration and cleanup.
-	 * Exposed so the Scripts settings tab (T4.2) and Commands tab (T4.4) can call
+	 * Exposed so the Scripts and Commands settings pages can call
 	 * register/unregister without importing Plugin directly.
 	 * Initialised in _initStore(); safe to call after onLayoutReady.
 	 */
@@ -144,7 +144,7 @@ export class MarkdownMasonPlugin extends Plugin {
 
 	/**
 	 * Live lifecycle controller (T6.2) — composes disclosure + materializer + store
-	 * + per-device fingerprint + catalog into one method per Scripts-tab op.
+	 * + per-device fingerprint + catalog into one method per Scripts-page op.
 	 * Initialised in _initLifecycleResolver() reusing the same catalog/vault/
 	 * scriptsDir/fingerprint wiring. Exposed so MasonSettingTab can delegate its
 	 * lifecycle ops. Optional so test doubles can omit it; the tab falls back to
@@ -636,7 +636,7 @@ export class MarkdownMasonPlugin extends Plugin {
 	// was registered here as a per-script selection command. As of the catalog
 	// migration (T5.2, PRD F11 / ADR-16) curated scripts ship as standalone
 	// catalog .cjs entries, materialized into the vault and enabled via the
-	// Scripts settings tab (Phase 4 UI) — not compiled into the plugin bundle.
+	// Scripts settings page. Their code is not compiled into the plugin bundle.
 	// The paste path consumes them through the data-driven paste chain; the
 	// command path goes through the CommandManager launcher below.
 	// -------------------------------------------------------------------------

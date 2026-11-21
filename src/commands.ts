@@ -298,9 +298,8 @@ function fusedFormatNote(editor: Editor, settings: MasonSettings): EditPlan {
 		? (l: string) => debug(`[MarkdownMason] ${l}`)
 		: undefined;
 
-	// Steps 1-7: cleanup pipeline delegated to applyTextCleanup (spec 005 T1.2).
-	// dehyphenate → dewrap → tidyWhitespace → decomposeLigatures →
-	// normalizeBullets → normalizeOrdered → normalize (heading gap-close).
+	// Cleanup stage: delegated to applyTextCleanup (spec 005 T1.2), which owns
+	// the transform list and its order (see core/formatPipeline.ts).
 	// Each step is gated by the matching boolean key in recipe; log receives
 	// one "format: <name> …" line per step.
 	const s7 = applyTextCleanup(original, recipe, log);

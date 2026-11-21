@@ -1,7 +1,7 @@
 // src/core/formatPipeline.ts — shared cleanup helper (spec 005, CON-2: no obsidian import)
 //
-// applyTextCleanup chains the 7 in-memory cleanup transforms that are also used
-// in fusedFormatNote (commands.ts steps 1-7). Extracting them here lets the
+// applyTextCleanup chains the in-memory cleanup transforms that are also used
+// in fusedFormatNote (commands.ts, the cleanup stage). Extracting them here lets the
 // paste pipeline re-use the same logic without duplicating the gate pattern.
 //
 // Step order matches fusedFormatNote exactly:
@@ -32,11 +32,11 @@ import { normalize } from "./headings";
 export type StepLogger = (line: string) => void;
 
 /**
- * Apply the 7 cleanup transforms to `doc` in order, gated by the matching
+ * Apply the cleanup transforms to `doc` in order, gated by the matching
  * boolean keys in `recipe`.
  *
  * @param doc    Source document text.
- * @param recipe Toggle map; only the 7 cleanup keys are consumed.
+ * @param recipe Toggle map; only the cleanup keys are consumed.
  * @param log    Optional logger; receives one line per step ("format: …").
  * @returns      Transformed document string.
  */
