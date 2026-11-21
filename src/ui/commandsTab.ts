@@ -15,10 +15,10 @@
 //   getState(id)        → LifecycleState   (P5: live lifecycle resolver)
 // Tests inject fakes; main.ts injects P5 adapters when they exist.
 //
-// TOGGLE WIRING
-// ─────────────
-// Toggle ON  → commandManager.register(id, name, fn, getState) + store.setRecord command=true
-// Toggle OFF → commandManager.unregister(id) + store.setRecord command=false, enabled preserved
+// ROW WIRING
+// ──────────
+// A row is configured by configureCommandRow (commandsPage.ts), which the
+// declarative Commands page shares. This renderer goes away with spec 010 T3.1.
 //
 // COMMUNITY COMPLIANCE
 // ────────────────────
@@ -27,30 +27,11 @@
 // - No default hotkeys.
 
 import { Setting } from "obsidian";
-import type { ScriptFunction } from "../scripts/context";
-import type { LifecycleState } from "../scripts/lifecycle";
-import type { ScriptRecord, ScriptStore } from "../scripts/store";
+import type { ScriptStore } from "../scripts/store";
+import { COMMANDS_EMPTY_STATE, COMMANDS_INTRO, configureCommandRow } from "./commandsPage";
+import type { CommandRowDeps, CommandsTabCommandManager, ScriptFnResolver, StateResolver } from "./commandsPage";
 
-// ---------------------------------------------------------------------------
-// Public types
-// ---------------------------------------------------------------------------
-
-/** Minimal CommandManager surface consumed by the Commands tab. */
-export interface CommandsTabCommandManager {
-	register(
-		id: string,
-		name: string,
-		script: ScriptFunction,
-		getState: (id: string) => LifecycleState,
-	): void;
-	unregister(id: string): void;
-}
-
-/** Resolver that returns a ScriptFunction for a given script id. P5: real module loader. */
-export type ScriptFnResolver = (id: string) => ScriptFunction;
-
-/** Resolver that returns the current LifecycleState for a given script id. */
-export type StateResolver = (id: string) => LifecycleState;
+export type { CommandsTabCommandManager, ScriptFnResolver, StateResolver } from "./commandsPage";
 
 // ---------------------------------------------------------------------------
 // Entry point
@@ -79,8 +60,19 @@ export async function renderCommandsTab(
 		return;
 	}
 
+	// This tab re-reads the store on every render, so the cache is a throwaway.
+	const deps: CommandRowDeps = {
+		store,
+		commandManager,
+		resolveScriptFn,
+		getState,
+		cache: { records: { ...scripts } },
+	};
 	for (const [id, record] of enabled) {
-		_renderScriptRow(containerEl, id, record, store, commandManager, resolveScriptFn, getState);
+		const setting = new Setting(containerEl);
+		configureCommandRow(setting, id, record, deps);
+		// Without an intro row, every row carries the hint.
+		setting.setDesc(COMMANDS_INTRO.desc);
 	}
 }
 
@@ -90,64 +82,6 @@ export async function renderCommandsTab(
 
 function _renderEmptyState(containerEl: HTMLElement): void {
 	new Setting(containerEl)
-		.setName("No enabled scripts")
-		.setDesc(
-			"Enable a script in the Scripts tab first, then return here to create a command for it.",
-		);
-}
-
-function _renderScriptRow(
-	containerEl: HTMLElement,
-	id: string,
-	record: ScriptRecord,
-	store: Pick<ScriptStore, "getScripts" | "setRecord">,
-	commandManager: CommandsTabCommandManager,
-	resolveScriptFn: ScriptFnResolver,
-	getState: StateResolver,
-): void {
-	// Effective command label = the user's chosen name, else the script id.
-	const effectiveName = (rec: ScriptRecord): string => (rec.commandName ?? "").trim() || id;
-
-	new Setting(containerEl)
-		.setName(id)
-		.setDesc("Name the command, toggle to create it, then bind keys in core hotkeys.")
-		// Editable command name. Empty → the script id is used. Changing it while a
-		// command exists re-registers so the palette / Hotkeys label updates live.
-		.addText((text) => {
-			text
-				.setPlaceholder(id)
-				.setValue(record.commandName ?? "")
-				.onChange(async (value) => {
-					const existing = (await store.getScripts())[id];
-					if (existing === undefined) return;
-					const trimmed = value.trim();
-					const next: ScriptRecord = { ...existing };
-					if (trimmed.length > 0) next.commandName = trimmed;
-					else delete next.commandName;
-					await store.setRecord(id, next);
-					// Re-register live only if a command is currently active.
-					if (existing.command) {
-						commandManager.register(id, effectiveName(next), resolveScriptFn(id), getState);
-					}
-				});
-		})
-		.addToggle((toggle) => {
-			toggle
-				.setValue(record.command)
-				.onChange(async (on) => {
-					const existing = (await store.getScripts())[id];
-					if (on) {
-						const name = existing !== undefined ? effectiveName(existing) : id;
-						commandManager.register(id, name, resolveScriptFn(id), getState);
-						if (existing !== undefined) {
-							await store.setRecord(id, { ...existing, command: true });
-						}
-					} else {
-						commandManager.unregister(id);
-						if (existing !== undefined) {
-							await store.setRecord(id, { ...existing, command: false });
-						}
-					}
-				});
-		});
+		.setName(COMMANDS_EMPTY_STATE.name)
+		.setDesc(COMMANDS_EMPTY_STATE.desc);
 }

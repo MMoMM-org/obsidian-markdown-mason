@@ -1,0 +1,165 @@
+// Commands page — turn enabled scripts into named commands (ADR-17, spec 010).
+//
+// buildCommandsPage returns the declarative page: an intro row that is always
+// there, then one row per ENABLED script, or the empty-state row. It builds
+// synchronously from the ScriptsCache records and performs no I/O.
+//
+// A command row has a name field (placeholder = the script id) and a toggle:
+//   toggle on  → commandManager.register(id, name, fn, getState) + record.command = true
+//   toggle off → commandManager.unregister(id) + record.command = false, enabled kept
+//   rename     → record.commandName (trimmed; empty removes it), and a live
+//                re-register while the command is active
+//
+// NO RE-RENDER ON EDIT
+// ────────────────────
+// A command row is a `render` row, which the settings runtime rebuilds on
+// `update()` — that would take the focus out of the name field on every
+// keystroke. So an edit saves through the store and patches `cache.records` in
+// place; the next build, whenever it comes, starts from the edited values.
+//
+// The script function is resolved when a command is registered, never while a
+// row is built.
+//
+// Community compliance: sentence-case UI text, DOM via Setting helpers only,
+// no default hotkeys.
+
+import type { Setting, SettingDefinition, SettingDefinitionEmpty, SettingDefinitionPage } from "obsidian";
+import type { ScriptFunction } from "../scripts/context";
+import type { LifecycleState } from "../scripts/lifecycle";
+import type { ScriptRecord, ScriptStore } from "../scripts/store";
+import type { ScriptsCache } from "./scriptsCache";
+
+/** Minimal CommandManager surface a command row needs. */
+export interface CommandsTabCommandManager {
+	register(
+		id: string,
+		name: string,
+		script: ScriptFunction,
+		getState: (id: string) => LifecycleState,
+	): void;
+	unregister(id: string): void;
+}
+
+/** Returns the ScriptFunction for a script id. */
+export type ScriptFnResolver = (id: string) => ScriptFunction;
+
+/** Returns the current LifecycleState for a script id. */
+export type StateResolver = (id: string) => LifecycleState;
+
+/** The part of ScriptsCache the Commands page reads and patches. */
+export type CommandRecordsCache = Pick<ScriptsCache, "records">;
+
+/** The narrow collaborators the Commands page needs. */
+export interface CommandPageDeps {
+	store: Pick<ScriptStore, "getScripts" | "setRecord">;
+	commandManager: CommandsTabCommandManager;
+	resolveScriptFn: ScriptFnResolver;
+	getState: StateResolver;
+}
+
+/** What one command row needs: the page collaborators plus the cache its edits patch. */
+export interface CommandRowDeps extends CommandPageDeps {
+	cache: CommandRecordsCache;
+}
+
+export const COMMANDS_PAGE_NAME = "Commands";
+
+/** How the page works. Shown once, above the rows; carries the search vocabulary. */
+export const COMMANDS_INTRO = {
+	name: "Script commands",
+	desc: "Name the command, toggle to create it, then bind keys in core hotkeys.",
+	aliases: ["hotkey", "command palette"],
+} as const;
+
+export const COMMANDS_EMPTY_STATE = {
+	name: "No enabled scripts",
+	desc: "Enable a script in the Scripts tab first, then return here to create a command for it.",
+} as const;
+
+/**
+ * Build the Commands page from the cached script records.
+ *
+ * Row names are the script ids: stable and unique among siblings, which is what
+ * the settings runtime keys rows by.
+ */
+export function buildCommandsPage(cache: CommandRecordsCache, deps: CommandPageDeps): SettingDefinitionPage {
+	const rowDeps: CommandRowDeps = { ...deps, cache };
+	const commandRows: SettingDefinition[] = Object.entries(cache.records)
+		.filter(([, record]) => record.enabled)
+		.map(([id, record]) => ({
+			name: id,
+			render: (setting: Setting) => configureCommandRow(setting, id, record, rowDeps),
+		}));
+
+	return {
+		type: "page",
+		name: COMMANDS_PAGE_NAME,
+		items: [introRow(), ...(commandRows.length > 0 ? commandRows : [emptyStateRow()])],
+	};
+}
+
+/** Turn `setting` into the command row of script `id`: name field plus create-command toggle. */
+export function configureCommandRow(
+	setting: Setting,
+	id: string,
+	record: ScriptRecord,
+	deps: CommandRowDeps,
+): void {
+	const { store, commandManager, resolveScriptFn, getState, cache } = deps;
+
+	const save = async (next: ScriptRecord): Promise<void> => {
+		await store.setRecord(id, next);
+		cache.records[id] = next;
+	};
+	const register = (rec: ScriptRecord | undefined): void => {
+		commandManager.register(id, commandLabel(id, rec), resolveScriptFn(id), getState);
+	};
+
+	setting
+		.setName(id)
+		.addText((text) => {
+			text
+				.setPlaceholder(id)
+				.setValue(record.commandName ?? "")
+				.onChange(async (value) => {
+					const existing = (await store.getScripts())[id];
+					if (existing === undefined) return;
+					const next = withCommandName(existing, value);
+					await save(next);
+					// Only an active command has a palette / hotkeys label to refresh.
+					if (existing.command) register(next);
+				});
+		})
+		.addToggle((toggle) => {
+			toggle
+				.setValue(record.command)
+				.onChange(async (on) => {
+					const existing = (await store.getScripts())[id];
+					if (on) register(existing);
+					else commandManager.unregister(id);
+					if (existing !== undefined) await save({ ...existing, command: on });
+				});
+		});
+}
+
+function introRow(): SettingDefinitionEmpty {
+	return { ...COMMANDS_INTRO, aliases: [...COMMANDS_INTRO.aliases] };
+}
+
+function emptyStateRow(): SettingDefinitionEmpty {
+	return { ...COMMANDS_EMPTY_STATE };
+}
+
+/** The command's label: the user's chosen name, else the script id. */
+function commandLabel(id: string, record: ScriptRecord | undefined): string {
+	return (record?.commandName ?? "").trim() || id;
+}
+
+/** A copy of `record` named `name` (trimmed); an empty name removes commandName. */
+function withCommandName(record: ScriptRecord, name: string): ScriptRecord {
+	const next: ScriptRecord = { ...record };
+	const trimmed = name.trim();
+	if (trimmed.length > 0) next.commandName = trimmed;
+	else delete next.commandName;
+	return next;
+}
