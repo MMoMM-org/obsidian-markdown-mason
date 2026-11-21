@@ -1,4 +1,4 @@
-import { App, Notice, Plugin, PluginSettingTab, Setting } from "obsidian";
+import { App, Plugin, PluginSettingTab, Setting } from "obsidian";
 import type { PluginManifest } from "obsidian";
 import type { MasonSettings } from "../core/types";
 import type { ScriptRecord, ScriptStore } from "../scripts/store";
@@ -10,8 +10,7 @@ import { renderCommandsTab } from "./commandsTab";
 import type { CommandsTabCommandManager, ScriptFnResolver, StateResolver } from "./commandsTab";
 import type { LifecycleResolver } from "../scripts/lifecycleResolver";
 import type { LifecycleController } from "../scripts/lifecycleController";
-import { BrowseOfficialModal } from "./browseOfficialModal";
-import type { BrowseEntryStatus } from "./browseOfficialModal";
+import { buildLifecycleOps } from "./scriptLifecycleOps";
 import { buildRequireFn, loadRunFnSafe, resolveScriptsDir } from "../scripts/loader";
 import { debug, setDebugLogging } from "../core/debug";
 import { resolveFormatSelectionRecipe } from "../core/formatSelection";
@@ -354,89 +353,19 @@ export class MasonSettingTab extends PluginSettingTab {
 	}
 
 	/**
-	 * Build the concrete LifecycleOps action seam (T6.2).
-	 *
-	 * When the live LifecycleController is wired (production + integration tests),
-	 * EVERY op delegates to it — the controller composes the existing services
-	 * (disclosure consent gate, materializer, store, per-device fingerprint,
-	 * catalog) and re-renders via the GUARDED path injected below. browseOfficial
-	 * presents a minimal modal listing curated entries, each with an enable action.
-	 *
-	 * Fallback (controller absent — card-rendering unit tests that inject only a
-	 * fake store): enable/disable/remove operate on the store directly; the
-	 * catalog-requiring ops surface a sentence-case Notice rather than a stub.
+	 * Build the LifecycleOps action seam for the Scripts section (T6.2): the
+	 * controller-backed ops, or the store-only fallback when no controller is
+	 * wired. Every state change re-renders via the GUARDED _selectSegment path.
 	 */
 	private _buildLifecycleOps(containerEl: HTMLElement): LifecycleOps {
-		const controller = this._plugin.lifecycleController;
-		if (controller !== undefined) {
-			// Inject the GUARDED re-render path so every op refreshes via _selectSegment.
-			controller.setRerender(() => { void this._selectSegment(containerEl, "Scripts"); });
-			return {
-				enable: (id) => controller.enable(id),
-				disable: (id) => controller.disable(id),
-				remove: (id) => controller.remove(id),
-				retry: (id) => controller.retry(id),
-				update: (id) => controller.update(id),
-				reReview: (id) => controller.reReview(id),
-				viewSource: (id) => controller.viewSource(id),
-				importFromVault: () => controller.importFromVault(),
-				browseOfficial: async () => {
-					const entries = await controller.listOfficial();
-					// Reflect each entry's current state so an already-enabled script
-					// shows as "Enabled" instead of offering a redundant "Enable".
-					const records = await this._plugin.store.getScripts();
-					const statusOf = (id: string): BrowseEntryStatus => {
-						const r = records[id];
-						if (r === undefined) return "available";
-						return r.enabled ? "enabled" : "installed";
-					};
-					new BrowseOfficialModal(this._plugin.app, entries, (id: string) => {
-						// enableOfficial creates the curated record first — enable() alone
-						// would silently no-op for a catalog entry that has no record yet.
-						void controller.enableOfficial(id);
-					}, statusOf).open();
-				},
-			};
-		}
-		return this._buildLifecycleOpsFallback(containerEl);
-	}
-
-	/**
-	 * Minimal store-only LifecycleOps for the card-rendering unit tests that inject
-	 * a fake store but no live controller. enable/disable/remove persist directly;
-	 * the catalog-requiring ops surface a sentence-case Notice.
-	 */
-	private _buildLifecycleOpsFallback(containerEl: HTMLElement): LifecycleOps {
-		const rerender = (): void => { void this._selectSegment(containerEl, "Scripts"); };
-		const store = this._plugin.store;
-
-		const setEnabled = async (id: string, enabled: boolean): Promise<void> => {
-			const rec = (await store.getScripts())[id];
-			if (rec === undefined) return;
-			await store.setRecord(id, { ...rec, enabled });
-			rerender();
-		};
-
-		const unavailable = (): void => {
-			new Notice("Mason: the script catalog is not available right now.");
-		};
-
-		return {
-			enable: (id) => setEnabled(id, true),
-			disable: (id) => setEnabled(id, false),
-			remove: async (id) => {
-				const rec = (await store.getScripts())[id];
-				if (rec === undefined) return;
-				await store.setRecord(id, { ...rec, enabled: false, okayed: null });
-				rerender();
+		return buildLifecycleOps(
+			{
+				app: this._plugin.app,
+				store: this._plugin.store,
+				controller: this._plugin.lifecycleController,
 			},
-			retry: () => { unavailable(); },
-			update: () => { unavailable(); },
-			reReview: () => { unavailable(); },
-			viewSource: () => { unavailable(); },
-			importFromVault: () => { unavailable(); },
-			browseOfficial: () => { unavailable(); },
-		};
+			() => { void this._selectSegment(containerEl, "Scripts"); },
+		);
 	}
 
 	// -------------------------------------------------------------------------
