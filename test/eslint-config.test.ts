@@ -16,7 +16,13 @@ const makeEslint = (): ESLint =>
 		overrideConfigFile: path.join(repoRoot, "eslint.config.mjs"),
 	});
 
-describe("eslint flat config — CON-3 no-console enforcement", () => {
+// The first lintText() call boots the full type-aware config and a TS project
+// service — routinely several seconds, and past vitest's 5s default when the
+// whole suite runs in parallel workers. That is a cold-start cost, not a
+// regression signal, so the suite gets a generous ceiling.
+const COLD_START_TIMEOUT_MS = 30_000;
+
+describe("eslint flat config — CON-3 no-console enforcement", { timeout: COLD_START_TIMEOUT_MS }, () => {
 	// Shared instance — all four tests use the same config; no need to recreate it.
 	const eslint = makeEslint();
 
