@@ -279,7 +279,7 @@ Responsibilities (MECE):
 ```
 .
 ├── src/
-│   ├── main.ts                    # MODIFY: tab builds LifecycleOps once (buildLifecycleOps registers the controller rerender); _countUpdatableScripts → cache; _openScriptsSettings → openPagePath + fallback; drop selectScriptsSegment use
+│   ├── main.ts                    # MODIFY: tab builds LifecycleOps once (buildLifecycleOps registers the controller rerender); _countUpdatableScripts deleted, _seedScriptsThenMaybeShowSplash seeds the cache at layout-ready; _openScriptsSettings → openPagePath + fallback; selectScriptsSegment use dropped
 │   ├── commands.ts                # MODIFY: comment only (stale "Catalyst beta" note, Feature 10)
 │   ├── core/types.ts              # MODIFY: comment only ("eleven" → thirteen)
 │   ├── core/formatSelection.ts    # MODIFY: comment only
@@ -289,8 +289,10 @@ Responsibilities (MECE):
 │       ├── settingsControlStore.ts# NEW: FixedKey type, read/write adapter
 │       ├── scriptsCache.ts        # NEW: async script state holder
 │       ├── scriptLifecycleOps.ts  # NEW (moved from settingsTab.ts L377-448)
-│       ├── scriptsPage.ts         # RENAME+MODIFY from scriptsTab.ts (keep mapping helpers; drop card/toolbar DOM)
-│       ├── commandsPage.ts        # RENAME+MODIFY from commandsTab.ts (row receives a Setting)
+│       ├── scriptsPage.ts         # NEW (T2.3): mapping helpers moved from scriptsTab.ts; no card/toolbar DOM
+│       ├── commandsPage.ts        # NEW (T2.4): row logic moved from commandsTab.ts (row receives a Setting)
+│       ├── scriptsTab.ts          # DELETE (T3.1; git history does not follow, the page modules already existed)
+│       ├── commandsTab.ts         # DELETE (T3.1)
 │       ├── pluginIdentity.ts      # NEW: replaces HeaderSection.ts
 │       └── HeaderSection.ts       # DELETE
 ├── styles.css                     # MODIFY: delete .mason-segment-*, .mason-scripts-toolbar/list, .mason-script-card*; keep pill/version/badge/blocked classes
@@ -340,13 +342,11 @@ settingsControlStore:
 
 settingsDefinitions:
   FIXED_SETTINGS: readonly FixedSettingSpec[]   # SSOT rows {key, section, name, desc, aliases?, control}
-  fixedSetting(key: FixedKey): FixedSettingSpec  # lookup; throws on an unknown key (bridge for the old tab until T3.1)
   FORMAT_SELECTION_INTRO: SettingDefinitionEmpty # "Which steps run" row (no control key), aliases paste / paste and format
-  FORMAT_SELECTION_ONLY, FORMAT_SELECTION_HEADING, SECTION_HEADINGS, RESOURCES_NAME_PLACEHOLDER  # shared text constants
+  FORMAT_SELECTION_ONLY                          # exported text constant (headings and the Resources placeholder are module-private since T3.1)
   type MainPageParts = {scriptsPage: SettingDefinitionPage, commandsPage: SettingDefinitionPage, identityRow: SettingDefinitionAction}
   type FixedGroupRow = SettingDefinition<FixedKey>  # what a fixed group may contain (rows only)
   buildMainPageItems(parts: MainPageParts): SettingDefinitionItem<FixedKey>[]
-  # T3.1: prune fixedSetting and constants that only the old tab used
 
 scriptsCache:
   ScriptsCacheDeps {
@@ -354,7 +354,7 @@ scriptsCache:
     resolver?: Pick<LifecycleResolver, "clearCache" | "resolveItems">
     setUpdatableCount(n: number): void
   }
-  buildOfflineScriptItems(records): ScriptItem[]   # the single offline fallback (evaluateState); also used by the old tab until T3.1
+  buildOfflineScriptItems(records): ScriptItem[]   # the single offline fallback (evaluateState)
   class ScriptsCache {
     constructor(deps: ScriptsCacheDeps)
     items: ScriptItem[] | null          # null = not loaded yet
@@ -394,7 +394,7 @@ commandsPage:
   type CommandRowDeps = CommandPageDeps & {cache: CommandRecordsCache}
   buildCommandsPage(cache: CommandPageCache, deps: CommandPageDeps): SettingDefinitionPage
   configureCommandRow(setting: Setting, id: string, record: ScriptRecord, deps: CommandRowDeps, rowName?: string): void
-  # also re-exports the types as in code (CommandsTabCommandManager, ScriptFnResolver, StateResolver)
+  # also exports the types as in code (CommandManagerPort, ScriptFnResolver, StateResolver)
 
 pluginIdentity:
   REPO_URL: string
@@ -459,7 +459,7 @@ Bare items and the two page entries render together in the implicit untitled fir
   data_flow: "clearCache → getScripts → resolveItems (offline fallback evaluateState when no resolver)"
 - from: MasonPlugin.onLayoutReady
   to: scriptsCache
-  data_flow: "await tab.scripts.refresh(); updatableScriptCount = cache.updatableCount (replaces the second catalog fetch in _countUpdatableScripts)"
+  data_flow: "_seedScriptsThenMaybeShowSplash: await tab.scripts.refresh(), then the splash check; the cache publishes updatableScriptCount through its setUpdatableCount dep (wired in the tab constructor), the splash reads `updatableScriptCount ?? 0`; the second catalog fetch in _countUpdatableScripts is gone"
 - from: MasonPlugin._openScriptsSettings
   to: app.setting (private)
   data_flow: "open(); openPagePath(id, [SCRIPTS_PAGE_NAME]) if a function, else openTabById(id)"
@@ -534,7 +534,7 @@ async refresh(): Promise<void> {
 		this.updatableCount = items.filter(i => i.state.kind === "UpdateAvailable").length;
 		this.deps.setUpdatableCount(this.updatableCount);    // plugin.updatableScriptCount
 		this.onChange();                                     // tab.update()
-	} catch (err) { debug("[mason] scripts refresh failed", err); /* keep last good state */ }
+	} catch (err) { console.warn("[mason] scripts refresh failed", err); /* keep last good state; genuine errors use console.warn (T2.5 review) */ }
 	finally {
 		this.inFlight = false;
 		if (this.pending) { this.pending = false; void this.refresh(); }
@@ -709,7 +709,7 @@ No change: single artifact. Rollback means publishing a new release (users below
 - **Error Handling:** local try/catch with debug traces and Notices (see Error Handling); never throw into Obsidian's render.
 - **Performance:** synchronous definition building; one catalog fetch per refresh; refresh coalescing.
 - **i18n/L10n:** none (English only, as today).
-- **Logging/Auditing:** existing `debug()` traces behind `debugLogging`.
+- **Logging/Auditing:** existing `debug()` traces behind `debugLogging`; genuine errors (cache refresh and listener failures) go to `console.warn`, per src/core/debug.ts.
 
 ### Multi-Component Patterns (if applicable)
 N/A: single plugin process.
@@ -736,7 +736,7 @@ N/A: single plugin process.
 
 - [x] **ADR-4 Splash deep link:** feature-detected private `app.setting.openPagePath(pluginId, ["Scripts"])`, falling back to `openTabById`.
   - Rationale: the only way to land directly on the sub-page (Feature 6); Obsidian uses it internally (seen in the 1.15.1 bundle).
-  - Trade-offs: private API may change, so the fallback lands on the main page (where the Scripts badge still shows). Covered by the smoke test.
+  - Trade-offs: private API may change, so the fallback lands on the main page (where the Scripts page indicator, `displayValue`/`status`, still shows). Covered by the smoke test.
   - User confirmed: **Yes (2026-11-21)**
 
 - [x] **ADR-5 Storage:** override `getControlValue`/`setControlValue` with a key adapter (`FixedKey`, dotted `formatSelection.*` keys) that always persists through `plugin.saveSettings()`.
@@ -758,6 +758,7 @@ N/A: single plugin process.
 - [x] **ADR-8 Module partition and test strategy:** split into pure builders (`settingsDefinitions`, `settingsControlStore`, `scriptsPage`, `commandsPage`, `pluginIdentity`) plus `scriptsCache`, `scriptLifecycleOps` and a thin tab; tests assert on the returned definition tree; render rows are tested by calling `render(mockSetting, mockGroup)`.
   - Rationale: SSOT; testable without DOM; reuses today's state→UI helpers verbatim.
   - Trade-offs: about 1,300–1,500 lines of UI tests rewritten or deleted, about 900 kept with a harness change, and about 150 lines of mock additions.
+  - Measured at the end of Phase 3 (555ef71..f37c980): 2,524 lines rewritten or deleted (1,032 in three whole deleted files plus 1,492 in rewritten files; the estimate left out the whole-file deletions), 984 kept, mock +172, plus new helpers and harness tests (+716).
   - User confirmed: **Yes (2026-11-21)**
 
 ## Quality Requirements

@@ -80,6 +80,7 @@ Recorded deviations:
 - **D-2 (2026-11-21, approved via drift resolution):** T1.4 switched the old settings tab to read its strings from `settingsDefinitions.ts`, although T1.4 step 4 said "not yet switched". The same step demanded no duplicated strings, so single-source won. Behaviour unchanged (old tab tests green).
 - **D-3 (2026-11-21, approved):** `ScriptsCache` has no generation guard. `refresh()` is single-flight and the counter was bumped after the in-flight check, so the guard could never fire; single flight plus one pending follow-up pass already guarantees last state wins. Found in T2.1. SDD example, interface, data model, ADR-6 and plan updated.
 - **D-4 (2026-11-21, approved):** T4.1 (minAppVersion 1.13.1 + compliance test) runs before the T3.1 commit. The declarative tab calls `SettingTab.update()`, which obsidianmd/no-unsupported-api rejects below 1.13.0, so T3.1 cannot pass lint while the manifest says 1.7.2. T4.1 is committed first in its own commit; phase-4.md marks it done early.
+- **Phase 3 drift (2026-11-21, update spec + T3.5):** drift check 0 FAIL / 7 WARN, all SDD text lagging approved code (pruned exports, CommandManagerPort, console.warn, page modules NEW not renamed, seed wiring, ADR-8 measured volume). T3.5 added for whole-tree alias uniqueness, one shared script-function resolver, and review follow-ups.
 
 ## Metadata Reference
 

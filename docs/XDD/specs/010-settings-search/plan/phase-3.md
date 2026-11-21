@@ -68,7 +68,7 @@ Swaps the segmented tab for the declarative one, wires it into the plugin lifecy
      - [x] Segment bar gone `[ref: PRD/F2.4]`
      - [x] SDD behaviour-parity criteria `[ref: SDD/Acceptance Criteria/Behaviour parity]`
 
-- [ ] **T3.2 Plugin wiring and splash deep link** `[activity: integration]`
+- [x] **T3.2 Plugin wiring and splash deep link** `[activity: integration]`
 
   Depends on T3.1.
 
@@ -85,7 +85,7 @@ Swaps the segmented tab for the declarative one, wires it into the plugin lifecy
   4. Validate: Unit tests pass; lint and types clean; the splash modal tests still pass.
   5. Success: Splash opens the Scripts page `[ref: PRD/F6.4]`; indicator seeded `[ref: PRD/F6.1]`; script rows searchable after startup `[ref: PRD/F4.7]`; SDD deep-link criterion `[ref: SDD/Acceptance Criteria/Indicator and deep link]`
 
-- [ ] **T3.3 Dead CSS removal** `[activity: frontend-ui]` `[parallel: true]`
+- [x] **T3.3 Dead CSS removal** `[activity: frontend-ui]` `[parallel: true]`
 
   Depends on T3.1. Can run alongside T3.2.
 
@@ -94,6 +94,21 @@ Swaps the segmented tab for the declarative one, wires it into the plugin lifecy
   3. Implement: Delete `.mason-segment-*`, `.mason-scripts-toolbar`, `.mason-scripts-list`, `.mason-script-card*` and the header/tagline rules; keep and adapt the pill/version/badge/blocked styles for rows inside a `Setting`.
   4. Validate: Static test passes; full suite green.
   5. Success: No dead CSS for removed UI `[ref: SDD/Implementation Gotchas]`; rows keep readable status styling `[ref: PRD/Detailed Feature Specifications/Business Rules]`
+
+- [ ] **T3.5 Phase 3 gap fixes** `[activity: frontend-ui]`
+
+  Added by the Phase 3 checkpoint (2026-11-21): T3.4 validation and the T3.2/T3.3 code reviews.
+
+  1. Prime: SDD Acceptance Criteria, aliases line ("No alias appears on more than one target") `[ref: SDD/Acceptance Criteria]`; src/ui/settingsTab.ts L163-180; src/main.ts L505-515 and L675-690; src/scripts/loader.ts; test/ui/stylesClasses.test.ts; test/main.test.ts (seed tests)
+  2. Test:
+     - whole-tree alias uniqueness: after `tab.scripts.refresh()` with scripts present, walk `tab.getSettingDefinitions()` and assert no static alias (fixed settings, Format selection intro, Commands intro, Scripts action rows) is on two targets. A script row's own id alias is user data and is exempt; record that in the SDD criterion;
+     - one shared script-function resolver (Active → `loadRunFnSafe`, otherwise a no-op) with its own unit tests, used by the tab and both main.ts call sites;
+     - the splash still shows, with count 0, when the cache refresh fails (rejecting `resolveItems`);
+     - main.test stubs `_initLifecycleResolver` with `vi.spyOn(...).mockImplementation`, so a rename fails loudly;
+     - stylesClasses.test: the indirect-class allowlist is keyed by file and count, not by exact source snippets; `classList.add(` is matched or the unsupported forms are documented; drop the unused exports.
+  3. Implement: extract the resolver helper next to `loadRunFnSafe` in src/scripts/loader.ts and use it in all three places; adjust the tests as above; no behaviour change.
+  4. Validate: `npx tsc -noEmit -skipLibCheck && npm run lint && npm test` green.
+  5. Success: no alias on two targets across the whole tree `[ref: SDD/Acceptance Criteria]`; one copy of the Active-or-no-op rule `[ref: SDD/Components]`
 
 - [ ] **T3.4 Phase validation** `[activity: validate]`
 

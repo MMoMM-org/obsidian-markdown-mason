@@ -59,6 +59,7 @@ Makes the release correct and honest (version floor, lint, docs) and proves the 
      - every fixed setting name from `FIXED_SETTINGS` appears in docs/configuration.md;
      - the stated minimum Obsidian version is 1.13.1 in README and installation;
      - no doc says "segment";
+     - no doc says "Scripts tab" (queued from T3.2: docs/usage.md:67, docs/troubleshooting.md:32,70,99; also the mock comment test/__mocks__/obsidian.ts:154);
      - the step counts match `resolveFormatSelectionRecipe` (13 Format selection steps; Paste and format = the non-"Format selection only" set).
   3. Implement:
      - rewrite configuration.md around the main page, the Scripts and Commands pages and settings search, including example search words;
