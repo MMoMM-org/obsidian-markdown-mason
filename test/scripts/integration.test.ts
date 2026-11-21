@@ -18,7 +18,7 @@
 //     this property to substitute clipboardReader, applyPlan, and failScript.
 //   - rawFallback calls editor.replaceSelection(rawText); tests spy on _replaced.
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from "vitest";
 import { ScriptStore } from "../../src/scripts/store";
 import { importScript } from "../../src/scripts/runtime";
 import type { VaultAdapterPort } from "../../src/scripts/runtime";
@@ -207,7 +207,7 @@ describe("T5.5B importScript — vault import flow", () => {
 	const scriptVersion = 1;
 
 	function makeStore(): {
-		setRecord: ReturnType<typeof vi.fn>;
+		setRecord: Mock<ScriptStore["setRecord"]>;
 	} {
 		return { setRecord: vi.fn().mockResolvedValue(undefined) };
 	}
@@ -291,9 +291,9 @@ describe("T5.5B importScript — vault import flow", () => {
 
 		await importScript({ id: scriptId, vaultPath, destPath, version: 3, store, vaultAdapter });
 
-		const recordArg = store.setRecord.mock.calls[0]?.[1] as Record<string, unknown>;
+		const recordArg = store.setRecord.mock.calls[0]?.[1];
 		expect(recordArg).toBeDefined();
-		expect(recordArg["okayed"]).toBeNull();
+		expect(recordArg?.okayed).toBeNull();
 	});
 
 	it("returns { version, checksum } matching sha256Bytes of the imported bytes", async () => {

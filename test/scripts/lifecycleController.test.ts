@@ -26,7 +26,8 @@
 //   importFromVault — creates an imported record + runs enable flow → materialize
 //   every op re-renders; no op fires a "coming soon" Notice
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
+import type { FingerprintStore } from "../../src/scripts/materializedFingerprint";
 import { App, noticeLog, clearNoticeLog } from "../__mocks__/obsidian";
 import { LifecycleController } from "../../src/scripts/lifecycleController";
 import type { ScriptRecord } from "../../src/scripts/store";
@@ -139,7 +140,7 @@ function makeController(opts: {
 	store: ReturnType<typeof makeStore>;
 	vault: ReturnType<typeof makeVault>;
 	catalog: CatalogSource;
-	fingerprints: { setVersion: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn>; getVersion?: ReturnType<typeof vi.fn> };
+	fingerprints: { setVersion: Mock<FingerprintStore["setVersion"]>; remove: Mock<FingerprintStore["remove"]>; getVersion?: Mock<FingerprintStore["getVersion"]> };
 	decision?: AskDecision;
 	listCjs?: () => Promise<string[]>;
 	pick?: (paths: string[]) => Promise<string | null>;

@@ -21,7 +21,8 @@
 //   (l) kill-switch: enabled===false → "disable" immediately, no modal
 //   (m) no record at all → modal shown (unknown → prompt path)
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, type Mock } from "vitest";
+import type { ScriptStore } from "../../src/scripts/store";
 import { App } from "obsidian";
 import { MockHTMLElement } from "../__mocks__/obsidian";
 import { ScriptDisclosureModal, makeAskCallback } from "../../src/scripts/disclosure";
@@ -42,8 +43,8 @@ function mockEl(modal: ScriptDisclosureModal): MockHTMLElement {
 // ---------------------------------------------------------------------------
 
 type FakeStore = {
-	getScripts: ReturnType<typeof vi.fn>;
-	setRecord: ReturnType<typeof vi.fn>;
+	getScripts: Mock<ScriptStore["getScripts"]>;
+	setRecord: Mock<ScriptStore["setRecord"]>;
 };
 
 /** Build a fake store that returns the given record map (or empty map). */
