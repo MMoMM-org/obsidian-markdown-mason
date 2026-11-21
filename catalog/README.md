@@ -4,7 +4,7 @@ In-repo SOURCE and built artifacts for the curated script catalog (PRD F11, ADR-
 
 Curated scripts are NOT compiled into the plugin bundle. They ship as standalone
 CommonJS envelope `.cjs` files, distributed via the catalog, materialized into the
-vault, and enabled through the Scripts settings tab.
+vault, and enabled through the Scripts settings page.
 
 ## Layout
 

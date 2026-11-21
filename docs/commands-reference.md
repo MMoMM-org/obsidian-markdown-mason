@@ -1,6 +1,6 @@
 # Commands Reference
 
-Markdown Mason contributes **ten built-in commands** to the Obsidian command palette, plus
+Markdown Mason contributes its **built-in commands** to the Obsidian command palette, plus
 one optional command per script you choose to expose. In the palette they all appear under
 the plugin name — search **Markdown Mason** (or just "Mason") to find them. None ship with a
 default hotkey; assign your own under Settings → Hotkeys.
@@ -9,7 +9,7 @@ default hotkey; assign your own under Settings → Hotkeys.
 
 ## Built-in commands
 
-All ten appear in the palette as `Markdown Mason: <name>` and require a focused editor.
+They all appear in the palette as `Markdown Mason: <name>` and require a focused editor.
 Each shows a descriptive Notice when there is nothing to do (e.g. *No footnotes found to
 tidy*, *Select text to cascade headings*). The internal command `id` is shown for the three
 paste/format commands you most often choose between.
@@ -22,6 +22,14 @@ paste/format commands you most often choose between.
 | **Normalize headings** | Close gaps in heading levels so they step by one (e.g. `H1 → H3` becomes `H1 → H2`). | Whole note |
 | **Convert citations to footnotes** | Turn bare `[n]` citation markers into `[^n]` footnote references. | Whole note |
 | **Resolve footnote identity** | Renumber numeric footnotes gap-free in first-reference order and de-duplicate by URL. | Whole note |
+| **Convert box-drawing table to Markdown** | Turn terminal/CLI tables drawn with box characters (`┌─┬─┐`, or ASCII `+--+`) into Markdown tables. | Whole note |
+| **Reflow wrapped text** | Rebuild hard-wrapped OCR/slide captures (no blank lines between blocks) into paragraphs and bullet lists, keeping sub-bullet nesting. | Whole note |
+| **Dewrap paragraphs** | Re-join hard-wrapped lines into full paragraphs, skipping code, headings, lists, blockquotes, and tables. | Whole note |
+| **Dehyphenate words** | Remove end-of-line hyphens that split a word across lines (lowercase-to-lowercase splits only). | Whole note |
+| **Decompose ligatures and punctuation** | Replace ligature glyphs (ﬁ, æ, œ…) and typographic punctuation (curly quotes, em dash, ellipsis) with plain ASCII equivalents. | Whole note |
+| **Tidy whitespace** | Collapse double spaces, remove trailing whitespace, and squeeze three or more blank lines to one. | Whole note |
+| **Normalize bullets** | Replace unordered bullet markers (`*`, `+`, `•`, `–`, `·`) with a dash (`-`), preserving nesting and checkboxes. | Whole note |
+| **Normalize ordered list** | Renumber ordered lists sequentially (1. 2. 3.) per nesting level. | Whole note |
 | **Move footnotes to resources** | Move numeric footnote definitions under the Resources heading — created at your configured level if absent, or an existing section reused at whatever level it has (see [Configuration](configuration.md)). | Whole note |
 | **Paste and run scripts** (`mason.pasteAndRunScripts`) | Run your enabled paste-converter **scripts** on the clipboard and insert the result at the cursor; plain-paste fallback on error or if nothing matches (a no-match paste is still fitted to the list item your cursor is in). This is about converter scripts (e.g. Perplexity → Markdown), **not** the cleanup recipe. *(Previously named "Paste and format".)* | Clipboard → cursor |
 | **Paste and format** (`mason.pasteAndFormatText`) | Paste the clipboard, then apply the **9-step** cleanup recipe scoped to just the pasted text: the 6 cleanup steps, 2 list steps, and normalize headings — one undo. It does **not** run any paste scripts, cascade headings, or the 3 footnote steps. Respects the same step toggles as Format selection for those 9 steps. When the cursor is inside a list item, the result is also fitted to that list — one item per paragraph, sub-lists nested (Settings → Markdown Mason → Fit paste to list context). | Clipboard → pasted text |

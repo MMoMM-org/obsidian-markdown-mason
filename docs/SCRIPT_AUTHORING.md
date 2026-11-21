@@ -149,7 +149,7 @@ runs through Node's `require` anchored at your vault's scripts directory and
    in the disclosure and the Scripts card, so you know what you're approving.
 
 To run it: enable **Paste and run scripts**, or create a command for it in the
-**Commands** tab (then bind a hotkey in Obsidian's core Hotkeys), or use
+**Commands** page (then bind a hotkey in Obsidian's core Hotkeys), or use
 **Mason: Run script…**.
 
 ---

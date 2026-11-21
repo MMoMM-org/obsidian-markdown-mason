@@ -58,7 +58,7 @@ export interface ScriptRecord {
 	description?: string;
 	/**
 	 * Optional user-chosen command name. When the user creates a command for this
-	 * script (Commands tab), this is the label shown in the command palette /
+	 * script (Commands page), this is the label shown in the command palette /
 	 * Hotkeys list. Absent → the script id is used as the command name.
 	 */
 	commandName?: string;

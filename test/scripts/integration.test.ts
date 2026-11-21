@@ -974,7 +974,7 @@ describe("T3.3 — data-driven paste chain dispatch via mason.pasteAndRunScripts
 // v0.1 registered a per-script selection command per bundled library script
 // (mason.script.perplexity-app/web/web-download). Curated scripts now ship as
 // standalone catalog .cjs entries (catalog/dist) and are enabled via the
-// Scripts settings tab, not compiled into the plugin. The paste path consumes
+// Scripts settings page, not compiled into the plugin. The paste path consumes
 // them through the data-driven paste chain (covered in block C above), and the
 // command path goes through the CommandManager launcher. The compiled-in
 // selection commands must therefore no longer be registered.

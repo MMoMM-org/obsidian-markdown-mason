@@ -204,7 +204,7 @@ export class MockHTMLElement {
 		return this._attrs.get(key);
 	}
 
-	/** Find the first descendant checkbox input (the Scripts-tab enable toggle). */
+	/** Find the first descendant checkbox input (the Scripts page enable toggle). */
 	_findToggle(): MockHTMLElement | undefined {
 		for (const child of this._children) {
 			if (child.tagName === "input" && child._attr("type") === "checkbox") {

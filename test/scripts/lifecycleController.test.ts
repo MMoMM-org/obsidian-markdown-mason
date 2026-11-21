@@ -1,7 +1,7 @@
-// T6.2  LifecycleController — live Scripts-tab ops (RED → GREEN)
+// T6.2  LifecycleController — live Scripts page ops (RED → GREEN)
 //
 // Composes the EXISTING units (disclosure consent gate, materializer, store,
-// fingerprint store, catalog) into one async method per Scripts-tab op. Adds NO
+// fingerprint store, catalog) into one async method per Scripts page op. Adds NO
 // new lifecycle/trust logic — materialize is the only writer of code, consent
 // rides okayed, fingerprint is per-device.
 //

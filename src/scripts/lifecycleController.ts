@@ -1,8 +1,8 @@
-// T6.2  LifecycleController — live Scripts-tab ops
+// T6.2  LifecycleController — live Scripts page ops
 //
 // PURPOSE
 // -------
-// One async method per Scripts-tab lifecycle op (enable, disable, retry, update,
+// One async method per Scripts page lifecycle op (enable, disable, retry, update,
 // reReview, remove, viewSource, browseOfficial/listOfficial, importFromVault),
 // composing the EXISTING units:
 //

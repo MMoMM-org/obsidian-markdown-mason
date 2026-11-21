@@ -76,8 +76,8 @@ Three commands cover the paste-and-format workflows. Pick by what you need:
 
 The crisp distinction: **Paste and run scripts** is about converter scripts; **Paste and
 format** (9 steps) and **Format selection** (13 steps) are about cleanup. The other built-in
-commands (each footnote and heading step on its own, plus **Run script…**) are listed in the
-[Commands Reference](docs/commands-reference.md).
+commands (each cleanup, list, heading and footnote step on its own, plus **Run script…**) are
+listed in the [Commands Reference](docs/commands-reference.md).
 
 No default hotkeys are registered — assign your own under **Settings → Hotkeys**.
 

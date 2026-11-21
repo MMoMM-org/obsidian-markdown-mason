@@ -2,7 +2,8 @@
 //
 // Everything asserted here is derived from the source: setting names and search
 // words from the definition modules, step counts from the recipe, the minimum
-// Obsidian version from manifest.json.
+// Obsidian version from manifest.json, built-in command names from
+// registerCommands().
 //
 // Conventions the docs follow, so the checks can stay simple:
 // - step counts are written in digits, directly before "step": "13 steps",
@@ -12,6 +13,8 @@
 import { describe, it, expect } from "vitest";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
+import type { Command } from "obsidian";
+import { registerCommands } from "../../src/commands";
 import { DEFAULT_SETTINGS } from "../../src/core/types";
 import { resolveFormatSelectionRecipe } from "../../src/core/formatSelection";
 import { FIXED_SETTINGS, FORMAT_SELECTION_INTRO, FORMAT_SELECTION_ONLY } from "../../src/ui/settingsDefinitions";
@@ -33,6 +36,7 @@ const DOC_PATHS: string[] = [
 const README = resolve(REPO_ROOT, "README.md");
 const CONFIGURATION = resolve(DOCS_DIR, "configuration.md");
 const INSTALLATION = resolve(DOCS_DIR, "installation.md");
+const COMMANDS_REFERENCE = resolve(DOCS_DIR, "commands-reference.md");
 
 function read(path: string): string {
 	return readFileSync(path, "utf8");
@@ -68,11 +72,63 @@ function statesStepCount(text: string, count: number): boolean {
 	return new RegExp(`\\b${count}[- ]steps?\\b`).test(text);
 }
 
+// --- Built-in command names, from code --------------------------------------
+
+/**
+ * The names registerCommands() registers: both presets plus one command per
+ * registry entry it does not skip. The three commands main.ts registers itself
+ * (Paste and run scripts, Paste and format, Run script…) are inline literals
+ * there and are not covered.
+ */
+function registeredCommandNames(): string[] {
+	const names: string[] = [];
+	registerCommands({
+		addCommand(command: Command): Command {
+			names.push(command.name);
+			return command;
+		},
+		settings: DEFAULT_SETTINGS,
+	});
+	return names;
+}
+
+const NUMBER_WORD = "two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen";
+
 describe("user docs match the settings code", () => {
 	it("finds the docs", () => {
 		expect(DOC_PATHS.map(label)).toEqual(
-			expect.arrayContaining(["README.md", "docs/configuration.md", "docs/installation.md", "docs/usage.md"]),
+			expect.arrayContaining([
+				"README.md",
+				"docs/SCRIPT_AUTHORING.md",
+				"docs/commands-reference.md",
+				"docs/configuration.md",
+				"docs/installation.md",
+				"docs/troubleshooting.md",
+				"docs/usage.md",
+			]),
 		);
+	});
+
+	describe("docs/commands-reference.md", () => {
+		const reference = read(COMMANDS_REFERENCE);
+		const commandNames = registeredCommandNames();
+
+		it("registerCommands registers the presets and the registry commands", () => {
+			expect(commandNames).toEqual(expect.arrayContaining(["Tidy footnotes", "Format selection"]));
+			expect(commandNames.length).toBeGreaterThan(2);
+			expect(commandNames).not.toContain("Normalize url");
+		});
+
+		it.each(commandNames)("lists the built-in command %s", (name) => {
+			expect(reference).toContain(`| **${name}**`);
+		});
+
+		it("no doc states how many built-in commands there are", () => {
+			const count = `\\d+|${NUMBER_WORD}|sixteen|seventeen|eighteen|nineteen|twenty`;
+			expect(
+				linesMatching(new RegExp(`\\b(${count})\\b[\\W_]{0,4}built-in[\\W_]{1,4}commands`, "i")),
+			).toEqual([]);
+		});
 	});
 
 	describe("docs/configuration.md", () => {
@@ -125,7 +181,7 @@ describe("user docs match the settings code", () => {
 		});
 
 		it("no doc calls the Scripts or Commands page a tab", () => {
-			expect(linesMatching(/\b(scripts|commands)\s+(settings\s+)?tab\b/i)).toEqual([]);
+			expect(linesMatching(/\b(scripts|commands)[\W_]{0,4}(settings\s+)?tab\b/i)).toEqual([]);
 		});
 	});
 
@@ -155,8 +211,7 @@ describe("user docs match the settings code", () => {
 		});
 
 		it("no doc spells a step or toggle count out", () => {
-			const numberWord = "two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen";
-			expect(linesMatching(new RegExp(`\\b(${numberWord})[- ](steps?|toggles?)\\b`, "i"))).toEqual([]);
+			expect(linesMatching(new RegExp(`\\b(${NUMBER_WORD})[- ](steps?|toggles?)\\b`, "i"))).toEqual([]);
 		});
 	});
 
