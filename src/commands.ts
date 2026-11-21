@@ -340,8 +340,9 @@ function fusedFormatNote(editor: Editor, settings: MasonSettings): EditPlan {
  * Minimal host surface this module needs from the plugin: command registration
  * plus the live settings. Declaring `settings` here (rather than via `Plugin &
  * { settings }`) keeps the access resolving to Mason's own field instead of the
- * official `Plugin.settings` slot — that slot only exists in Obsidian ≥1.13.0
- * (Catalyst beta), and depending on it would force minAppVersion past stable.
+ * official `Plugin.settings` slot. The interface predates the `Plugin.settings`
+ * typings (Obsidian 1.13.0+); those are fine at the current minAppVersion
+ * 1.13.1, and the interface stays as the narrower dependency.
  */
 interface CommandHost {
 	addCommand: Plugin["addCommand"];

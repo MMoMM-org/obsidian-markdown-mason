@@ -50,9 +50,10 @@ export interface MasonSettings {
 	 */
 	lastSeenVersion?: string;
 	/**
-	 * Per-step toggles for the Format selection command. All eleven toggles default to
-	 * true when absent. Absent field (older persisted data) resolves to all-on via
-	 * resolveFormatSelectionRecipe(). See spec 003 and spec 004.
+	 * Per-step toggles for the Format selection command: thirteen toggles, each
+	 * defaulting to true when absent except `reflow` (opt-in, false). An absent
+	 * field (older persisted data) resolves to those defaults via
+	 * resolveFormatSelectionRecipe(). See specs 003, 004, 006 and 007.
 	 */
 	formatSelection?: Partial<FormatSelectionRecipe>;
 	/**

@@ -40,9 +40,6 @@ export default [
 				// noun ("run scripts"); skip it rather than force either casing.
 				ignoreWords: ["Scripts"],
 			}],
-			// Deferred: the declarative settings-definitions API targets Obsidian
-			// 1.13.0+, which is not yet generally available. Revisit when 1.13 ships.
-			"obsidianmd/settings-tab/prefer-setting-definitions": "off",
 		},
 	},
 	{

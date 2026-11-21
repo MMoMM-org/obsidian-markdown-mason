@@ -2,9 +2,10 @@
 import type { MasonSettings } from "./types";
 
 // ---------------------------------------------------------------------------
-// FormatSelectionRecipe — eleven per-step toggles for the Format selection command.
+// FormatSelectionRecipe — thirteen per-step toggles for the Format selection command.
 // MasonSettings.formatSelection?: Partial<FormatSelectionRecipe> is defined in
-// types.ts; absent field resolves to all-on via resolveFormatSelectionRecipe().
+// types.ts; an absent field resolves to the defaults (all on except the opt-in
+// reflow) via resolveFormatSelectionRecipe().
 // ---------------------------------------------------------------------------
 
 export interface FormatSelectionRecipe {
