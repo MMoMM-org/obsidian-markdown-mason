@@ -29,7 +29,7 @@ phase: 4
 
 Makes the release correct and honest (version floor, lint, docs) and proves the feature end to end in a real Obsidian.
 
-- [ ] **T4.1 Minimum version bump** `[activity: build-config]`
+- [x] **T4.1 Minimum version bump** `[activity: build-config]` (done early in Phase 3, D-4: d660bea)
 
   1. Prime: manifest.json, versions.json, version-bump.mjs L16-29, scripts/check-manifest.mjs, test/compliance.test.ts L283-290 `[ref: SDD/Deployment View]`
   2. Test: Update the compliance test:

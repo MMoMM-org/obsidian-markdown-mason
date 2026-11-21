@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Tab swap and plugin wiring"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 3
 ---
@@ -31,7 +31,7 @@ phase: 3
 
 Swaps the segmented tab for the declarative one, wires it into the plugin lifecycle, and removes dead UI code, CSS and tests.
 
-- [ ] **T3.1 Declarative MasonSettingTab** `[activity: frontend-ui]`
+- [x] **T3.1 Declarative MasonSettingTab** `[activity: frontend-ui]`
 
   1. Prime: src/ui/settingsTab.ts (whole file), test/ui/settingsTab.test.ts, test/ui/formatSelectionSection.test.ts `[ref: SDD/Implementation Examples/Control-key resolution with nested Format selection]` `[ref: SDD/Implementation Gotchas]`
   2. Test (rewrite settingsTab.test.ts and formatSelectionSection.test.ts as definition-level tests):
@@ -60,13 +60,13 @@ Swaps the segmented tab for the declarative one, wires it into the plugin lifecy
      - no references to `selectScriptsSegment`/`HeaderSection`/`renderScriptsTab` remain (`rg`);
      - lint with `obsidianmd/no-deprecated-display` has nothing to flag.
   5. Success:
-     - [ ] Behaviour parity `[ref: PRD/F3.1]` `[ref: PRD/F3.3]`
-     - [ ] Debug logging live `[ref: PRD/F3.4]`
-     - [ ] Commands use new values `[ref: PRD/F3.5]`
-     - [ ] Search result shows the setting `[ref: PRD/F1.3]`
-     - [ ] No Mason entry on a non-matching search `[ref: PRD/F1.4]`
-     - [ ] Segment bar gone `[ref: PRD/F2.4]`
-     - [ ] SDD behaviour-parity criteria `[ref: SDD/Acceptance Criteria/Behaviour parity]`
+     - [x] Behaviour parity `[ref: PRD/F3.1]` `[ref: PRD/F3.3]`
+     - [x] Debug logging live `[ref: PRD/F3.4]`
+     - [x] Commands use new values `[ref: PRD/F3.5]`
+     - [x] Search result shows the setting `[ref: PRD/F1.3]`
+     - [x] No Mason entry on a non-matching search `[ref: PRD/F1.4]`
+     - [x] Segment bar gone `[ref: PRD/F2.4]`
+     - [x] SDD behaviour-parity criteria `[ref: SDD/Acceptance Criteria/Behaviour parity]`
 
 - [ ] **T3.2 Plugin wiring and splash deep link** `[activity: integration]`
 
@@ -80,7 +80,8 @@ Swaps the segmented tab for the declarative one, wires it into the plugin lifecy
      - when `openPagePath` is absent it falls back to `openTabById`;
      - when `app.setting` is missing it does nothing and doesn't throw;
      - script rows are present in `settingItems` after the seed refresh (searchable after startup).
-  3. Implement: Update `src/main.ts`: seed the cache at layout-ready (replacing `_countUpdatableScripts`' own resolve), rewrite `_openScriptsSettings` per ADR-4, and remove the placeholder rerender comment and the `selectScriptsSegment` call.
+  3. Implement: Update `src/main.ts`: seed the cache at layout-ready (replacing `_countUpdatableScripts`' own resolve), rewrite `_openScriptsSettings` per ADR-4, and remove the placeholder rerender comment. (The `selectScriptsSegment` call already went with T3.1.)
+     - queued from the T3.1 reviews: reword the stale segment/badge/`_selectSegment` comments in src/main.ts (about L163, L171, L255, L361, L388), and the user-facing "Scripts tab" wording in src/ui/runScriptModal.ts:52 and src/ui/updateSplashModal.ts:14 to "Scripts page".
   4. Validate: Unit tests pass; lint and types clean; the splash modal tests still pass.
   5. Success: Splash opens the Scripts page `[ref: PRD/F6.4]`; indicator seeded `[ref: PRD/F6.1]`; script rows searchable after startup `[ref: PRD/F4.7]`; SDD deep-link criterion `[ref: SDD/Acceptance Criteria/Indicator and deep link]`
 
