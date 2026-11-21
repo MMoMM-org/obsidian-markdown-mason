@@ -75,8 +75,11 @@ export const RAW_BASE = "https://raw.githubusercontent.com/<owner>/markdown-maso
 export const PINNED_REF = "0000000000000000000000000000000000000000"; // placeholder
 ```
 
-At release time, `PINNED_REF` is replaced with the real 40-char catalog
-commit SHA and the plugin is rebuilt. The SHA is compiled into the production
+At release time, the release workflow writes the catalog repo's current
+40-char `main` SHA into `PINNED_REF_DEFAULT` and semantic-release commits
+`pinnedRef.ts` with the release. The pin is deliberately **not** passed via an
+env var: Obsidian's build verification rebuilds `main.js` from the tagged
+commit, and only a pin committed to source reproduces the released bytes. The SHA is compiled into the production
 bundle as a string literal. The `requestUrlAdapter` constructs catalog fetch
 URLs as `${RAW_BASE}/${PINNED_REF}/index.json` for the index and
 `${RAW_BASE}/${PINNED_REF}/<entry.path>` for scripts (where `entry.path` is the
