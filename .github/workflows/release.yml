@@ -40,7 +40,7 @@ jobs:
         with:
           # Full history so semantic-release can read tags + commits since the
           # last release. persist-credentials:false hands credential control to
-          # semantic-release (it uses GITHUB_TOKEN for the push).
+          # semantic-release (it pushes with the release app token).
           fetch-depth: 0
           persist-credentials: false
 
@@ -95,12 +95,26 @@ jobs:
       - name: Test (includes compliance sweep)
         run: npm test
 
+      # The main-branch ruleset requires CodeQL results for every commit,
+      # which semantic-release's own release commit can never have. The
+      # GitHub Actions app cannot be a ruleset bypass actor, so the push
+      # runs as our own release GitHub App, which is a bypass actor
+      # (#55). Merges via PR stay CodeQL-gated. The `[skip ci]` in the
+      # release commit message keeps the app's push from retriggering
+      # workflows (unlike GITHUB_TOKEN, an app token would).
+      - name: Mint release app token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       # semantic-release reruns `node version-bump.mjs && npm run build` via its
       # exec prepareCmd, so main.js / manifest.json / styles.css on disk carry
       # the freshly-bumped version after this step.
       - name: Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         run: npx semantic-release
 
       # Catch the silent-drop class where a release-worthy feat/fix commit
